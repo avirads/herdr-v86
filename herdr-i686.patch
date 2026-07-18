@@ -1,0 +1,383 @@
+--- a/build.rs	2026-07-18 13:53:18.054949458 +0000
++++ b/build.rs	2026-07-18 13:53:18.056934133 +0000
+@@ -8,6 +8,8 @@
+         "x86_64-unknown-linux-gnu" => "x86_64-linux-gnu",
+         "aarch64-unknown-linux-gnu" => "aarch64-linux-gnu",
+         "x86_64-unknown-linux-musl" => "x86_64-linux-musl",
++        "i686-unknown-linux-musl" => "x86-linux-musl",
++        "i686-unknown-linux-gnu" => "x86-linux-gnu",
+         "aarch64-unknown-linux-musl" => "aarch64-linux-musl",
+         "x86_64-apple-darwin" => "x86_64-macos",
+         "aarch64-apple-darwin" => "aarch64-macos",
+diff --git a/src/ghostty/bindings.rs b/src/ghostty/bindings.rs
+index af743ea..a5339c0 100644
+--- a/src/ghostty/bindings.rs
++++ b/src/ghostty/bindings.rs
+@@ -197,6 +197,7 @@ pub struct GhosttyString {
+     pub len: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyString"][::std::mem::size_of::<GhosttyString>() - 16usize];
+     ["Alignment of GhosttyString"][::std::mem::align_of::<GhosttyString>() - 8usize];
+@@ -224,6 +225,7 @@ pub struct GhosttyBuffer {
+     pub len: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyBuffer"][::std::mem::size_of::<GhosttyBuffer>() - 24usize];
+     ["Alignment of GhosttyBuffer"][::std::mem::align_of::<GhosttyBuffer>() - 8usize];
+@@ -250,6 +252,7 @@ pub struct GhosttySurfacePosition {
+     pub y: f64,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttySurfacePosition"][::std::mem::size_of::<GhosttySurfacePosition>() - 16usize];
+     ["Alignment of GhosttySurfacePosition"]
+@@ -269,6 +272,7 @@ pub struct GhosttyCodepoints {
+     pub len: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyCodepoints"][::std::mem::size_of::<GhosttyCodepoints>() - 16usize];
+     ["Alignment of GhosttyCodepoints"][::std::mem::align_of::<GhosttyCodepoints>() - 8usize];
+@@ -337,6 +341,7 @@ pub struct GhosttyAllocatorVtable {
+     >,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyAllocatorVtable"][::std::mem::size_of::<GhosttyAllocatorVtable>() - 32usize];
+     ["Alignment of GhosttyAllocatorVtable"]
+@@ -360,6 +365,7 @@ pub struct GhosttyAllocator {
+     pub vtable: *const GhosttyAllocatorVtable,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyAllocator"][::std::mem::size_of::<GhosttyAllocator>() - 16usize];
+     ["Alignment of GhosttyAllocator"][::std::mem::align_of::<GhosttyAllocator>() - 8usize];
+@@ -437,6 +443,7 @@ pub struct GhosttyColorRgb {
+     pub b: u8,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyColorRgb"][::std::mem::size_of::<GhosttyColorRgb>() - 3usize];
+     ["Alignment of GhosttyColorRgb"][::std::mem::align_of::<GhosttyColorRgb>() - 1usize];
+@@ -453,6 +460,7 @@ pub struct GhosttyColorPaletteMask {
+     pub bits: [u64; 4usize],
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyColorPaletteMask"][::std::mem::size_of::<GhosttyColorPaletteMask>() - 32usize];
+     ["Alignment of GhosttyColorPaletteMask"]
+@@ -470,6 +478,7 @@ pub struct GhosttyColorX11Entry {
+     pub color: GhosttyColorRgb,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyColorX11Entry"][::std::mem::size_of::<GhosttyColorX11Entry>() - 16usize];
+     ["Alignment of GhosttyColorX11Entry"][::std::mem::align_of::<GhosttyColorX11Entry>() - 8usize];
+@@ -568,6 +577,7 @@ pub struct GhosttyDeviceAttributesPrimary {
+     pub num_features: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyDeviceAttributesPrimary"]
+         [::std::mem::size_of::<GhosttyDeviceAttributesPrimary>() - 144usize];
+@@ -601,6 +611,7 @@ pub struct GhosttyDeviceAttributesSecondary {
+     pub rom_cartridge: u16,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyDeviceAttributesSecondary"]
+         [::std::mem::size_of::<GhosttyDeviceAttributesSecondary>() - 6usize];
+@@ -621,6 +632,7 @@ pub struct GhosttyDeviceAttributesTertiary {
+     pub unit_id: u32,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyDeviceAttributesTertiary"]
+         [::std::mem::size_of::<GhosttyDeviceAttributesTertiary>() - 4usize];
+@@ -638,6 +650,7 @@ pub struct GhosttyDeviceAttributes {
+     pub tertiary: GhosttyDeviceAttributesTertiary,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyDeviceAttributes"]
+         [::std::mem::size_of::<GhosttyDeviceAttributes>() - 160usize];
+@@ -840,6 +853,7 @@ pub union GhosttyStyleColorValue {
+     pub _padding: u64,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyStyleColorValue"][::std::mem::size_of::<GhosttyStyleColorValue>() - 8usize];
+     ["Alignment of GhosttyStyleColorValue"]
+@@ -868,6 +882,7 @@ pub struct GhosttyStyleColor {
+     pub value: GhosttyStyleColorValue,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyStyleColor"][::std::mem::size_of::<GhosttyStyleColor>() - 16usize];
+     ["Alignment of GhosttyStyleColor"][::std::mem::align_of::<GhosttyStyleColor>() - 8usize];
+@@ -905,6 +920,7 @@ pub struct GhosttyStyle {
+     pub underline: ::std::os::raw::c_int,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyStyle"][::std::mem::size_of::<GhosttyStyle>() - 72usize];
+     ["Alignment of GhosttyStyle"][::std::mem::align_of::<GhosttyStyle>() - 8usize];
+@@ -958,6 +974,7 @@ pub struct GhosttyGridRef {
+     pub y: u16,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyGridRef"][::std::mem::size_of::<GhosttyGridRef>() - 24usize];
+     ["Alignment of GhosttyGridRef"][::std::mem::align_of::<GhosttyGridRef>() - 8usize];
+@@ -1026,6 +1043,7 @@ pub struct GhosttyPointCoordinate {
+     pub y: u32,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyPointCoordinate"][::std::mem::size_of::<GhosttyPointCoordinate>() - 8usize];
+     ["Alignment of GhosttyPointCoordinate"]
+@@ -1057,6 +1075,7 @@ pub union GhosttyPointValue {
+     pub _padding: [u64; 2usize],
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyPointValue"][::std::mem::size_of::<GhosttyPointValue>() - 16usize];
+     ["Alignment of GhosttyPointValue"][::std::mem::align_of::<GhosttyPointValue>() - 8usize];
+@@ -1082,6 +1101,7 @@ pub struct GhosttyPoint {
+     pub value: GhosttyPointValue,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyPoint"][::std::mem::size_of::<GhosttyPoint>() - 24usize];
+     ["Alignment of GhosttyPoint"][::std::mem::align_of::<GhosttyPoint>() - 8usize];
+@@ -1125,6 +1145,7 @@ pub struct GhosttySelection {
+     pub rectangle: bool,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttySelection"][::std::mem::size_of::<GhosttySelection>() - 64usize];
+     ["Alignment of GhosttySelection"][::std::mem::align_of::<GhosttySelection>() - 8usize];
+@@ -1160,6 +1181,7 @@ pub struct GhosttyTerminalSelectWordOptions {
+     pub boundary_codepoints_len: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyTerminalSelectWordOptions"]
+         [::std::mem::size_of::<GhosttyTerminalSelectWordOptions>() - 48usize];
+@@ -1201,6 +1223,7 @@ pub struct GhosttyTerminalSelectWordBetweenOptions {
+     pub boundary_codepoints_len: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyTerminalSelectWordBetweenOptions"]
+         [::std::mem::size_of::<GhosttyTerminalSelectWordBetweenOptions>() - 72usize];
+@@ -1247,6 +1270,7 @@ pub struct GhosttyTerminalSelectLineOptions {
+     pub semantic_prompt_boundary: bool,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyTerminalSelectLineOptions"]
+         [::std::mem::size_of::<GhosttyTerminalSelectLineOptions>() - 56usize];
+@@ -1290,6 +1314,7 @@ pub struct GhosttyTerminalSelectionFormatOptions {
+     pub selection: *const GhosttySelection,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyTerminalSelectionFormatOptions"]
+         [::std::mem::size_of::<GhosttyTerminalSelectionFormatOptions>() - 24usize];
+@@ -1383,6 +1408,7 @@ pub struct GhosttySelectionGestureBehaviors {
+     pub triple_click: GhosttySelectionGestureBehavior,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttySelectionGestureBehaviors"]
+         [::std::mem::size_of::<GhosttySelectionGestureBehaviors>() - 12usize];
+@@ -1418,6 +1444,7 @@ pub struct GhosttySelectionGestureGeometry {
+     pub screen_height: u32,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttySelectionGestureGeometry"]
+         [::std::mem::size_of::<GhosttySelectionGestureGeometry>() - 16usize];
+@@ -1744,6 +1771,7 @@ pub struct GhosttySizeReportSize {
+     pub cell_height: u32,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttySizeReportSize"][::std::mem::size_of::<GhosttySizeReportSize>() - 12usize];
+     ["Alignment of GhosttySizeReportSize"]
+@@ -1926,6 +1954,7 @@ pub struct GhosttyKittyGraphicsPlacementRenderInfo {
+     pub source_height: u32,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyKittyGraphicsPlacementRenderInfo"]
+         [::std::mem::size_of::<GhosttyKittyGraphicsPlacementRenderInfo>() - 56usize];
+@@ -2107,6 +2136,7 @@ pub struct GhosttyTerminalOptions {
+     pub max_scrollback: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyTerminalOptions"][::std::mem::size_of::<GhosttyTerminalOptions>() - 16usize];
+     ["Alignment of GhosttyTerminalOptions"]
+@@ -2172,6 +2202,7 @@ pub union GhosttyTerminalScrollViewportValue {
+     pub _padding: [u64; 2usize],
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyTerminalScrollViewportValue"]
+         [::std::mem::size_of::<GhosttyTerminalScrollViewportValue>() - 16usize];
+@@ -2201,6 +2232,7 @@ pub struct GhosttyTerminalScrollViewport {
+     pub value: GhosttyTerminalScrollViewportValue,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyTerminalScrollViewport"]
+         [::std::mem::size_of::<GhosttyTerminalScrollViewport>() - 24usize];
+@@ -2258,6 +2290,7 @@ pub struct GhosttyTerminalScrollbar {
+     pub len: u64,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyTerminalScrollbar"]
+         [::std::mem::size_of::<GhosttyTerminalScrollbar>() - 24usize];
+@@ -2297,6 +2330,7 @@ pub struct GhosttyClipboardContent {
+     pub data: GhosttyString,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyClipboardContent"][::std::mem::size_of::<GhosttyClipboardContent>() - 32usize];
+     ["Alignment of GhosttyClipboardContent"]
+@@ -2329,6 +2363,7 @@ pub struct GhosttyClipboardWrite {
+     pub contents_len: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyClipboardWrite"][::std::mem::size_of::<GhosttyClipboardWrite>() - 32usize];
+     ["Alignment of GhosttyClipboardWrite"]
+@@ -2717,6 +2752,7 @@ pub struct GhosttyFormatterScreenExtra {
+     pub charsets: bool,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyFormatterScreenExtra"]
+         [::std::mem::size_of::<GhosttyFormatterScreenExtra>() - 16usize];
+@@ -2759,6 +2795,7 @@ pub struct GhosttyFormatterTerminalExtra {
+     pub screen: GhosttyFormatterScreenExtra,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyFormatterTerminalExtra"]
+         [::std::mem::size_of::<GhosttyFormatterTerminalExtra>() - 32usize];
+@@ -2799,6 +2836,7 @@ pub struct GhosttyFormatterTerminalOptions {
+     pub selection: *const GhosttySelection,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyFormatterTerminalOptions"]
+         [::std::mem::size_of::<GhosttyFormatterTerminalOptions>() - 56usize];
+@@ -2984,6 +3022,7 @@ pub struct GhosttyRenderStateRowSelection {
+     pub end_x: u16,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyRenderStateRowSelection"]
+         [::std::mem::size_of::<GhosttyRenderStateRowSelection>() - 16usize];
+@@ -3014,6 +3053,7 @@ pub struct GhosttyRenderStateColors {
+     pub palette: [GhosttyColorRgb; 256usize],
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyRenderStateColors"]
+         [::std::mem::size_of::<GhosttyRenderStateColors>() - 792usize];
+@@ -3380,6 +3420,7 @@ pub struct GhosttySgrUnknown {
+     pub partial_len: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttySgrUnknown"][::std::mem::size_of::<GhosttySgrUnknown>() - 32usize];
+     ["Alignment of GhosttySgrUnknown"][::std::mem::align_of::<GhosttySgrUnknown>() - 8usize];
+@@ -3420,6 +3461,7 @@ pub union GhosttySgrAttributeValue {
+     pub _padding: [u64; 8usize],
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttySgrAttributeValue"]
+         [::std::mem::size_of::<GhosttySgrAttributeValue>() - 64usize];
+@@ -3469,6 +3511,7 @@ pub struct GhosttySgrAttribute {
+     pub value: GhosttySgrAttributeValue,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttySgrAttribute"][::std::mem::size_of::<GhosttySgrAttribute>() - 72usize];
+     ["Alignment of GhosttySgrAttribute"][::std::mem::align_of::<GhosttySgrAttribute>() - 8usize];
+@@ -3546,6 +3589,7 @@ pub struct GhosttySysImage {
+     pub data_len: usize,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttySysImage"][::std::mem::size_of::<GhosttySysImage>() - 24usize];
+     ["Alignment of GhosttySysImage"][::std::mem::align_of::<GhosttySysImage>() - 8usize];
+@@ -4020,6 +4064,7 @@ pub struct GhosttyMousePosition {
+     pub y: f32,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyMousePosition"][::std::mem::size_of::<GhosttyMousePosition>() - 8usize];
+     ["Alignment of GhosttyMousePosition"][::std::mem::align_of::<GhosttyMousePosition>() - 4usize];
+@@ -4135,6 +4180,7 @@ pub struct GhosttyMouseEncoderSize {
+     pub padding_left: u32,
+ }
+ #[allow(clippy::unnecessary_operation, clippy::identity_op)]
++#[cfg(target_pointer_width = "64")] // layout tests generated on 64-bit; structs use usize/ptrs and are width-portable
+ const _: () = {
+     ["Size of GhosttyMouseEncoderSize"][::std::mem::size_of::<GhosttyMouseEncoderSize>() - 40usize];
+     ["Alignment of GhosttyMouseEncoderSize"]
