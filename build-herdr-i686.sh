@@ -18,7 +18,15 @@ git apply ../herdr-i686.patch  # includes build.rs target map + bindings.rs 32-b
 #      SIMD included (google/highway supports 32-bit SSE). No SIMD fallback needed.
 #    - rust-lld as linker: no i686 musl C cross-toolchain needed (deps are pure
 #      Rust apart from the Zig-built static lib).
-RUSTFLAGS="-C linker=rust-lld -C target-feature=+crt-static" \
+#    - LIBGHOSTTY_VT_OPTIMIZE=ReleaseSafe (default is ReleaseFast): keep Zig
+#      safety checks. The i686 build currently hits a "attempt to use null
+#      value" Zig panic in libghostty-vt on pane creation (see README known
+#      issues); ReleaseFast would turn that same bug into silent UB.
+#    - debuginfo=1 + no strip: the Zig panic trace prints raw addresses; the
+#      binary is non-PIE static, so with symbols present you can resolve them
+#      directly:  llvm-addr2line -f -e herdr-i686 0xb88d33 0xb94c91 ...
+LIBGHOSTTY_VT_OPTIMIZE=ReleaseSafe \
+RUSTFLAGS="-C linker=rust-lld -C target-feature=+crt-static -C debuginfo=1 -C strip=none" \
 cargo +1.96.1 build --release --target i686-unknown-linux-musl
 
 # 4. Verify: should say "ELF 32-bit LSB executable, Intel 80386 ... statically linked"

@@ -66,9 +66,21 @@ emulator.add_listener("download-error", (e) => {
 window.onerror = (msg) => { status("JS ERROR: " + msg); };
 let gotSerial = false;
 setTimeout(() => { if (!gotSerial) status("no VM output after 120s — likely kernel/disk fetch problem; reload"); }, 120000);
+// The kernel serial console has no window size (TIOCGWINSZ reports 0x0), so
+// herdr would render into a 1x1 grid. Set the tty size once at the first
+// shell prompt, matching the xterm.js geometry above.
+let sttySent = false;
+let recentOutput = "";
 emulator.add_listener("serial0-output-byte", (byte) => {
   if (!gotSerial) { gotSerial = true; status("VM booting — output live"); }
   term.write(Uint8Array.of(byte));
+  if (!sttySent) {
+    recentOutput = (recentOutput + String.fromCharCode(byte)).slice(-16);
+    if (recentOutput.endsWith(":~# ")) {
+      sttySent = true;
+      for (const ch of "stty rows 32 cols 100\n") emulator.serial0_send(ch);
+    }
+  }
 });
 term.onData((data) => {
   for (const ch of data) emulator.serial0_send(ch);

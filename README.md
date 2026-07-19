@@ -13,3 +13,32 @@ Artifacts for running [herdr](https://herdr.dev) inside a v86 browser VM.
 
 Boot args (disk image route): `root=/dev/sda rw console=ttyS0`
 Needs an i686 kernel with 8250 serial + ext4 (or 9p/virtio for the tarball route).
+
+## Hosting
+
+The disk image is loaded with `async: true`, so the web server **must support
+HTTP Range requests** (206). GitHub Pages, nginx, caddy, and `npx http-server`
+work; `python -m http.server` does not (returns 200/full-body, v86 aborts the
+read, and the guest kernel spirals into ATA timeouts before dropping to PIO).
+
+## Known issues (herdr 0.7.4 i686)
+
+- **`herdr --session <name>` fails with `lost connection to server: Connection
+  reset by peer (os error 104)`.** The auto-spawned session server aborts on a
+  Zig safety panic (`attempt to use null value`) in the i686 build of
+  libghostty-vt as soon as a pane terminal is created; the daemon's stderr goes
+  to /dev/null so the crash is silent. Full analysis, captured trace, minimal
+  repro, and debugging plan: [CRASH-REPORT.md](CRASH-REPORT.md).
+
+  Interim workaround (attach works; creating a workspace still crashes):
+
+  ```sh
+  herdr server --session work >/tmp/w.log 2>&1 &
+  sleep 10
+  herdr --session work
+  ```
+
+- **1x1 terminal**: the kernel serial console reports a 0x0 window size, so
+  herdr renders into a 1x1 grid (blank screen). `index.html` now sends
+  `stty rows 32 cols 100` at the first shell prompt automatically; if you use a
+  different console or geometry, run `stty` yourself before attaching.
