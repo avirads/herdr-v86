@@ -54,8 +54,20 @@ const emulator = new V86({
   autostart: true,
 });
 
-emulator.add_listener("emulator-ready", () => status("booting… (first boot ~30-90s)"));
+emulator.add_listener("emulator-ready", () => status("emulator ready — booting… (first boot ~30-90s)"));
+emulator.add_listener("download-progress", (e) => {
+  if (e.file_name && e.loaded != null && e.total)
+    status("downloading " + e.file_name + " " + Math.round(100*e.loaded/e.total) + "%");
+});
+emulator.add_listener("download-error", (e) => {
+  status("DOWNLOAD FAILED: " + (e.file_name || "?") + " — reload to retry");
+  term.write("\r\n[asset download failed: " + (e.file_name || "?") + "]\r\n");
+});
+window.onerror = (msg) => { status("JS ERROR: " + msg); };
+let gotSerial = false;
+setTimeout(() => { if (!gotSerial) status("no VM output after 120s — likely kernel/disk fetch problem; reload"); }, 120000);
 emulator.add_listener("serial0-output-byte", (byte) => {
+  if (!gotSerial) { gotSerial = true; status("VM booting — output live"); }
   term.write(Uint8Array.of(byte));
 });
 term.onData((data) => {
