@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>herdr in the browser (v86)</title>
+<link rel="stylesheet" href="xterm.css">
+<style>
+  body { margin: 0; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  header { padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
+  header h1 { font-size: 15px; margin: 0; }
+  #status { font-size: 12px; color: #8b949e; }
+  #term { padding: 0 8px 8px; }
+  #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
+</style>
+</head>
+<body>
+<header>
+  <h1>herdr-vm</h1>
+  <div id="status">loading v86…</div>
+</header>
+<div id="term"></div>
+<div id="screen_container">
+  <div style="white-space:pre; font:14px monospace"></div>
+  <canvas></canvas>
+</div>
+
+<script src="xterm.js"></script>
+<script src="libv86.js"></script>
+<script>
+"use strict";
+const status = (m) => document.getElementById("status").textContent = m;
+
+const term = new Terminal({
+  cols: 100, rows: 32,
+  convertEol: false,
+  cursorBlink: true,
+  fontFamily: "monospace",
+  fontSize: 14,
+  theme: { background: "#0d1117" },
+});
+term.open(document.getElementById("term"));
+
+const emulator = new V86({
+  wasm_path: "v86.wasm",
+  memory_size: 256 * 1024 * 1024,
+  vga_memory_size: 2 * 1024 * 1024,
+  bios: { url: "seabios.bin" },
+  vga_bios: { url: "vgabios.bin" },
+  bzimage: { url: "bzImage" },
+  cmdline: "root=/dev/sda rw console=ttyS0 tsc=reliable",
+  hda: { url: "herdr-vm-ext4.img", async: true, size: 100663296 },
+  screen_container: document.getElementById("screen_container"),
+  autostart: true,
+});
+
+emulator.add_listener("emulator-ready", () => status("booting… (first boot ~30-90s)"));
+emulator.add_listener("serial0-output-byte", (byte) => {
+  term.write(Uint8Array.of(byte));
+});
+term.onData((data) => {
+  for (const ch of data) emulator.serial0_send(ch);
+  status("running — type in the terminal. Try: herdr");
+});
+term.focus();
+</script>
+</body>
+</html>
