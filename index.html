@@ -134,9 +134,17 @@ const setupOverlay = document.getElementById("setup-overlay");
 let bootReady = false;
 let llmReady = false;
 let autobroReady = false;
+let llmCheckComplete = false;
+let autobroCheckComplete = false;
 let setupFinished = false;
 function updateSetupWizard() {
   if (!bootReady || setupFinished) return;
+  if (!llmCheckComplete || !autobroCheckComplete) {
+    setBootProgress(100, "Restoring configuration…");
+    status("restoring configuration…");
+    return;
+  }
+  bootOverlay.classList.add("done");
   if (llmReady && autobroReady) {
     setupFinished = true;
     setupOverlay.classList.remove("active");
@@ -171,7 +179,6 @@ function finishBoot() {
     term.clear();
     term.write("\x1b[2J\x1b[H");
     emulator.serial0_send("\n");
-    bootOverlay.classList.add("done");
     bootReady = true;
     updateSetupWizard();
   }, 300);
@@ -336,12 +343,14 @@ async function connectAutoBro({ interactive = true, extensionId = null, token = 
     sessionStorage.setItem("herdr.autobroPairingToken", token.trim());
     browserStatus(`connected — bridge v${health.bridgeVersion || "?"}`);
     autobroReady = true;
+    autobroCheckComplete = true;
     document.getElementById("setup-autobro-status").textContent = `Connected — bridge v${health.bridgeVersion || "?"}`;
     updateSetupWizard();
     return true;
   } catch (error) {
     browserStatus("error — " + error.message);
     autobroReady = false;
+    autobroCheckComplete = true;
     document.getElementById("setup-autobro-status").textContent = "Connection failed: " + error.message;
     updateSetupWizard();
     return false;
@@ -369,6 +378,7 @@ document.getElementById("setup-autobro-form").onsubmit = event => {
 document.getElementById("setup-autobro-extension-id").value = localStorage.getItem("herdr.autobroExtensionId") || "";
 document.getElementById("setup-autobro-token").value = sessionStorage.getItem("herdr.autobroPairingToken") || "";
 if (localStorage.getItem("herdr.autobroExtensionId") && sessionStorage.getItem("herdr.autobroPairingToken")) connectAutoBro({ interactive: false });
+else autobroCheckComplete = true;
 const llmFileInput = document.getElementById("llm-file-input");
 document.getElementById("configure-llm").onclick = () => llmFileInput.click();
 document.getElementById("setup-configure-llm").onclick = () => llmFileInput.click();
@@ -386,10 +396,12 @@ try {
     hostBridge?.setLlmClient(client);
     llmStatus(result.modelName ? `ready — ${result.modelName}` : "ready — choose Configure LLM to load a model");
     llmReady = Boolean(result.modelName);
+    llmCheckComplete = true;
     document.getElementById("setup-llm-status").textContent = result.modelName ? `Ready — ${result.modelName}` : "Choose a .litertlm or .task model file.";
     updateSetupWizard();
   }).catch(error => {
     llmStatus("unavailable — " + error.message);
+    llmCheckComplete = true;
     document.getElementById("setup-llm-status").textContent = "WebGPU LLM unavailable: " + error.message;
     updateSetupWizard();
   });
@@ -414,6 +426,9 @@ try {
   };
 } catch (error) {
   llmStatus("unavailable — " + error.message);
+  llmCheckComplete = true;
+  document.getElementById("setup-llm-status").textContent = "WebGPU LLM unavailable: " + error.message;
+  updateSetupWizard();
 }
 
 const fileInput = document.getElementById("file-input");
