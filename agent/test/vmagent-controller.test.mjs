@@ -19,12 +19,14 @@ test('vmagent command controller runs a persistent harness and reports in the te
     onBusy: value => busy.push(value),
   });
   await controller.handle('run', 'inspect project');
+  await controller.handle('run', 'inspect project');
   await controller.handle('run', 'run tests');
   assert.equal(controller.conversationActive, true);
   assert.equal(creations, 1);
   assert.deepEqual(prompts, ['inspect project', 'run tests']);
+  assert.equal(outputs.filter(output => output === 'done: inspect project').length, 2);
   assert.match(outputs.at(-1), /done: run tests/);
-  assert.deepEqual(busy, [true, false, true, false]);
+  assert.deepEqual(busy, [true, false, false, true, false]);
   controller.closeConversation();
   assert.equal(controller.conversationActive, false);
 });

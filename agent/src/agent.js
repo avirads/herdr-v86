@@ -147,7 +147,7 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     name: 'vmllm_info', description: 'Inspect the page-local LiteRT-LM status or cached model list. Chat is intentionally excluded to avoid recursive inference.', schema: z.object({ operation: z.enum(['status', 'models']) }),
   });
   const browserTools = [];
-  const recentAutoBroExecutions = new Map();
+  let currentAutoBroExecution = null;
   const autoBroAutomationCommands = new Set([
     'pageInfo', 'inventoryCurrentPage', 'visibleActions', 'relatedActions',
     'extractGrids', 'findSearchAction', 'fillInput', 'setSelect', 'elementState',
@@ -155,6 +155,7 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     'waitForLoad', 'waitNetworkIdle', 'gotoUrl', 'currentTab', 'newTab', 'gwClick',
   ]);
   if (browserClient) browserTools.push(tool(async ({ query, engine }) => {
+    if (currentAutoBroExecution) return `AUTOBRO_EXECUTION_COMPLETE\n${currentAutoBroExecution.text}`;
     const base = engine === 'bing' ? 'https://www.bing.com/search?q=' : engine === 'duckduckgo' ? 'https://duckduckgo.com/?q=' : 'https://www.google.com/search?q=';
     const url = base + encodeURIComponent(query);
     const detail = { engine, query, url };
@@ -164,16 +165,16 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
       const tab = await browserClient.command('newTab', { url }, 120_000);
       await browserClient.command('waitForLoad', { tabId: tab.tabId, timeout: 20 }, 30_000).catch(() => undefined);
       const page = await browserClient.command('pageInfo', { tabId: tab.tabId }, 30_000).catch(() => tab);
-      return JSON.stringify({ engine, query, tab, page });
+      const text = [`AutoBro task completed.`, `Search: ${query}`, `Engine: ${engine}`, `Final page: ${page?.title || '(untitled)'}${page?.url ? ` — ${page.url}` : ''}`].join('\n');
+      currentAutoBroExecution = { instruction: `Search ${engine} for ${query}`, results: [{ command: 'browser_search', result: { tab, page } }], finalPage: page, text };
+      return `AUTOBRO_EXECUTION_COMPLETE\n${text}`;
     } catch (error) { return `Browser search error: ${error.message}`; }
   }, {
     name: 'browser_search', description: 'Search Google, Bing, or DuckDuckGo in a real AutoBro-controlled Chrome tab. Use this—not vmfetch—when asked to go to a search engine or search the web. Requires approval unless YOLO is active.', schema: z.object({ query: z.string(), engine: z.enum(['google', 'bing', 'duckduckgo']).default('google') }),
   }));
   if (browserClient) browserTools.push(tool(async ({ instruction }) => {
-    const executionKey = instruction.trim().toLowerCase().replace(/\s+/g, ' ');
-    const previous = recentAutoBroExecutions.get(executionKey);
-    if (previous && Date.now() - previous.completedAt < 30_000) {
-      return `AUTOBRO_EXECUTION_COMPLETE\nDuplicate execution suppressed. Report the existing result to the user without running another browser tool.\n${previous.report}`;
+    if (currentAutoBroExecution) {
+      return `AUTOBRO_EXECUTION_COMPLETE\nA browser automation sequence has already run during this vmagent turn. Do not run another browser tool.\n${currentAutoBroExecution.text}`;
     }
     const detail = { instruction, planner: 'page-local WebGPU LLM', context: 'current page, visible controls, related actions, and AutoBro skills' };
     onActivity({ tool: 'autobro_automate', detail, approval: true });
@@ -204,8 +205,15 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     });
     const raw = completion?.choices?.[0]?.message?.content ?? completion;
     const plan = parseDecision(raw);
-    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+    let steps = Array.isArray(plan?.steps) ? plan.steps : [];
     if (!steps.length || steps.length > 12) throw new Error('WebGPU planner returned no usable AutoBro steps');
+    const signatures = steps.map(step => JSON.stringify({ command: step?.command, args: step?.args || [], tabId: step?.tabId || null }));
+    for (let period = 1; period <= Math.floor(steps.length / 2); period += 1) {
+      if (steps.length % period === 0 && signatures.every((signature, index) => signature === signatures[index % period])) {
+        steps = steps.slice(0, period);
+        break;
+      }
+    }
     const results = [];
     for (const step of steps) {
       if (!step || !autoBroAutomationCommands.has(step.command)) throw new Error(`WebGPU planner selected unsupported AutoBro command: ${step?.command || '<missing>'}`);
@@ -214,15 +222,18 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
       results.push({ command: step.command, result: await browserClient.command(step.command, parameters, 120_000) });
     }
     const finalPage = await browserClient.command('pageInfo', {}, 30_000).catch(() => null);
-    const report = JSON.stringify({ task: instruction, executedOnce: true, steps: results, finalPage });
-    recentAutoBroExecutions.set(executionKey, { completedAt: Date.now(), report });
-    return `AUTOBRO_EXECUTION_COMPLETE\nThe browser task ran exactly once. Report the following execution result in the vmagent shell and do not call another browser tool for this task.\n${report}`;
+    const stepLines = results.map(({ command, result }, index) => `${index + 1}. ${command}: ${typeof result === 'string' ? result : JSON.stringify(result)}`);
+    const pageLine = finalPage ? `Final page: ${finalPage.title || finalPage.pageTitle || '(untitled)'}${finalPage.url ? ` — ${finalPage.url}` : ''}` : 'Final page: unavailable';
+    const text = [`AutoBro task completed.`, `Task: ${instruction}`, ...stepLines, pageLine].join('\n');
+    currentAutoBroExecution = { instruction, results, finalPage, text };
+    return `AUTOBRO_EXECUTION_COMPLETE\nThe browser task ran exactly once. This result will be returned directly in the vmagent shell. Do not call another browser tool.\n${text}`;
   }, {
     name: 'autobro_automate',
     description: 'Preferred tool for natural-language browser tasks when AutoBro is connected. It gives the current page, exact visible controls, relevant AutoBro skills, and the requested action to the ready page-local WebGPU LLM; validates the resulting command sequence; then executes it. Use autobro_command only for an already-known low-level command.',
     schema: z.object({ instruction: z.string().min(1) }),
   }));
   if (browserClient) browserTools.push(tool(async ({ command, parameters }) => {
+    if (currentAutoBroExecution) return `AUTOBRO_EXECUTION_COMPLETE\nA browser task already ran during this vmagent turn.\n${currentAutoBroExecution.text}`;
     const fallbackUrl = ['gotoUrl', 'newTab'].includes(command) ? parameters?.url : null;
     const canFetchFallback = fallbackUrl && /^https:\/\//i.test(fallbackUrl);
     const detail = { command, parameters, fallback: canFetchFallback ? 'vmfetch raw GET if AutoBro navigation fails' : 'none' };
@@ -264,10 +275,21 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
   return {
     agent,
     async run(prompt, { signal } = {}) {
+      currentAutoBroExecution = null;
       onActivity({ state: 'running', prompt });
-      const result = await agent.invoke({ messages: [{ role: 'user', content: prompt }] }, { signal, recursionLimit: 60, configurable: { thread_id: sessionId } });
+      let result;
+      try {
+        result = await agent.invoke({ messages: [{ role: 'user', content: prompt }] }, { signal, recursionLimit: 60, configurable: { thread_id: sessionId } });
+      } catch (error) {
+        if (currentAutoBroExecution) {
+          const output = `${currentAutoBroExecution.text}\nAgent follow-up warning: ${error.message}`;
+          onActivity({ state: 'complete', output });
+          return { output, result: null, sessionId };
+        }
+        throw error;
+      }
       const finalMessage = result.messages?.at(-1);
-      const output = contentText(finalMessage || { content: 'Agent completed without a final message.' });
+      const output = currentAutoBroExecution?.text || contentText(finalMessage || { content: 'Agent completed without a final message.' });
       onActivity({ state: 'complete', output });
       return { output, result, sessionId };
     },

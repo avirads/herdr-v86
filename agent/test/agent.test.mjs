@@ -146,7 +146,10 @@ test('AutoBro automation uses the page-local WebGPU LLM to plan exact commands',
   const harness = createHerdrAgent({
     llmClient: scriptedClient([
       { tool: 'autobro_automate', args: { instruction: 'Type test in the Search field' } },
-      { steps: [{ command: 'fillInput', args: ['[name="query"]', 'test'] }] },
+      { steps: [
+        { command: 'fillInput', args: ['[name="query"]', 'test'] },
+        { command: 'fillInput', args: ['[name="query"]', 'test'] },
+      ] },
       { final: 'Entered test in the Search field.' },
     ]),
     guest: fallbackGuest(async () => '__V86AGENT_EXIT__0\nok'),
@@ -154,7 +157,8 @@ test('AutoBro automation uses the page-local WebGPU LLM to plan exact commands',
     approveAction: async () => true,
   });
   const result = await harness.run('Type test in the Search field.');
-  assert.match(result.output, /Entered test/);
+  assert.match(result.output, /AutoBro task completed/);
+  assert.match(result.output, /fillInput: \{"changed":true\}/);
   assert.deepEqual(browserCalls.map(call => call[0]), ['inventoryCurrentPage', 'relatedActions', 'skills', 'fillInput', 'pageInfo']);
   assert.deepEqual(browserCalls.at(-2)[1], { args: ['[name="query"]', 'test'] });
 });
@@ -173,7 +177,7 @@ test('duplicate AutoBro automation calls return the first execution result witho
     llmClient: scriptedClient([
       { tool: 'autobro_automate', args: { instruction } },
       { steps: [{ command: 'pressKey', args: ['ENTER'] }] },
-      { tool: 'autobro_automate', args: { instruction } },
+      { tool: 'autobro_automate', args: { instruction: 'Press Enter to submit this form now' } },
       { final: 'The form was submitted and the browser reached the results page.' },
     ]),
     guest: fallbackGuest(async () => '__V86AGENT_EXIT__0\nok'),
@@ -181,6 +185,8 @@ test('duplicate AutoBro automation calls return the first execution result witho
     approveAction: async () => true,
   });
   const result = await harness.run(instruction);
-  assert.match(result.output, /results page/);
+  assert.match(result.output, /AutoBro task completed/);
+  assert.match(result.output, /example\.com\/results/);
+  assert.doesNotMatch(result.output, /The form was submitted/);
   assert.deepEqual(executed, ['pressKey']);
 });

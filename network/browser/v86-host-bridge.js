@@ -32,6 +32,7 @@ export class V86HostBridge extends EventTarget {
     this.rpcSerial = rpcSerial;
     this.lines = ["", ""];
     this.replyChannels = new Map();
+    this.handledAgentRequests = new Set();
     this.sendQueue = Promise.resolve();
     this.onByte0 = byte => this.consumeByte(byte, 0);
     this.onByte1 = byte => this.consumeByte(byte, 1);
@@ -95,6 +96,9 @@ export class V86HostBridge extends EventTarget {
     if (operation === "LLM_CHAT") return this.llm(id, "chat", fields[0]);
     if (operation.startsWith("AGENT_")) {
       if (!this.agentHandler) throw new Error("vmagent is still initializing");
+      if (this.handledAgentRequests.has(id)) return;
+      this.handledAgentRequests.add(id);
+      if (this.handledAgentRequests.size > 128) this.handledAgentRequests.delete(this.handledAgentRequests.values().next().value);
       const command = operation.slice("AGENT_".length).toLowerCase();
       const values = fields.map(value => decodeText(value || ""));
       this.agentHandler(command, ...values).catch(error => {

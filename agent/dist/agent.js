@@ -95245,7 +95245,7 @@ function createHerdrAgent({ llmClient, guest, browserClient = null, onActivity =
     schema: external_exports2.object({ operation: external_exports2.enum(["status", "models"]) })
   });
   const browserTools = [];
-  const recentAutoBroExecutions = /* @__PURE__ */ new Map();
+  let currentAutoBroExecution = null;
   const autoBroAutomationCommands = /* @__PURE__ */ new Set([
     "pageInfo",
     "inventoryCurrentPage",
@@ -95270,6 +95270,8 @@ function createHerdrAgent({ llmClient, guest, browserClient = null, onActivity =
     "gwClick"
   ]);
   if (browserClient) browserTools.push(tool(async ({ query, engine }) => {
+    if (currentAutoBroExecution) return `AUTOBRO_EXECUTION_COMPLETE
+${currentAutoBroExecution.text}`;
     const base = engine === "bing" ? "https://www.bing.com/search?q=" : engine === "duckduckgo" ? "https://duckduckgo.com/?q=" : "https://www.google.com/search?q=";
     const url2 = base + encodeURIComponent(query);
     const detail = { engine, query, url: url2 };
@@ -95279,7 +95281,10 @@ function createHerdrAgent({ llmClient, guest, browserClient = null, onActivity =
       const tab = await browserClient.command("newTab", { url: url2 }, 12e4);
       await browserClient.command("waitForLoad", { tabId: tab.tabId, timeout: 20 }, 3e4).catch(() => void 0);
       const page = await browserClient.command("pageInfo", { tabId: tab.tabId }, 3e4).catch(() => tab);
-      return JSON.stringify({ engine, query, tab, page });
+      const text = [`AutoBro task completed.`, `Search: ${query}`, `Engine: ${engine}`, `Final page: ${page?.title || "(untitled)"}${page?.url ? ` \u2014 ${page.url}` : ""}`].join("\n");
+      currentAutoBroExecution = { instruction: `Search ${engine} for ${query}`, results: [{ command: "browser_search", result: { tab, page } }], finalPage: page, text };
+      return `AUTOBRO_EXECUTION_COMPLETE
+${text}`;
     } catch (error48) {
       return `Browser search error: ${error48.message}`;
     }
@@ -95289,12 +95294,10 @@ function createHerdrAgent({ llmClient, guest, browserClient = null, onActivity =
     schema: external_exports2.object({ query: external_exports2.string(), engine: external_exports2.enum(["google", "bing", "duckduckgo"]).default("google") })
   }));
   if (browserClient) browserTools.push(tool(async ({ instruction }) => {
-    const executionKey = instruction.trim().toLowerCase().replace(/\s+/g, " ");
-    const previous = recentAutoBroExecutions.get(executionKey);
-    if (previous && Date.now() - previous.completedAt < 3e4) {
+    if (currentAutoBroExecution) {
       return `AUTOBRO_EXECUTION_COMPLETE
-Duplicate execution suppressed. Report the existing result to the user without running another browser tool.
-${previous.report}`;
+A browser automation sequence has already run during this vmagent turn. Do not run another browser tool.
+${currentAutoBroExecution.text}`;
     }
     const detail = { instruction, planner: "page-local WebGPU LLM", context: "current page, visible controls, related actions, and AutoBro skills" };
     onActivity({ tool: "autobro_automate", detail, approval: true });
@@ -95306,7 +95309,7 @@ ${previous.report}`;
       url: page?.url,
       title: page?.title || page?.pageTitle,
       controls: (page?.controls || []).slice(0, 30).map(({ tag, type, id, name, label, disabled, readonly: readonly2 }) => ({ tag, type, id, name, label, disabled, readonly: readonly2 })),
-      actions: (page?.actions || []).slice(0, 20).map(({ id, text, tag, dataGwClick }) => ({ id, text, tag, dataGwClick })),
+      actions: (page?.actions || []).slice(0, 20).map(({ id, text: text2, tag, dataGwClick }) => ({ id, text: text2, tag, dataGwClick })),
       relatedActions: (relatedActions || []).slice(0, 12)
     };
     const skillContext = (Array.isArray(skills) ? skills : skills?.skills || []).slice(0, 2).map((skill) => ({ path: skill.path, content: String(skill.content || "").slice(0, 1200) }));
@@ -95325,8 +95328,15 @@ Relevant skills: ${JSON.stringify(skillContext)}` }
     });
     const raw = completion?.choices?.[0]?.message?.content ?? completion;
     const plan = parseDecision(raw);
-    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+    let steps = Array.isArray(plan?.steps) ? plan.steps : [];
     if (!steps.length || steps.length > 12) throw new Error("WebGPU planner returned no usable AutoBro steps");
+    const signatures = steps.map((step) => JSON.stringify({ command: step?.command, args: step?.args || [], tabId: step?.tabId || null }));
+    for (let period = 1; period <= Math.floor(steps.length / 2); period += 1) {
+      if (steps.length % period === 0 && signatures.every((signature, index2) => signature === signatures[index2 % period])) {
+        steps = steps.slice(0, period);
+        break;
+      }
+    }
     const results = [];
     for (const step of steps) {
       if (!step || !autoBroAutomationCommands.has(step.command)) throw new Error(`WebGPU planner selected unsupported AutoBro command: ${step?.command || "<missing>"}`);
@@ -95335,17 +95345,22 @@ Relevant skills: ${JSON.stringify(skillContext)}` }
       results.push({ command: step.command, result: await browserClient.command(step.command, parameters, 12e4) });
     }
     const finalPage = await browserClient.command("pageInfo", {}, 3e4).catch(() => null);
-    const report = JSON.stringify({ task: instruction, executedOnce: true, steps: results, finalPage });
-    recentAutoBroExecutions.set(executionKey, { completedAt: Date.now(), report });
+    const stepLines = results.map(({ command, result }, index2) => `${index2 + 1}. ${command}: ${typeof result === "string" ? result : JSON.stringify(result)}`);
+    const pageLine = finalPage ? `Final page: ${finalPage.title || finalPage.pageTitle || "(untitled)"}${finalPage.url ? ` \u2014 ${finalPage.url}` : ""}` : "Final page: unavailable";
+    const text = [`AutoBro task completed.`, `Task: ${instruction}`, ...stepLines, pageLine].join("\n");
+    currentAutoBroExecution = { instruction, results, finalPage, text };
     return `AUTOBRO_EXECUTION_COMPLETE
-The browser task ran exactly once. Report the following execution result in the vmagent shell and do not call another browser tool for this task.
-${report}`;
+The browser task ran exactly once. This result will be returned directly in the vmagent shell. Do not call another browser tool.
+${text}`;
   }, {
     name: "autobro_automate",
     description: "Preferred tool for natural-language browser tasks when AutoBro is connected. It gives the current page, exact visible controls, relevant AutoBro skills, and the requested action to the ready page-local WebGPU LLM; validates the resulting command sequence; then executes it. Use autobro_command only for an already-known low-level command.",
     schema: external_exports2.object({ instruction: external_exports2.string().min(1) })
   }));
   if (browserClient) browserTools.push(tool(async ({ command, parameters }) => {
+    if (currentAutoBroExecution) return `AUTOBRO_EXECUTION_COMPLETE
+A browser task already ran during this vmagent turn.
+${currentAutoBroExecution.text}`;
     const fallbackUrl = ["gotoUrl", "newTab"].includes(command) ? parameters?.url : null;
     const canFetchFallback = fallbackUrl && /^https:\/\//i.test(fallbackUrl);
     const detail = { command, parameters, fallback: canFetchFallback ? "vmfetch raw GET if AutoBro navigation fails" : "none" };
@@ -95391,10 +95406,22 @@ ${report}`;
   return {
     agent,
     async run(prompt, { signal } = {}) {
+      currentAutoBroExecution = null;
       onActivity({ state: "running", prompt });
-      const result = await agent.invoke({ messages: [{ role: "user", content: prompt }] }, { signal, recursionLimit: 60, configurable: { thread_id: sessionId } });
+      let result;
+      try {
+        result = await agent.invoke({ messages: [{ role: "user", content: prompt }] }, { signal, recursionLimit: 60, configurable: { thread_id: sessionId } });
+      } catch (error48) {
+        if (currentAutoBroExecution) {
+          const output2 = `${currentAutoBroExecution.text}
+Agent follow-up warning: ${error48.message}`;
+          onActivity({ state: "complete", output: output2 });
+          return { output: output2, result: null, sessionId };
+        }
+        throw error48;
+      }
       const finalMessage = result.messages?.at(-1);
-      const output = contentText(finalMessage || { content: "Agent completed without a final message." });
+      const output = currentAutoBroExecution?.text || contentText(finalMessage || { content: "Agent completed without a final message." });
       onActivity({ state: "complete", output });
       return { output, result, sessionId };
     }

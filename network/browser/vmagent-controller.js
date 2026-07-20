@@ -5,9 +5,10 @@ export class VmAgentController {
     this.abortController = null;
     this.yolo = true;
     this.conversationActive = false;
+    this.completedRuns = new Map();
   }
 
-  resetHarness() { this.harness = null; }
+  resetHarness() { this.harness = null; this.completedRuns.clear(); }
   closeConversation() { this.conversationActive = false; }
 
   async handle(command, value = '') {
@@ -25,6 +26,7 @@ export class VmAgentController {
       this.abortController?.abort();
       this.abortController = null;
       this.harness = null;
+      this.completedRuns.clear();
       this.yolo = true;
       this.conversationActive = false;
       return await this.onOutput('[vmagent] session reset; YOLO is on by default.');
@@ -38,6 +40,12 @@ export class VmAgentController {
       return await this.onOutput(`[vmagent] YOLO ${this.yolo ? 'on' : 'off'}.`);
     }
     if (command !== 'run') throw new Error(`unsupported vmagent command: ${command}`);
+    const runKey = String(value).trim();
+    if (this.completedRuns.has(runKey)) {
+      await this.onOutput(this.completedRuns.get(runKey));
+      await this.onBusy(false);
+      return;
+    }
     if (this.abortController) return await this.onOutput('[vmagent] another task is already running; use vmagent stop first.');
     const llmClient = this.getLlmClient();
     const guest = this.getGuest();
@@ -56,6 +64,8 @@ export class VmAgentController {
         approveAction: (operation, detail) => this.yolo || this.approveAction(operation, detail),
       });
       const result = await this.harness.run(value, { signal: this.abortController.signal });
+      this.completedRuns.set(runKey, result.output);
+      if (this.completedRuns.size > 64) this.completedRuns.delete(this.completedRuns.keys().next().value);
       await this.onOutput(result.output);
     } catch (error) {
       await this.onOutput(`Error: ${error.message}`);
