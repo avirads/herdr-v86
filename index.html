@@ -83,6 +83,7 @@ function finishBoot() {
   setTimeout(() => {
     term.clear();
     term.write("\x1b[2J\x1b[H");
+    emulator.serial0_send("\n");
     bootOverlay.classList.add("done");
     document.getElementById("term").style.visibility = "visible";
     term.focus();
