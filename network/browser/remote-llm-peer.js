@@ -21,6 +21,7 @@ export class RemoteLlmPeer extends EventTarget {
     this.secret = null;
     this.pending = new Map();
     this.seen = new Map();
+    this.active = new Set();
   }
 
   activity(message) {
@@ -67,16 +68,23 @@ export class RemoteLlmPeer extends EventTarget {
         connection.send(this.seen.get(message.id));
         return;
       }
+      if (this.active.has(message.id)) return;
+      this.active.add(message.id);
       try {
         const client = this.getLlmClient?.();
         if (!client) throw new Error('desktop WebGPU LLM is not ready');
-        const completion = await client.chat({ messages: [{ role: 'user', content: message.prompt }] });
+        const body = { messages: [{ role: 'user', content: message.prompt }] };
+        const completion = client.chatStream
+          ? await client.chatStream(body, delta => connection.send({ type: 'llm.chunk', id: message.id, delta }))
+          : await client.chat(body);
         const response = { type: 'llm.result', id: message.id, content: completion?.choices?.[0]?.message?.content || '' };
         this.seen.set(message.id, response);
         if (this.seen.size > 256) this.seen.delete(this.seen.keys().next().value);
-        connection.send(response);
+        connection.send(client.chatStream ? { type: 'llm.done', id: message.id } : response);
       } catch (error) {
         connection.send({ type: 'llm.error', id: message.id, error: error.message || String(error) });
+      } finally {
+        this.active.delete(message.id);
       }
     });
   }
@@ -117,22 +125,34 @@ export class RemoteLlmPeer extends EventTarget {
     connection.on('data', message => {
       if (!message?.id || !this.pending.has(message.id)) return;
       const pending = this.pending.get(message.id);
+      if (message.type === 'llm.chunk') {
+        clearTimeout(pending.timer);
+        pending.timer = this.responseTimer(message.id, pending.reject);
+        pending.content += message.delta || '';
+        pending.onChunk?.(message.delta || '');
+        return;
+      }
       clearTimeout(pending.timer);
       this.pending.delete(message.id);
-      if (message.type === 'llm.result') pending.resolve(message.content);
+      if (message.type === 'llm.done') pending.resolve(pending.content);
+      else if (message.type === 'llm.result') pending.resolve(message.content);
       else if (message.type === 'llm.error') pending.reject(new Error(message.error));
     });
     connection.on('close', () => this.activity('desktop disconnected'));
   }
 
-  chat(prompt) {
+  responseTimer(id, reject) {
+    return setTimeout(() => {
+      this.pending.delete(id);
+      reject(new Error('LLM response timed out'));
+    }, REQUEST_TIMEOUT_MS);
+  }
+
+  chat(prompt, { onChunk } = {}) {
     const id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error('LLM response timed out'));
-      }, REQUEST_TIMEOUT_MS);
-      this.pending.set(id, { resolve, reject, timer });
+      const timer = this.responseTimer(id, reject);
+      this.pending.set(id, { resolve, reject, timer, onChunk, content: '' });
       try { send(this.connection, { type: 'llm.chat', id, prompt }); }
       catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
@@ -149,5 +169,6 @@ export class RemoteLlmPeer extends EventTarget {
     }
     this.pending.clear();
     this.seen.clear();
+    this.active.clear();
   }
 }

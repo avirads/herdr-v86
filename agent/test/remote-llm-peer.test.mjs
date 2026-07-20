@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { LiteRtLmClient } from '../../network/browser/litert-lm-client.js';
 import { RemoteLlmPeer } from '../../network/browser/remote-llm-peer.js';
 
 if (!globalThis.CustomEvent) {
@@ -45,6 +46,51 @@ test('remote LLM client correlates responses without invoking an agent', async (
   assert.equal(await result, 'direct answer');
   assert.equal(request.type, 'llm.chat');
   assert.equal(request.prompt, 'hello');
+});
+
+test('LiteRT and WebRTC stream generated chunks to the mobile client', async () => {
+  const llm = new LiteRtLmClient();
+  llm.modelName = 'test-model';
+  llm.engine = {
+    async createConversation() {
+      return {
+        sendMessageStreaming() {
+          return new ReadableStream({ start(controller) {
+            controller.enqueue({ role: 'assistant', content: 'hello ' });
+            controller.enqueue({ role: 'assistant', content: 'mobile' });
+            controller.close();
+          }});
+        },
+        async delete() {},
+      };
+    },
+  };
+  const host = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => llm });
+  host.secret = 'b'.repeat(32);
+  const connection = new FakeConnection();
+  host.accept(connection);
+  connection.emit('data', { type: 'auth', secret: host.secret });
+  connection.emit('data', { type: 'llm.chat', id: 'stream-1', prompt: 'hello' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(connection.sent, [
+    { type: 'auth.ok' },
+    { type: 'llm.chunk', id: 'stream-1', delta: 'hello ' },
+    { type: 'llm.chunk', id: 'stream-1', delta: 'mobile' },
+    { type: 'llm.done', id: 'stream-1' },
+  ]);
+
+  const mobile = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => null });
+  const mobileConnection = new FakeConnection();
+  mobile.connection = mobileConnection;
+  mobile.bindResults(mobileConnection);
+  const chunks = [];
+  const result = mobile.chat('hello', { onChunk: chunk => chunks.push(chunk) });
+  const request = mobileConnection.sent[0];
+  mobileConnection.emit('data', { type: 'llm.chunk', id: request.id, delta: 'hello ' });
+  mobileConnection.emit('data', { type: 'llm.chunk', id: request.id, delta: 'mobile' });
+  mobileConnection.emit('data', { type: 'llm.done', id: request.id });
+  assert.equal(await result, 'hello mobile');
+  assert.deepEqual(chunks, ['hello ', 'mobile']);
 });
 
 test('mobile remote page does not load the VM or local model runtime', async () => {

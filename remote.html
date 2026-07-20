@@ -89,7 +89,16 @@ document.getElementById('chat-form').onsubmit = async event => {
   log.scrollTop = log.scrollHeight;
   const send = document.getElementById('send');
   send.disabled = true;
-  try { log.textContent += `${await remote.chat(message)}\n\n`; }
+  let streamed = false;
+  try {
+    const answer = await remote.chat(message, { onChunk: delta => {
+      streamed = true;
+      log.textContent += delta;
+      log.scrollTop = log.scrollHeight;
+    }});
+    if (!streamed) log.textContent += answer;
+    log.textContent += '\n\n';
+  }
   catch (error) { log.textContent += `[error: ${error.message}]\n\n`; }
   finally { send.disabled = false; log.scrollTop = log.scrollHeight; prompt.focus(); }
 };

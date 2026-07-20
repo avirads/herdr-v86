@@ -176,4 +176,33 @@ export class LiteRtLmClient extends EventTarget {
       conversation.delete?.();
     }
   }
+
+  async chatStream(body, onChunk) {
+    if (!this.engine) throw new Error('no page-local LiteRT-LM model loaded; use Configure LLM');
+    const messages = body?.messages || [];
+    if (!messages.length) throw new Error('messages required');
+    const last = messages[messages.length - 1];
+    const preface = messages.slice(0, -1).map(message => ({ role: message.role, content: contentToText(message.content) }));
+    const conversation = await this.engine.createConversation(preface.length ? { preface: { messages: preface } } : {});
+    let content = '';
+    try {
+      const reader = conversation.sendMessageStreaming(contentToText(last.content)).getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const delta = contentToText(value?.content);
+        if (!delta) continue;
+        content += delta;
+        await onChunk?.(delta);
+      }
+      return {
+        id: `litertlm-${Date.now()}`,
+        object: 'chat.completion',
+        model: this.modelName,
+        choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+      };
+    } finally {
+      await conversation.delete?.();
+    }
+  }
 }

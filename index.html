@@ -471,8 +471,14 @@ document.getElementById("remote-chat-form").onsubmit = async event => {
   const submit = event.submitter;
   if (submit) submit.disabled = true;
   try {
-    const answer = await (await getRemoteLlmPeer()).chat(prompt);
-    remoteChatLog.textContent += `${answer}\n\n`;
+    let streamed = false;
+    const answer = await (await getRemoteLlmPeer()).chat(prompt, { onChunk: delta => {
+      streamed = true;
+      remoteChatLog.textContent += delta;
+      remoteChatLog.scrollTop = remoteChatLog.scrollHeight;
+    }});
+    if (!streamed) remoteChatLog.textContent += answer;
+    remoteChatLog.textContent += "\n\n";
   } catch (error) {
     remoteChatLog.textContent += `[error: ${error.message}]\n\n`;
   } finally {
