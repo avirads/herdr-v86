@@ -51,6 +51,11 @@ export class AutoBroClient {
     port.postMessage({ type: 'llm-provider-hello', token: this.token });
   }
 
+  disconnect() {
+    try { this.llmPort?.disconnect(); } catch {}
+    this.llmPort = null;
+  }
+
   command(command, parameters = {}, timeoutMs = 30_000) {
     return this.send({ ...parameters, command, timeoutMs });
   }

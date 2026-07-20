@@ -94,6 +94,25 @@ export class LiteRtLmClient extends EventTarget {
     await this.loadCachedModel(file.name);
   }
 
+  async reset() {
+    await this.engine?.delete?.();
+    this.engine = null;
+    this.modelName = null;
+    this.loading = null;
+    localStorage.removeItem(LAST_MODEL_KEY);
+    try {
+      const directory = await this.modelsDirectory();
+      const names = [];
+      for await (const [name, handle] of directory.entries()) {
+        if (handle.kind === 'file') names.push(name);
+      }
+      for (const name of names) await directory.removeEntry(name);
+    } catch (error) {
+      if (error?.name !== 'NotFoundError') throw error;
+    }
+    this.activity('model configuration reset');
+  }
+
   async loadCachedModel(name) {
     const directory = await this.modelsDirectory();
     const file = await (await directory.getFileHandle(name)).getFile();

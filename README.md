@@ -10,6 +10,11 @@ page-local WebGPU LLM, then pair AutoBro. The guest shell is revealed only after
 both providers report ready; cached model and current-tab pairing state are
 detected automatically.
 
+Use **Settings** in the header to reset either provider. **Reset LLM** unloads
+the model and deletes its browser-cached model files; **Reset AutoBro** closes
+the provider connection and forgets the saved extension ID and pairing token.
+Either action hides the shell and returns to the corresponding wizard step.
+
 - `herdr-vm-ext4.img` — bootable ext4 root filesystem (Alpine 3.22.5 x86 + herdr 0.7.4,
   static i686-musl). Init mounts proc/sysfs/devpts/tmpfs and spawns shells on ttyS0 + tty1.
 - `herdr-alpine-x86-rootfs.tar.gz` — same tree, for 9p setups.

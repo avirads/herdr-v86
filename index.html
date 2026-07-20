@@ -41,6 +41,8 @@
   dialog label { display: grid; gap: 5px; margin: 12px 0; font-size: 12px; color: #8b949e; }
   dialog input { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 8px; }
   .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .settings-action { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 12px 0; border-top: 1px solid #30363d; }
+  .settings-action small, #settings-dialog p { color: #8b949e; }
 </style>
 </head>
 <body>
@@ -92,8 +94,7 @@
     <button id="open-help" title="Guest command reference">Help</button>
     <button id="configure-llm" title="Load a page-local LiteRT-LM WebGPU model">Configure LLM</button>
     <button id="connect-autobro" title="Pair AutoBro for agent browser automation">Connect AutoBro</button>
-    <a class="tool-link" href="downloads/autobro-web-bridge-0.3.0.zip" download title="Download the AutoBro Chrome extension package">Download AutoBro</a>
-    <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer" title="Download the approximately 2 GB Gemma E2B WebGPU model">Download LLM model (~2 GB)</a>
+    <button id="open-settings" title="Reset LLM or AutoBro configuration">Settings</button>
     <input id="file-input" type="file" hidden>
     <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
   </div>
@@ -112,6 +113,19 @@
       <button type="submit">Connect</button>
     </div>
   </form>
+</dialog>
+<dialog id="settings-dialog">
+  <h2>Settings</h2>
+  <p>Resetting a provider returns the app to the corresponding setup-wizard step.</p>
+  <div class="settings-action">
+    <div><strong>WebGPU LLM</strong><br><small>Unload and delete cached model files from this browser.</small></div>
+    <button id="reset-llm" type="button">Reset LLM</button>
+  </div>
+  <div class="settings-action">
+    <div><strong>AutoBro</strong><br><small>Disconnect and forget the extension ID and pairing token.</small></div>
+    <button id="reset-autobro" type="button">Reset AutoBro</button>
+  </div>
+  <div class="dialog-actions"><button id="close-settings" type="button">Close</button></div>
 </dialog>
 <div id="term"></div>
 <div id="screen_container">
@@ -366,6 +380,51 @@ document.getElementById("autobro-form").onsubmit = event => {
   if (!extensionId || !token) return;
   autobroDialog.close();
   connectAutoBro({ interactive: false, extensionId, token });
+};
+const settingsDialog = document.getElementById("settings-dialog");
+document.getElementById("open-settings").onclick = () => settingsDialog.showModal();
+document.getElementById("close-settings").onclick = () => settingsDialog.close();
+function returnToSetup() {
+  setupFinished = false;
+  document.getElementById("term").style.visibility = "hidden";
+  updateSetupWizard();
+}
+document.getElementById("reset-llm").onclick = async () => {
+  if (!confirm("Reset the WebGPU LLM and delete its cached model files from this browser?")) return;
+  const button = document.getElementById("reset-llm");
+  button.disabled = true;
+  try {
+    await webGpuLlmClient?.reset();
+    llmReady = false;
+    llmCheckComplete = true;
+    vmAgentController?.resetHarness();
+    llmStatus("reset — configure a model");
+    document.getElementById("setup-llm-status").textContent = "Choose a .litertlm or .task model file.";
+    settingsDialog.close();
+    returnToSetup();
+  } catch (error) {
+    llmStatus("reset failed — " + error.message);
+  } finally {
+    button.disabled = false;
+  }
+};
+document.getElementById("reset-autobro").onclick = () => {
+  if (!confirm("Disconnect AutoBro and forget its pairing configuration?")) return;
+  autobroClient?.disconnect?.();
+  autobroClient = null;
+  autobroReady = false;
+  autobroCheckComplete = true;
+  localStorage.removeItem("herdr.autobroExtensionId");
+  sessionStorage.removeItem("herdr.autobroPairingToken");
+  document.getElementById("autobro-extension-id").value = "";
+  document.getElementById("autobro-pairing-token").value = "";
+  document.getElementById("setup-autobro-extension-id").value = "";
+  document.getElementById("setup-autobro-token").value = "";
+  document.getElementById("setup-autobro-status").textContent = "AutoBro is not connected.";
+  vmAgentController?.resetHarness();
+  browserStatus("not connected");
+  settingsDialog.close();
+  returnToSetup();
 };
 document.getElementById("setup-autobro-form").onsubmit = event => {
   event.preventDefault();
