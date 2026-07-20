@@ -31,6 +31,7 @@ export class WebGpuToolChatModel extends BaseChatModel {
   }
 
   _llmType() { return 'autobro-webgpu'; }
+  get profile() { return { maxInputTokens: 16384, maxOutputTokens: this.maxTokens, toolCalling: true }; }
   bindTools(tools, kwargs = {}) {
     const merged = [...this.boundTools, ...tools];
     const wrapped = merged.map(definition => ({

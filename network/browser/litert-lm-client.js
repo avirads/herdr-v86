@@ -1,6 +1,7 @@
 // First-party LiteRT-LM WebGPU provider. Models are stored in this page's OPFS;
 // no extension, native process, API key, or guest network is involved.
 const LAST_MODEL_KEY = 'herdr.litert.lastModel';
+const MAX_CONTEXT_TOKENS = 16384;
 
 function contentToText(content) {
   if (typeof content === 'string') return content;
@@ -109,7 +110,7 @@ export class LiteRtLmClient extends EventTarget {
     try {
       this.engine = await this.Engine.create({
         model: source,
-        mainExecutorSettings: { maxNumTokens: 8192 },
+        mainExecutorSettings: { maxNumTokens: MAX_CONTEXT_TOKENS },
       });
       this.modelName = name;
       localStorage.setItem(LAST_MODEL_KEY, name);
@@ -127,6 +128,7 @@ export class LiteRtLmClient extends EventTarget {
       modelName: this.modelName,
       loading: this.loading,
       provider: 'page-local-litert-lm',
+      maxContextTokens: MAX_CONTEXT_TOKENS,
     };
   }
 

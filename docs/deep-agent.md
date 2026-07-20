@@ -65,6 +65,11 @@ sandbox—not parity with a modern x86-64 workstation:
   so long autonomous tasks may need narrower prompts and more supervision;
 - checkpoints survive multiple prompts in the open page, but not a page reload.
 
+The LiteRT engine reserves a 16,384-token context window. DeepAgentsJS receives
+that model profile and automatically summarizes older conversation/tool history
+at 85% utilization, preventing the previous 8,192-token startup overflow caused
+by the framework's complete native tool catalogue.
+
 ## Setup
 
 1. Download the model with the link in the VM header.

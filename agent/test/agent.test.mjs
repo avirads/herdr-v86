@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHerdrAgent } from '../src/agent.js';
+import { createHerdrAgent, WebGpuToolChatModel } from '../src/agent.js';
+
+test('WebGPU model advertises the LiteRT context budget for summarization', () => {
+  const model = new WebGpuToolChatModel({ chat: async () => ({}) });
+  assert.equal(model.profile.maxInputTokens, 16384);
+  assert.equal(model.profile.maxOutputTokens, 1400);
+});
 
 test('Deep Agents invokes the native guest backend and returns evidence', async () => {
   let calls = 0;
