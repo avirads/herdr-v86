@@ -20,3 +20,4 @@ Important constraints:
 - vmllm uses herdr's built-in page-local WebGPU LiteRT-LM provider; it does not run inference inside the guest and requires no extension.
 - Browser-import and export files are limited to 8 MiB; vmfetch responses to 16 MiB.
 - Deep Agents maps `/` to `/root/project`; reads are automatic, while mutations and all shell commands require confirmation.
+- Optional AutoBro pairing adds authenticated browser automation; every browser command requires approval unless session-only YOLO mode is active.

@@ -38,6 +38,10 @@ browser approval. Typed browser-bridge tools cover `vmfetch`, `vmgithub`,
 [the Deep Agents guide](docs/deep-agent.md).
 An explicit session-only **YOLO** toggle can waive individual approvals; it is
 off by default, visibly marked, and resets on reload or **New session**.
+Optional **Connect AutoBro** pairing gives the agent authenticated bridge-v3
+browser automation for tabs, navigation, DOM/form interaction, CDP input,
+waits, dialogs, JavaScript, uploads, and domain commands. It remains separate
+from the built-in page-local LiteRT inference provider.
 
 ## Hosting
 

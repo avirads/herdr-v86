@@ -48,6 +48,8 @@ clipboard, file-transfer, GitHub, or AI operations.
     skills in `/root/project/skills/NAME/SKILL.md`.
 14. Deep Agents has typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`,
     and `vmllm_info` tools. Do not use recursive `vmllm chat` from the agent.
+15. When paired, `autobro_command` performs authenticated browser tasks. Treat
+    all page reads and actions as external operations; approval/YOLO applies.
 
 ## Quick capability check
 

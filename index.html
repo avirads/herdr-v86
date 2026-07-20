@@ -27,6 +27,7 @@
   <div id="status">loading v86…</div>
   <div id="network-status">network: disabled</div>
   <div id="llm-status">WebGPU LLM: not paired</div>
+  <div id="browser-status">AutoBro: not connected</div>
   <div id="tools">
     <button id="save-state">Save VM</button>
     <button id="restore-state">Restore VM</button>
@@ -34,6 +35,7 @@
     <button id="import-file">Import file</button>
     <button id="open-help" title="Guest command reference">Help</button>
     <button id="configure-llm" title="Load a page-local LiteRT-LM WebGPU model">Configure LLM</button>
+    <button id="connect-autobro" title="Pair AutoBro for agent browser automation">Connect AutoBro</button>
     <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer" title="Download the approximately 2 GB Gemma E2B WebGPU model">Download LLM model (~2 GB)</a>
     <button id="toggle-agent" title="Full Deep Agents coding assistant">Agent</button>
     <input id="file-input" type="file" hidden>
@@ -127,6 +129,7 @@ const emulator = new V86({
 
 let hostBridge;
 let webGpuLlmClient;
+let autobroClient;
 let guestReadonlyClient;
 let readonlyAgentController;
 let codingAgentHarness;
@@ -151,6 +154,30 @@ import("./network/browser/v86-host-bridge.js").then(module => {
 }).catch(error => status("host bridge failed — " + error.message));
 
 const llmStatus = message => document.getElementById("llm-status").textContent = "WebGPU LLM: " + message;
+const browserStatus = message => document.getElementById("browser-status").textContent = "AutoBro: " + message;
+async function connectAutoBro({ interactive = true } = {}) {
+  const storedId = localStorage.getItem("herdr.autobroExtensionId") || "";
+  const storedToken = sessionStorage.getItem("herdr.autobroPairingToken") || "";
+  const extensionId = interactive ? prompt("AutoBro extension ID", storedId) : storedId;
+  if (!extensionId) return;
+  const token = interactive ? prompt("AutoBro pairing token (kept for this tab only)", storedToken) : storedToken;
+  if (!token) return;
+  browserStatus("pairing…");
+  try {
+    const { AutoBroClient } = await import("./network/browser/autobro-client.js");
+    const client = new AutoBroClient({ extensionId: extensionId.trim(), token: token.trim() });
+    const health = await client.pair();
+    autobroClient = client;
+    codingAgentHarness = null;
+    localStorage.setItem("herdr.autobroExtensionId", extensionId.trim());
+    sessionStorage.setItem("herdr.autobroPairingToken", token.trim());
+    browserStatus(`connected — bridge v${health.bridgeVersion || "?"}`);
+  } catch (error) {
+    browserStatus("error — " + error.message);
+  }
+}
+document.getElementById("connect-autobro").onclick = () => connectAutoBro();
+if (localStorage.getItem("herdr.autobroExtensionId") && sessionStorage.getItem("herdr.autobroPairingToken")) connectAutoBro({ interactive: false });
 const llmFileInput = document.getElementById("llm-file-input");
 document.getElementById("configure-llm").onclick = () => llmFileInput.click();
 try {
@@ -228,6 +255,7 @@ document.getElementById("agent-run").onclick = async () => {
     codingAgentHarness ||= createHerdrAgent({
         llmClient: webGpuLlmClient,
         guest: guestReadonlyClient,
+        browserClient: autobroClient,
         onActivity: event => agentActivity.textContent += "\n" + JSON.stringify(event),
         approveAction: async (operation, detail) => yoloMode || confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
       });

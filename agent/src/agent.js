@@ -88,7 +88,7 @@ export class WebGpuToolChatModel extends BaseChatModel {
   }
 }
 
-export function createHerdrAgent({ llmClient, guest, onActivity = () => {}, approveAction = async () => false, sessionId = crypto.randomUUID() }) {
+export function createHerdrAgent({ llmClient, guest, browserClient = null, onActivity = () => {}, approveAction = async () => false, sessionId = crypto.randomUUID() }) {
   const model = new WebGpuToolChatModel(llmClient);
   const backend = new V86DeepAgentsBackend(guest, { approve: approveAction, onActivity });
   const approvedCommand = async (toolName, detail, command) => {
@@ -121,10 +121,24 @@ export function createHerdrAgent({ llmClient, guest, onActivity = () => {}, appr
   const vmllmInfo = tool(async ({ operation }) => commandResult(await guest.execute(`vmllm ${operation}`)), {
     name: 'vmllm_info', description: 'Inspect the page-local LiteRT-LM status or cached model list. Chat is intentionally excluded to avoid recursive inference.', schema: z.object({ operation: z.enum(['status', 'models']) }),
   });
+  const browserTools = [];
+  if (browserClient) browserTools.push(tool(async ({ command, parameters }) => {
+    const detail = { command, parameters };
+    onActivity({ tool: 'autobro_command', detail, approval: true });
+    if (!await approveAction('autobro_command', detail)) return 'Browser operation rejected by user.';
+    const result = await browserClient.command(command, parameters, 120_000);
+    if (command === 'captureScreenshot' && result?.data) return JSON.stringify({ ...result, data: '<omitted from text context>', byteLength: Math.ceil(result.data.length * 3 / 4) });
+    const output = typeof result === 'string' ? result : JSON.stringify(result);
+    return output.length > 60000 ? `${output.slice(0, 60000)}\n[AutoBro result truncated]` : output;
+  }, {
+    name: 'autobro_command',
+    description: 'Control the user-authorized Chrome browser through AutoBro bridge-v3. Commands: health, listTabs, newTab, switchTab, ensureRealTab, activeTab, currentTab, closeTab, gotoUrl, pageInfo, inventoryCurrentPage, visibleActions, relatedActions, extractMessages, extractGrids, findSearchAction, fillInput, setSelect, elementState, dispatchKey, showWidget, clickAtXY, typeText, pressKey, scroll, waitForLoad, waitForElement, waitNetworkIdle, pendingDialog, acceptDialog, captureScreenshot, highlightElement, js, cdp, uploadFile, localLogin, skills. Pass command fields in parameters (for example {url}, {tabId}, {x,y}, {text}, {selector}, or {args:[...]}). Every call requires approval unless YOLO is active.',
+    schema: z.object({ command: z.string(), parameters: z.record(z.string(), z.unknown()).default({}) }),
+  }));
   const agent = createDeepAgent({
     name: 'herdr-coding-agent',
     model,
-    tools: [vmfetch, vmgithub, vmclip, vmexport, vmai, vmllmInfo],
+    tools: [vmfetch, vmgithub, vmclip, vmexport, vmai, vmllmInfo, ...browserTools],
     backend,
     checkpointer: new MemorySaver(),
     generalPurposeAgent: true,

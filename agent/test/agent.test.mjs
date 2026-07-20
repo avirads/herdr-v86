@@ -33,12 +33,12 @@ test('Deep Agents invokes the native guest backend and returns evidence', async 
     async execute(command) { guestCalls.push(['execute', command]); return '__V86AGENT_EXIT__0\nok'; },
     async test(recipe) { guestCalls.push(['test', recipe]); return 'ok'; },
   };
-  const harness = createHerdrAgent({ llmClient, guest, onActivity: event => activities.push(event) });
+  const harness = createHerdrAgent({ llmClient, guest, browserClient: { command: async () => ({ ok: true }) }, onActivity: event => activities.push(event) });
   const result = await harness.run('List the project.');
   assert.deepEqual(guestCalls, [['list', 'skills/'], ['read', 'AGENTS.md'], ['list', '.']]);
   assert.match(result.output, /src\/main\.js/);
   const protocol = firstRequest.messages[0].content;
-  for (const name of ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'vmfetch', 'vmgithub', 'vmclip', 'vmexport', 'vmai', 'vmllm_info']) {
+  for (const name of ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'vmfetch', 'vmgithub', 'vmclip', 'vmexport', 'vmai', 'vmllm_info', 'autobro_command']) {
     assert.match(protocol, new RegExp(`"name":"${name}"`));
   }
 });

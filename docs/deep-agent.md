@@ -64,6 +64,31 @@ scrape `google.com` because Google does not grant cross-origin fetch access, and
 it cannot click or inspect rendered pages. Use a CORS-enabled search/API service
 or a separately authorized browser-automation integration for that workflow.
 
+## AutoBro browser automation
+
+Install/load the AutoBro Web Bridge extension from `web-bridge/extension`, then
+click **Connect AutoBro** in the VM header and enter its extension ID and pairing
+token. The ID is retained in localStorage; the token exists only in the current
+tab's sessionStorage. Connecting AutoBro resets the current agent harness so the
+next run receives the `autobro_command` tool.
+
+That tool covers bridge-v3 tab management, navigation, page/DOM inventory,
+visible actions, forms, coordinate clicks, text/key input, scrolling, waits,
+dialogs, screenshots, JavaScript/CDP, uploads, skills, and enabled domain
+commands. Example prompts include:
+
+```text
+Go to google.com, search for test, and report the result-page title and URL.
+Open a new tab, navigate to the application, inspect visible actions, and stop.
+```
+
+Every AutoBro call requires approval unless YOLO is active, including read-only
+inspection, because logged-in pages may contain private information. The
+extension retains its own origin allow-list and pairing-token checks. Chrome
+internal pages cannot be automated. Screenshot image data is omitted from the
+text model context to prevent context exhaustion; DOM inventory is the primary
+inspection path for the current text-only LiteRT model.
+
 ## YOLO mode
 
 **Enable YOLO** removes per-operation approval for the current open page only.
