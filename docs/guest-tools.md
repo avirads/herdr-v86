@@ -206,10 +206,13 @@ their URLs, headers, bodies, and responses. Do not use secrets with an untrusted
 or modified deployment. The browser bridge deliberately cannot bypass browser
 security controls.
 
-## Deep Agents coding agent
+## `vmagent` — Deep Agents coding agent
 
-The browser toolbar also exposes an **Agent** panel. It uses the page-local
-WebGPU LLM and maps DeepAgentsJS filesystem and shell tools to `/root/project`.
+The guest command `vmagent 'TASK'` uses the page-local WebGPU LLM and maps
+DeepAgentsJS filesystem and shell tools to `/root/project`. Use `vmagent status`,
+`stop`, `reset`, or `yolo on|off` for lifecycle control. The browser temporarily
+reserves terminal input while a task runs because agent tool RPC shares the
+serial channel.
 Reads run automatically; edits and commands require browser confirmation. See
 [the Deep Agents guide](deep-agent.md) for capabilities, skills, approvals, and
 environment limits.

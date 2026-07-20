@@ -15,7 +15,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 
 ## Canonical command documentation
 
-- `docs/guest-tools.md`: complete guest command reference and examples, including `vmllm`.
+- `docs/guest-tools.md`: complete guest command reference and examples, including `vmllm` and `vmagent`.
 - `docs/deep-agent.md`: full Deep Agents tools, approvals, skills, and limits.
 - `network/docs/host-bridge.md`: browser-bridge protocol, limits, and security.
 - `network/README.md`: full IPv4 gateway deployment and testing.
@@ -48,13 +48,16 @@ clipboard, file-transfer, GitHub, or AI operations.
     skills in `/root/project/skills/NAME/SKILL.md`.
 14. Deep Agents has typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`,
     and `vmllm_info` tools. Do not use recursive `vmllm chat` from the agent.
+15. Launch Deep Agents from the guest terminal with `vmagent 'TASK'`; lifecycle
+    commands are `vmagent status|stop|reset|yolo on|yolo off`. There is no
+    separate agent panel.
 15. When paired, `autobro_command` performs authenticated browser tasks. Treat
     all page reads and actions as external operations; approval/YOLO applies.
 
 ## Quick capability check
 
 ```sh
-command -v vmfetch vmclip vmexport vmgithub vmai vmllm
+command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmagent
 ip route
 vmfetch --help
 ```

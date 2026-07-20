@@ -26,13 +26,15 @@ const hostBridge = new V86HostBridge(emulator, {
     chat: async () => ({ choices: [{ message: { content: 'webgpu-bridge-ok' } }] }),
   },
 });
+const vmagentCommands = [];
+hostBridge.setAgentHandler(async (command, value) => vmagentCommands.push({ command, value }));
 const guest = new V86GuestReadonlyClient(emulator, hostBridge);
 emulator.add_listener('serial0-output-byte', byte => {
   serial = (serial + String.fromCharCode(byte)).slice(-100000);
   document.querySelector('#serial').textContent = serial;
   if (!started && /(?:herdr-vm:~#|~\s*[#%])\s*$/.test(serial)) {
     started = true;
-    emulator.serial0_send("mkdir -p /root/project/src; printf 'const needle = 1;\\n' > /root/project/src/main.js; vmfetch -o /tmp/payload http://127.0.0.1:8091/network/test/payload.txt && printf 'VMFETCH_CONTENT=' && cat /tmp/payload; echo; printf 'VMLLM_CONTENT='; vmllm 'hello'; echo VMFETCH_E2E_END\n");
+    emulator.serial0_send("mkdir -p /root/project/src; printf 'const needle = 1;\\n' > /root/project/src/main.js; printf 'VMAGENT_PATH='; command -v vmagent; vmagent --help >/tmp/vmagent-help 2>&1; grep -q 'vmagent PROMPT' /tmp/vmagent-help && echo VMAGENT_HELP_OK; vmagent status; vmfetch -o /tmp/payload http://127.0.0.1:8091/network/test/payload.txt && printf 'VMFETCH_CONTENT=' && cat /tmp/payload; echo; printf 'VMLLM_CONTENT='; vmllm 'hello'; echo VMFETCH_E2E_END\n");
   }
   if (!submitted && /\r?\nVMFETCH_E2E_END\r?\n/.test(serial)) {
     submitted = true;
@@ -71,7 +73,7 @@ emulator.add_listener('serial0-output-byte', byte => {
         approveAction: async () => true,
       });
       const browserResult = await browserHarness.run('Go to Google and search for test.');
-      const ok = serial.includes('VMFETCH_CONTENT=browser-bridge-ok') && serial.includes('webgpu-bridge-ok') && list.includes('src') && read.includes('needle') && grep.includes('src/main.js') && written.includes('generated') && executed.includes('deepagents-shell-ok') && fetchedStdout.includes('browser-bridge-ok') && !fetchedStdout.includes('unrecognized option') && agentWritten.includes('created by Deep Agents') && agentResult.output.includes('agent-created.txt') && agentFetched.includes('browser-bridge-ok') && fetchResult.output.includes('vmfetch completed') && browserCalls[0]?.command === 'newTab' && browserCalls[0]?.parameters?.url.includes('google.com/search') && browserResult.output.includes('search completed');
+      const ok = serial.includes('VMAGENT_PATH=/usr/local/bin/vmagent') && serial.includes('VMAGENT_HELP_OK') && vmagentCommands.some(item => item.command === 'status') && serial.includes('VMFETCH_CONTENT=browser-bridge-ok') && serial.includes('webgpu-bridge-ok') && list.includes('src') && read.includes('needle') && grep.includes('src/main.js') && written.includes('generated') && executed.includes('deepagents-shell-ok') && fetchedStdout.includes('browser-bridge-ok') && !fetchedStdout.includes('unrecognized option') && agentWritten.includes('created by Deep Agents') && agentResult.output.includes('agent-created.txt') && agentFetched.includes('browser-bridge-ok') && fetchResult.output.includes('vmfetch completed') && browserCalls[0]?.command === 'newTab' && browserCalls[0]?.parameters?.url.includes('google.com/search') && browserResult.output.includes('search completed');
       await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, serial, list, read, grep, written, executed, fetchedStdout, agentWritten, agentFetched, agentOutput: agentResult.output }) });
     })().catch(error => fetch('/__result', { method: 'POST', body: JSON.stringify({ ok: false, serial: serial + '\n' + error.stack }) }));
   }

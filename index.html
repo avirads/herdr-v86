@@ -12,10 +12,6 @@
   #status { font-size: 12px; color: #8b949e; }
   #term { padding: 0 8px 8px; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
-  #agent-panel { display: none; margin: 0 10px 10px; padding: 10px; border: 1px solid #30363d; border-radius: 6px; background: #161b22; }
-  #agent-panel textarea { box-sizing: border-box; width: 100%; min-height: 70px; color: #c9d1d9; background: #0d1117; border: 1px solid #30363d; padding: 7px; }
-  #agent-panel pre { max-height: 220px; overflow: auto; white-space: pre-wrap; color: #b1bac4; }
-  #agent-yolo-warning { display: none; color: #ff7b72; font-weight: 700; }
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
   .tool-link { color: #58a6ff; align-self: center; font-size: 12px; white-space: nowrap; }
@@ -37,26 +33,11 @@
     <button id="configure-llm" title="Load a page-local LiteRT-LM WebGPU model">Configure LLM</button>
     <button id="connect-autobro" title="Pair AutoBro for agent browser automation">Connect AutoBro</button>
     <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer" title="Download the approximately 2 GB Gemma E2B WebGPU model">Download LLM model (~2 GB)</a>
-    <button id="toggle-agent" title="Full Deep Agents coding assistant">Agent</button>
     <input id="file-input" type="file" hidden>
     <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
   </div>
 </header>
 <div id="term"></div>
-<section id="agent-panel">
-  <strong>Deep Agents coding agent</strong>
-  <p>Workspace: <code>/root/project</code>. Planning, filesystem, shell, subagents, and typed browser-backed <code>vm*</code> tools; external actions require approval.</p>
-  <textarea id="agent-prompt" placeholder="Inspect the project, fix the failing parser test, run the tests, and explain the changes."></textarea>
-  <div>
-    <button id="agent-run">Run analysis</button>
-    <button id="agent-stop" disabled>Stop</button>
-    <button id="agent-new-session">New session</button>
-    <button id="agent-yolo" aria-pressed="false">Enable YOLO</button>
-  </div>
-  <p id="agent-yolo-warning">YOLO ACTIVE — writes and shell commands run without further approval.</p>
-  <pre id="agent-activity">idle</pre>
-  <pre id="agent-output"></pre>
-</section>
 <div id="screen_container">
   <div style="white-space:pre; font:14px monospace"></div>
   <canvas></canvas>
@@ -70,7 +51,7 @@
 const status = (m) => document.getElementById("status").textContent = m;
 const networkStatus = (m) => document.getElementById("network-status").textContent = "network: " + m;
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "readonly-agent-1";
+const DISK_VERSION = "vmagent-command-1";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `herdr-vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -131,15 +112,33 @@ let hostBridge;
 let webGpuLlmClient;
 let autobroClient;
 let guestReadonlyClient;
-let readonlyAgentController;
-let codingAgentHarness;
-let yoloMode = false;
+let vmAgentController;
+let agentBusy = false;
 import("./network/browser/v86-host-bridge.js").then(module => {
   hostBridge = new module.V86HostBridge(emulator, { llmClient: webGpuLlmClient });
   window.v86HostBridge = hostBridge;
   import("./network/browser/v86-guest-readonly.js").then(({ V86GuestReadonlyClient }) => {
     guestReadonlyClient = new V86GuestReadonlyClient(emulator, hostBridge);
     window.v86GuestReadonly = guestReadonlyClient;
+    import("./network/browser/vmagent-controller.js").then(async ({ VmAgentController }) => {
+      vmAgentController = new VmAgentController({
+        createAgent: async options => {
+          const { createHerdrAgent } = await import("./agent/dist/agent.js");
+          return createHerdrAgent(options);
+        },
+        getLlmClient: () => webGpuLlmClient,
+        getGuest: () => guestReadonlyClient,
+        getBrowserClient: () => autobroClient,
+        approveAction: async (operation, detail) => confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
+        onActivity: event => {
+          const label = event.tool || event.state;
+          if (label && label !== "running" && label !== "complete") term.write(`\r\n[vmagent] ${label}\r\n`);
+        },
+        onOutput: output => term.write(`\r\n${String(output).replace(/\n/g, "\r\n")}\r\n`),
+        onBusy: busy => { agentBusy = busy; status(busy ? "vmagent running — Ctrl-C to stop" : "running — type in the terminal. Try: vmagent --help"); },
+      });
+      hostBridge.setAgentHandler((command, value) => vmAgentController.handle(command, value));
+    });
   });
   document.getElementById("save-state").onclick = async () => {
     status("saving VM state…");
@@ -168,7 +167,7 @@ async function connectAutoBro({ interactive = true } = {}) {
     const client = new AutoBroClient({ extensionId: extensionId.trim(), token: token.trim() });
     const health = await client.pair();
     autobroClient = client;
-    codingAgentHarness = null;
+    vmAgentController?.resetHarness();
     localStorage.setItem("herdr.autobroExtensionId", extensionId.trim());
     sessionStorage.setItem("herdr.autobroPairingToken", token.trim());
     browserStatus(`connected — bridge v${health.bridgeVersion || "?"}`);
@@ -208,65 +207,6 @@ try {
 } catch (error) {
   llmStatus("unavailable — " + error.message);
 }
-
-const agentPanel = document.getElementById("agent-panel");
-const agentActivity = document.getElementById("agent-activity");
-const agentOutput = document.getElementById("agent-output");
-document.getElementById("toggle-agent").onclick = () => {
-  agentPanel.style.display = agentPanel.style.display === "block" ? "none" : "block";
-};
-document.getElementById("agent-stop").onclick = () => readonlyAgentController?.abort();
-const yoloButton = document.getElementById("agent-yolo");
-const yoloWarning = document.getElementById("agent-yolo-warning");
-function setYoloMode(enabled) {
-  yoloMode = enabled;
-  yoloButton.textContent = enabled ? "Disable YOLO" : "Enable YOLO";
-  yoloButton.setAttribute("aria-pressed", String(enabled));
-  yoloWarning.style.display = enabled ? "block" : "none";
-}
-yoloButton.onclick = () => {
-  if (yoloMode) return setYoloMode(false);
-  const accepted = confirm(
-    "Enable YOLO mode for this page session?\n\n" +
-    "The agent may overwrite or delete files and run arbitrary guest shell commands WITHOUT further approval. " +
-    "Shell commands can affect the entire VM, use credentials, install software, and access networks available to the guest.\n\n" +
-    "Reload the page or use New session to disable it."
-  );
-  if (accepted) setYoloMode(true);
-};
-document.getElementById("agent-new-session").onclick = () => {
-  setYoloMode(false);
-  codingAgentHarness = null;
-  agentActivity.textContent = "new agent session";
-  agentOutput.textContent = "";
-};
-document.getElementById("agent-run").onclick = async () => {
-  const prompt = document.getElementById("agent-prompt").value.trim();
-  if (!prompt) return;
-  if (!webGpuLlmClient) return agentActivity.textContent = "Pair WebGPU LLM first.";
-  if (!guestReadonlyClient) return agentActivity.textContent = "Guest bridge is still loading.";
-  const runButton = document.getElementById("agent-run");
-  const stopButton = document.getElementById("agent-stop");
-  runButton.disabled = true; stopButton.disabled = false;
-  agentOutput.textContent = ""; agentActivity.textContent = "starting Deep Agents…";
-  readonlyAgentController = new AbortController();
-  try {
-    const { createHerdrAgent } = await import("./agent/dist/agent.js");
-    codingAgentHarness ||= createHerdrAgent({
-        llmClient: webGpuLlmClient,
-        guest: guestReadonlyClient,
-        browserClient: autobroClient,
-        onActivity: event => agentActivity.textContent += "\n" + JSON.stringify(event),
-        approveAction: async (operation, detail) => yoloMode || confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
-      });
-    const result = await codingAgentHarness.run(prompt, { signal: readonlyAgentController.signal });
-    agentOutput.textContent = result.output;
-  } catch (error) {
-    agentOutput.textContent = `Agent error: ${error.message}`;
-  } finally {
-    runButton.disabled = false; stopButton.disabled = true; readonlyAgentController = null;
-  }
-};
 
 const fileInput = document.getElementById("file-input");
 document.getElementById("import-file").onclick = () => fileInput.click();
@@ -350,6 +290,10 @@ emulator.add_listener("serial0-output-byte", (byte) => {
   }
 });
 term.onData((data) => {
+  if (agentBusy) {
+    if (data === "\x03") vmAgentController?.handle("stop");
+    return;
+  }
   for (const ch of data) emulator.serial0_send(ch);
   status("running — type in the terminal. Try: herdr");
 });

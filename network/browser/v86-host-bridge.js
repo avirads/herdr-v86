@@ -22,12 +22,13 @@ function encodeBytes(bytes) {
 }
 
 export class V86HostBridge extends EventTarget {
-  constructor(emulator, { maxFetchBytes = 16 << 20, chunkBytes = 12 << 10, llmClient = null } = {}) {
+  constructor(emulator, { maxFetchBytes = 16 << 20, chunkBytes = 12 << 10, llmClient = null, agentHandler = null } = {}) {
     super();
     this.emulator = emulator;
     this.maxFetchBytes = maxFetchBytes;
     this.chunkBytes = chunkBytes;
     this.llmClient = llmClient;
+    this.agentHandler = agentHandler;
     this.line = "";
     this.sendQueue = Promise.resolve();
     this.onByte = byte => this.consumeByte(byte);
@@ -78,11 +79,24 @@ export class V86HostBridge extends EventTarget {
     if (operation === "LLM_STATUS") return this.llm(id, "status");
     if (operation === "LLM_MODELS") return this.llm(id, "models");
     if (operation === "LLM_CHAT") return this.llm(id, "chat", fields[0]);
+    if (operation.startsWith("AGENT_")) {
+      if (!this.agentHandler) throw new Error("vmagent is still initializing");
+      const command = operation.slice("AGENT_".length).toLowerCase();
+      const values = fields.map(value => decodeText(value || ""));
+      this.agentHandler(command, ...values).catch(error => {
+        this.dispatchEvent(new CustomEvent("agent-error", { detail: error }));
+      });
+      return;
+    }
     throw new Error(`unsupported host operation: ${operation}`);
   }
 
   setLlmClient(client) {
     this.llmClient = client;
+  }
+
+  setAgentHandler(handler) {
+    this.agentHandler = handler;
   }
 
   async llm(id, operation, body64) {

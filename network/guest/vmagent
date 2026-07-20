@@ -1,0 +1,48 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  cat >&2 <<'EOF'
+usage: vmagent PROMPT...
+       vmagent run PROMPT...
+       vmagent status
+       vmagent stop
+       vmagent reset
+       vmagent yolo on|off
+
+Run the browser-hosted Deep Agents coding agent against /root/project.
+The command returns control to the serial bridge while the task runs; keyboard
+input is reserved until the result is printed. Configure the WebGPU model in
+the browser header first. Mutations require browser confirmation unless YOLO
+is enabled for the current page session.
+EOF
+  exit "${1:-2}"
+}
+
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+case "${1:-}" in -h|--help|help) usage 0;; esac
+
+operation=RUN
+payload=''
+case "${1:-}" in
+  status) operation=STATUS; shift ;;
+  stop) operation=STOP; shift ;;
+  reset|new) operation=RESET; shift ;;
+  yolo)
+    operation=YOLO
+    shift
+    case "${1:-}" in on|off) payload=$1; shift;; *) usage 2;; esac ;;
+  run) shift ;;
+esac
+
+if [ "$operation" = RUN ]; then
+  if [ "$#" -gt 0 ]; then payload=$*; else payload=$(cat); fi
+  [ -n "$payload" ] || usage 2
+fi
+[ "$#" -eq 0 ] || usage 2
+
+printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > /dev/tty
+case "$operation" in
+  RUN) echo '[vmagent] task submitted; the terminal is reserved until completion.' ;;
+  *) echo "[vmagent] $operation requested." ;;
+esac

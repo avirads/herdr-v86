@@ -1,8 +1,23 @@
 # Deep Agents coding agent
 
 The browser demo integrates DeepAgentsJS with the real `/root/project`
-filesystem inside v86. The agent uses the page-local LiteRT-LM WebGPU model and
-does not require a browser extension or cloud API.
+filesystem inside v86. Run it from the guest terminal with `vmagent`; there is
+no separate agent panel. The agent uses the page-local LiteRT-LM WebGPU model
+and does not require a browser extension or cloud API.
+
+```sh
+vmagent 'Inspect the project, fix the failing test, and verify the change.'
+cat task.txt | vmagent
+vmagent status
+vmagent stop
+vmagent reset
+vmagent yolo on
+vmagent yolo off
+```
+
+The command submits the task and the browser temporarily reserves terminal
+input while DeepAgents uses the serial bridge for guest tools. Results and
+activity are printed in the same terminal. Press Ctrl-C to request a stop.
 
 ## Framework capabilities
 
@@ -20,8 +35,8 @@ The integration enables the framework's standard coding-agent facilities:
 - typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`, and `vmllm_info`
   tools backed by the browser bridge
 
-Choose **New session** to discard the panel's conversation checkpoint. Guest
-files remain unchanged until edited or the VM is restarted/restored.
+Run `vmagent reset` to discard the conversation checkpoint and turn off YOLO.
+Guest files remain unchanged until edited or the VM is restarted/restored.
 
 ## Approval boundary
 
@@ -117,10 +132,10 @@ but does not create the guest output file originally requested from `vmfetch`.
 
 ## YOLO mode
 
-**Enable YOLO** removes per-operation approval for the current open page only.
-Enabling it requires a prominent confirmation and displays a persistent red
-warning. **Disable YOLO**, **New session**, or a page reload turns it off. The
-choice is never stored in localStorage, OPFS, a VM snapshot, or the URL.
+`vmagent yolo on` removes per-operation approval for the current open page only.
+Enabling it requires a prominent browser confirmation. `vmagent yolo off`,
+`vmagent reset`, or a page reload turns it off. The choice is never stored in
+localStorage, OPFS, a VM snapshot, or the URL.
 
 YOLO mode preserves RPC path validation, 64 KiB limits, and the 120-second
 command timeout. However, an approved arbitrary shell is not confined to the
@@ -153,7 +168,7 @@ by the framework's complete native tool catalogue.
 1. Download the model with the link in the VM header.
 2. Select it with **Configure LLM** and wait for WebGPU compilation.
 3. Prepare a project at `/root/project`.
-4. Open **Agent** and give it a concrete task including expected verification.
+4. Run `vmagent 'TASK'` with a concrete task including expected verification.
 5. Review each requested mutation or command before approving it.
 
 Example:

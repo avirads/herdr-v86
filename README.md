@@ -28,7 +28,7 @@ NIC. The toolbar provides file import and IndexedDB VM snapshots. See
 start with [AGENTS.md](AGENTS.md); web-based agents can discover the documentation
 index through [llms.txt](llms.txt).
 
-The toolbar's **Agent** panel provides a full Deep Agents coding assistant
+The guest `vmagent` command provides a full Deep Agents coding assistant
 backed by the page-local LiteRT-LM WebGPU model. **Configure LLM** imports a
 compatible model into browser OPFS; no extension is required. The agent has
 framework-native planning, filesystem, shell, project-memory, skills, context
@@ -36,8 +36,8 @@ management, and subagent tools. Mutations and every command require explicit
 browser approval. Typed browser-bridge tools cover `vmfetch`, `vmgithub`,
 `vmclip`, `vmexport`, `vmai`, and LiteRT status/model discovery. See
 [the Deep Agents guide](docs/deep-agent.md).
-An explicit session-only **YOLO** toggle can waive individual approvals; it is
-off by default, visibly marked, and resets on reload or **New session**.
+The session-only `vmagent yolo on|off` control can waive individual approvals;
+it is off by default and resets on reload or `vmagent reset`.
 Optional **Connect AutoBro** pairing gives the agent authenticated bridge-v3
 browser automation for tabs, navigation, DOM/form interaction, CDP input,
 waits, dialogs, JavaScript, uploads, and domain commands. It remains separate
