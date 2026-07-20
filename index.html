@@ -90,15 +90,19 @@
   <div id="llm-status">WebGPU LLM: not paired</div>
   <div id="browser-status">AutoBro: not connected</div>
   <div id="tools">
-    <button id="import-file">Import file</button>
-    <button id="open-help" title="Guest command reference">Help</button>
     <button id="open-settings" title="Reset LLM or AutoBro configuration">Settings</button>
-    <input id="file-input" type="file" hidden>
-    <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
   </div>
 </header>
 <dialog id="settings-dialog">
   <h2>Settings</h2>
+  <div class="settings-action">
+    <div><strong>Import file</strong><br><small>Copy a file from this device into the VM.</small></div>
+    <button id="import-file" type="button">Import file</button>
+  </div>
+  <div class="settings-action">
+    <div><strong>Help</strong><br><small>Open the guest command reference.</small></div>
+    <button id="open-help" type="button">Open help</button>
+  </div>
   <p>Resetting a provider returns the app to the corresponding setup-wizard step.</p>
   <div class="settings-action">
     <div><strong>WebGPU LLM</strong><br><small>Unload and delete cached model files from this browser.</small></div>
@@ -110,6 +114,8 @@
   </div>
   <div class="dialog-actions"><button id="close-settings" type="button">Close</button></div>
 </dialog>
+<input id="file-input" type="file" hidden>
+<input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
 <div id="term"></div>
 <div id="screen_container">
   <div style="white-space:pre; font:14px monospace"></div>
@@ -454,8 +460,8 @@ try {
 }
 
 const fileInput = document.getElementById("file-input");
-document.getElementById("import-file").onclick = () => fileInput.click();
-document.getElementById("open-help").onclick = () => window.open("docs/guest-tools.md", "_blank", "noopener");
+document.getElementById("import-file").onclick = () => { settingsDialog.close(); fileInput.click(); };
+document.getElementById("open-help").onclick = () => { settingsDialog.close(); window.open("docs/guest-tools.md", "_blank", "noopener"); };
 fileInput.onchange = async () => {
   const file = fileInput.files[0];
   if (!file) return;
