@@ -44,6 +44,12 @@
   .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   .settings-action { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 12px 0; border-top: 1px solid #30363d; }
   .settings-action small, #settings-dialog p { color: #8b949e; }
+  #remote-dialog { width: min(560px, calc(100vw - 32px)); }
+  #remote-key { font: 12px monospace; }
+  #remote-chat-log { box-sizing: border-box; height: min(42vh, 340px); overflow-y: auto; margin: 12px 0; padding: 12px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; white-space: pre-wrap; line-height: 1.45; }
+  #remote-chat-log:empty::before { content: "Connect to a desktop, then send a message."; color: #8b949e; }
+  #remote-chat-form { display: flex; gap: 8px; }
+  #remote-prompt { flex: 1; min-width: 0; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 9px; }
   @media (max-width: 640px) {
     header { align-items: center; flex-wrap: wrap; gap: 5px 10px; padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left)); }
     header h1 { flex: 1 1 auto; font-size: 14px; }
@@ -61,6 +67,8 @@
     dialog { box-sizing: border-box; max-height: calc(100dvh - 24px); overflow-y: auto; width: calc(100vw - 24px); padding: 16px; }
     .settings-action { align-items: stretch; flex-direction: column; gap: 8px; }
     .settings-action button { width: 100%; }
+    #remote-chat-form { align-items: stretch; flex-direction: column; }
+    #remote-chat-form button { width: 100%; }
   }
 </style>
 </head>
@@ -81,6 +89,7 @@
       <div class="setup-actions">
         <button id="setup-configure-llm" type="button">Choose model file</button>
         <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download model (~2 GB)</a>
+        <button id="setup-connect-remote" type="button">Connect to desktop LLM</button>
       </div>
       <div id="setup-llm-status" class="setup-status">Checking for a configured model…</div>
     </section>
@@ -126,6 +135,10 @@
     <div><strong>Help</strong><br><small>Open the guest command reference.</small></div>
     <button id="open-help" type="button">Open help</button>
   </div>
+  <div class="settings-action">
+    <div><strong>Remote LLM</strong><br><small>Host this model or chat with a paired desktop over WebRTC.</small></div>
+    <button id="open-remote" type="button">Remote access</button>
+  </div>
   <p>Resetting a provider returns the app to the corresponding setup-wizard step.</p>
   <div class="settings-action">
     <div><strong>WebGPU LLM</strong><br><small>Unload and delete cached model files from this browser.</small></div>
@@ -137,6 +150,24 @@
   </div>
   <div class="dialog-actions"><button id="close-settings" type="button">Close</button></div>
 </dialog>
+<dialog id="remote-dialog">
+  <h2>Remote LLM</h2>
+  <p id="remote-status">Choose whether this device hosts its LLM or connects to another Herdr instance.</p>
+  <label>Pairing key
+    <input id="remote-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the desktop pairing key">
+  </label>
+  <div class="setup-actions">
+    <button id="remote-host" type="button">Host this LLM</button>
+    <button id="remote-connect" type="button">Connect to desktop</button>
+    <button id="remote-copy" type="button" hidden>Copy pairing key</button>
+  </div>
+  <div id="remote-chat-log" aria-live="polite"></div>
+  <form id="remote-chat-form">
+    <input id="remote-prompt" required autocomplete="off" placeholder="Message the desktop LLM">
+    <button type="submit">Send</button>
+  </form>
+  <div class="dialog-actions"><button id="close-remote" type="button">Close</button></div>
+</dialog>
 <input id="file-input" type="file" hidden>
 <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
 <div id="term"></div>
@@ -147,6 +178,7 @@
 
 <script src="xterm.js"></script>
 <script src="libv86-network.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" crossorigin="anonymous"></script>
 <script>
 "use strict";
 (async () => {
@@ -275,6 +307,7 @@ let webGpuLlmClient;
 let autobroClient;
 let guestReadonlyClient;
 let vmAgentController;
+let remoteLlmPeer;
 let agentBusy = false;
 let agentInput = "";
 const hiddenSerialMarkers = ["__V86AGENT_RESPONSE__", "__V86RPC__", "vmagent-rpc agent-"];
@@ -378,8 +411,74 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
   }
 }
 const settingsDialog = document.getElementById("settings-dialog");
+const remoteDialog = document.getElementById("remote-dialog");
+const remoteStatus = document.getElementById("remote-status");
+const remoteKey = document.getElementById("remote-key");
+const remoteChatLog = document.getElementById("remote-chat-log");
+async function getRemoteLlmPeer() {
+  if (remoteLlmPeer) return remoteLlmPeer;
+  if (!globalThis.Peer) throw new Error("PeerJS signaling library did not load");
+  const { RemoteLlmPeer } = await import("./network/browser/remote-llm-peer.js");
+  remoteLlmPeer = new RemoteLlmPeer({ Peer: globalThis.Peer, getLlmClient: () => webGpuLlmClient });
+  remoteLlmPeer.addEventListener("activity", event => { remoteStatus.textContent = event.detail.message; });
+  return remoteLlmPeer;
+}
+function openRemoteDialog() {
+  settingsDialog.close();
+  remoteDialog.showModal();
+}
 document.getElementById("open-settings").onclick = () => settingsDialog.showModal();
 document.getElementById("close-settings").onclick = () => settingsDialog.close();
+document.getElementById("open-remote").onclick = openRemoteDialog;
+document.getElementById("setup-connect-remote").onclick = openRemoteDialog;
+document.getElementById("close-remote").onclick = () => remoteDialog.close();
+document.getElementById("remote-host").onclick = async () => {
+  remoteStatus.textContent = "Starting secure WebRTC host…";
+  try {
+    if (!llmReady) throw new Error("configure the WebGPU LLM on this desktop first");
+    const key = await (await getRemoteLlmPeer()).host();
+    remoteKey.value = key;
+    document.getElementById("remote-copy").hidden = false;
+    remoteStatus.textContent = "Share this one-time pairing key with your phone. Keep this page open.";
+  } catch (error) { remoteStatus.textContent = "Host failed: " + error.message; }
+};
+document.getElementById("remote-copy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(remoteKey.value);
+    remoteStatus.textContent = "Pairing key copied.";
+  } catch { remoteKey.select(); remoteStatus.textContent = "Copy the selected pairing key."; }
+};
+document.getElementById("remote-connect").onclick = async () => {
+  const key = remoteKey.value.trim();
+  if (!key) return;
+  remoteStatus.textContent = "Connecting to desktop…";
+  try {
+    await (await getRemoteLlmPeer()).connect(key);
+    remoteStatus.textContent = "Connected. Messages use the desktop WebGPU LLM directly.";
+    document.getElementById("remote-prompt").focus();
+  } catch (error) { remoteStatus.textContent = "Connection failed: " + error.message; }
+};
+document.getElementById("remote-chat-form").onsubmit = async event => {
+  event.preventDefault();
+  const input = document.getElementById("remote-prompt");
+  const prompt = input.value.trim();
+  if (!prompt) return;
+  input.value = "";
+  remoteChatLog.textContent += `You: ${prompt}\n\nDesktop LLM: `;
+  remoteChatLog.scrollTop = remoteChatLog.scrollHeight;
+  const submit = event.submitter;
+  if (submit) submit.disabled = true;
+  try {
+    const answer = await (await getRemoteLlmPeer()).chat(prompt);
+    remoteChatLog.textContent += `${answer}\n\n`;
+  } catch (error) {
+    remoteChatLog.textContent += `[error: ${error.message}]\n\n`;
+  } finally {
+    if (submit) submit.disabled = false;
+    remoteChatLog.scrollTop = remoteChatLog.scrollHeight;
+    input.focus();
+  }
+};
 function returnToSetup() {
   setupFinished = false;
   document.getElementById("term").style.visibility = "hidden";

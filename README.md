@@ -59,6 +59,17 @@ from the built-in page-local LiteRT inference provider. The agent automatically
 switches between equivalent AutoBro and `vm*` operations when the primary
 provider fails.
 
+### Remote LLM chat over WebRTC
+
+A phone can chat directly with the WebGPU LLM loaded by a desktop Herdr page:
+
+1. On the desktop, open **Settings → Remote access** and select **Host this LLM**.
+2. Copy the generated session pairing key.
+3. On the phone, select **Connect to desktop LLM** during setup, paste the key, and connect. No mobile model download is required.
+4. Use the Remote LLM chat form. Requests go directly to the desktop model and do not invoke `vmagent` or DeepAgentsJS.
+
+The static page uses PeerJS Cloud for WebRTC signaling. Prompts and responses travel through the encrypted WebRTC data channel. The desktop page and model must remain open, one phone is accepted per hosted session, and restrictive networks may require a separately configured TURN relay. Treat the pairing key as a session secret.
+
 ## Hosting
 
 The disk image is loaded with `async: true`, so the web server **must support
