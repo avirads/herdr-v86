@@ -19,6 +19,7 @@
   #boot-ring::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: #0d1117; }
   #boot-percent { position: relative; font: 600 24px/1 monospace; color: #f0f6fc; }
   #boot-message { position: absolute; top: calc(100% + 18px); left: 0; width: 100%; color: #8b949e; font-size: 13px; }
+  #mobile-remote-entry { display: block; position: absolute; top: calc(100% + 50px); color: #58a6ff; font-size: 13px; }
   #boot-overlay.error #boot-ring { background: #da3633; }
   #boot-overlay.error #boot-message { color: #ff7b72; max-width: 80vw; text-align: center; }
   #setup-overlay { box-sizing: border-box; position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 900; display: none; place-items: center; overflow-x: hidden; overflow-y: auto; background: #0d1117; padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
@@ -77,6 +78,7 @@
   <div id="boot-loader">
     <div id="boot-ring"><span id="boot-percent">1%</span></div>
     <div id="boot-message">Preparing VM…</div>
+    <a id="mobile-remote-entry" href="remote.html">Connect to a desktop LLM instead</a>
   </div>
 </div>
 <div id="setup-overlay" role="dialog" aria-modal="true" aria-labelledby="setup-title">
@@ -430,7 +432,7 @@ function openRemoteDialog() {
 document.getElementById("open-settings").onclick = () => settingsDialog.showModal();
 document.getElementById("close-settings").onclick = () => settingsDialog.close();
 document.getElementById("open-remote").onclick = openRemoteDialog;
-document.getElementById("setup-connect-remote").onclick = openRemoteDialog;
+document.getElementById("setup-connect-remote").onclick = () => { location.href = "remote.html"; };
 document.getElementById("close-remote").onclick = () => remoteDialog.close();
 document.getElementById("remote-host").onclick = async () => {
   remoteStatus.textContent = "Starting secure WebRTC host…";

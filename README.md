@@ -65,10 +65,10 @@ A phone can chat directly with the WebGPU LLM loaded by a desktop Herdr page:
 
 1. On the desktop, open **Settings → Remote access** and select **Host this LLM**.
 2. Copy the generated session pairing key.
-3. On the phone, select **Connect to desktop LLM** during setup, paste the key, and connect. No mobile model download is required.
+3. On the phone, open [`remote.html`](remote.html) directly or select **Connect to a desktop LLM instead** during startup, paste the key, and connect.
 4. Use the Remote LLM chat form. Requests go directly to the desktop model and do not invoke `vmagent` or DeepAgentsJS.
 
-The static page uses PeerJS Cloud for WebRTC signaling. Prompts and responses travel through the encrypted WebRTC data channel. The desktop page and model must remain open, one phone is accepted per hosted session, and restrictive networks may require a separately configured TURN relay. Treat the pairing key as a session secret.
+The mobile-only page does not load v86, a VM disk, xterm, LiteRT-LM, or a model. The static page uses PeerJS Cloud for WebRTC signaling. Prompts and responses travel through the encrypted WebRTC data channel. The desktop page and model must remain open, one phone is accepted per hosted session, and restrictive networks may require a separately configured TURN relay. Treat the pairing key as a session secret.
 
 ## Hosting
 

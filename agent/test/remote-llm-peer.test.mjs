@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { RemoteLlmPeer } from '../../network/browser/remote-llm-peer.js';
 
@@ -44,4 +45,12 @@ test('remote LLM client correlates responses without invoking an agent', async (
   assert.equal(await result, 'direct answer');
   assert.equal(request.type, 'llm.chat');
   assert.equal(request.prompt, 'hello');
+});
+
+test('mobile remote page does not load the VM or local model runtime', async () => {
+  const html = await readFile(new URL('../../remote.html', import.meta.url), 'utf8');
+  for (const forbidden of ['libv86', 'v86-network', 'xterm.js', 'litert-lm-client', 'bzImage', 'ext4.img']) {
+    assert.equal(html.includes(forbidden), false, `remote.html unexpectedly includes ${forbidden}`);
+  }
+  assert.match(html, /remote-llm-peer\.js/);
 });
