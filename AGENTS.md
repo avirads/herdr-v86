@@ -16,7 +16,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 ## Canonical command documentation
 
 - `docs/guest-tools.md`: complete guest command reference and examples, including `vmllm`.
-- `docs/read-only-agent.md`: browser coding-agent tools, security boundary, and tests.
+- `docs/deep-agent.md`: full Deep Agents tools, approvals, skills, and limits.
 - `network/docs/host-bridge.md`: browser-bridge protocol, limits, and security.
 - `network/README.md`: full IPv4 gateway deployment and testing.
 - Run `<command> --help` inside the guest for concise local usage.
@@ -42,8 +42,10 @@ clipboard, file-transfer, GitHub, or AI operations.
     snapshot while credentials remain in guest memory.
 11. Use `vmllm` for the page-local WebGPU model. It runs in the browser host,
     not on the i386 guest, and requires a model loaded with **Configure LLM**.
-12. The browser's read-only agent may inspect only `/root/project`. Its
-    `guest_test` fixed recipes require explicit user approval; it cannot edit.
+12. The browser Deep Agents backend maps `/` to `/root/project`. Reads are
+    automatic; file mutations and every shell command require browser approval.
+13. Project-specific agent instructions belong in `/root/project/AGENTS.md` and
+    skills in `/root/project/skills/NAME/SKILL.md`.
 
 ## Quick capability check
 

@@ -206,10 +206,10 @@ their URLs, headers, bodies, and responses. Do not use secrets with an untrusted
 or modified deployment. The browser bridge deliberately cannot bypass browser
 security controls.
 
-## Read-only coding agent
+## Deep Agents coding agent
 
-The browser toolbar also exposes an **Agent** panel. It uses the paired WebGPU
-LLM and can inspect `/root/project` through a separate constrained RPC. It is
-not a guest command and cannot modify files. See
-[the read-only agent guide](read-only-agent.md) for its tools and test approval
-rules.
+The browser toolbar also exposes an **Agent** panel. It uses the page-local
+WebGPU LLM and maps DeepAgentsJS filesystem and shell tools to `/root/project`.
+Reads run automatically; edits and commands require browser confirmation. See
+[the Deep Agents guide](deep-agent.md) for capabilities, skills, approvals, and
+environment limits.

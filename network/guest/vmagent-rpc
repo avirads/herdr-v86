@@ -36,6 +36,14 @@ resolve_existing() {
   case "$target" in "$workspace_real"|"$workspace_real"/*) printf %s "$target";; *) fail 'path escapes workspace';; esac
 }
 
+resolve_new() {
+  relative=$(decode "${1:-}") || fail 'invalid base64 path'
+  case "$relative" in /*|*'..'*|'') fail 'path must be relative and cannot contain ..';; esac
+  parent=$(dirname "$relative")
+  parent_real=$(readlink -f "$workspace_real/$parent") || fail "parent directory not found: $parent"
+  case "$parent_real" in "$workspace_real"|"$workspace_real"/*) printf '%s/%s' "$parent_real" "$(basename "$relative")";; *) fail 'path escapes workspace';; esac
+}
+
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT INT TERM
 case "$operation" in
@@ -57,6 +65,34 @@ case "$operation" in
     target=$(resolve_existing "${2:-}")
     grep -R -n -F -- "$pattern" "$target" 2>/dev/null \
       | sed "s|$workspace_real/||" | head -n 300 > "$tmp" || true ;;
+  glob)
+    pattern=$(decode "${1:-}") || fail 'invalid base64 pattern'
+    [ -n "$pattern" ] || fail 'glob pattern is empty'
+    target=$(resolve_existing "${2:-}")
+    [ -d "$target" ] || fail 'glob target is not a directory'
+    find "$target" -mindepth 1 -maxdepth 12 -path "$target/$pattern" 2>/dev/null \
+      | head -n 1000 | while IFS= read -r item; do stat -c '%F\t%n\t%s' "$item"; done \
+      | sed "s|$workspace_real/||" > "$tmp" ;;
+  write)
+    target=$(resolve_new "${1:-}")
+    decode "${2:-}" > "$tmp" || fail 'invalid base64 content'
+    [ "$(wc -c < "$tmp")" -le "$MAX_BYTES" ] || fail "content exceeds $MAX_BYTES bytes"
+    cat "$tmp" > "$target"
+    printf 'written %s\n' "${target#"$workspace_real/"}" > "$tmp" ;;
+  delete)
+    target=$(resolve_existing "${1:-}")
+    [ -f "$target" ] || fail 'delete target is not a regular file'
+    rm -f "$target"
+    printf 'deleted\n' > "$tmp" ;;
+  execute)
+    command=$(decode "${1:-}") || fail 'invalid base64 command'
+    [ -n "$command" ] || fail 'command is empty'
+    set +e
+    timeout 120 sh -lc "$command" > "$tmp.out" 2>&1
+    code=$?
+    set -e
+    { printf '__V86AGENT_EXIT__%s\n' "$code"; head -c "$MAX_BYTES" "$tmp.out"; } > "$tmp"
+    rm -f "$tmp.out" ;;
   test)
     recipe=$(decode "${1:-}") || fail 'invalid test recipe'
     cd "$workspace_real"

@@ -40,15 +40,21 @@ emulator.add_listener('serial0-output-byte', byte => {
       const list = await guest.list('.');
       const read = await guest.read('src/main.js');
       const grep = await guest.grep('needle', '.');
-      const { createHerdrReadonlyAgent } = await import('../../agent/dist/agent.js');
+      await guest.write('src/generated.js', 'export const generated = true;\n');
+      const written = await guest.read('src/generated.js');
+      const executed = await guest.execute('printf deepagents-shell-ok');
+      await guest.delete('src/generated.js');
+      const { createHerdrAgent } = await import('../../agent/dist/agent.js');
       let modelCalls = 0;
-      const harness = createHerdrReadonlyAgent({
+      const harness = createHerdrAgent({
         guest,
-        llmClient: { chat: async () => ({ choices: [{ message: { content: ++modelCalls === 1 ? '{"tool":"guest_list","args":{"path":"."}}' : '{"final":"Deep agent inspected src/main.js."}' } }] }) },
+        llmClient: { chat: async () => ({ choices: [{ message: { content: ++modelCalls === 1 ? '{"tool":"write_file","args":{"file_path":"/agent-created.txt","content":"created by Deep Agents\\n"}}' : '{"final":"Deep agent created agent-created.txt."}' } }] }) },
+        approveAction: async () => true,
       });
-      const agentResult = await harness.run('List the project.');
-      const ok = serial.includes('VMFETCH_CONTENT=browser-bridge-ok') && serial.includes('webgpu-bridge-ok') && list.includes('src') && read.includes('needle') && grep.includes('src/main.js') && agentResult.output.includes('src/main.js');
-      await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, serial, list, read, grep, agentOutput: agentResult.output }) });
+      const agentResult = await harness.run('Create agent-created.txt.');
+      const agentWritten = await guest.read('agent-created.txt');
+      const ok = serial.includes('VMFETCH_CONTENT=browser-bridge-ok') && serial.includes('webgpu-bridge-ok') && list.includes('src') && read.includes('needle') && grep.includes('src/main.js') && written.includes('generated') && executed.includes('deepagents-shell-ok') && agentWritten.includes('created by Deep Agents') && agentResult.output.includes('agent-created.txt');
+      await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, serial, list, read, grep, written, executed, agentWritten, agentOutput: agentResult.output }) });
     })().catch(error => fetch('/__result', { method: 'POST', body: JSON.stringify({ ok: false, serial: serial + '\n' + error.stack }) }));
   }
 });

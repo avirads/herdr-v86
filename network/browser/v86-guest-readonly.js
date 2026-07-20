@@ -63,7 +63,14 @@ export class V86GuestReadonlyClient extends EventTarget {
   list(path = '.') { return this.request('list', path); }
   read(path) { return this.request('read', path); }
   grep(pattern, path = '.') { return this.request('grep', pattern, path); }
+  glob(pattern, path = '.') { return this.request('glob', pattern, path); }
+  write(path, content) { return this.request('write', path, content); }
+  delete(path) { return this.request('delete', path); }
+  execute(command) { return this.request('execute', command); }
   test(recipe) { return this.request('test', recipe); }
 
   destroy() { this.emulator.remove_listener?.('serial0-output-byte', this.onByte); }
 }
+
+// Preferred name now that the RPC supports the complete coding-agent backend.
+export { V86GuestReadonlyClient as V86GuestAgentClient };

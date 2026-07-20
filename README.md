@@ -28,11 +28,12 @@ NIC. The toolbar provides file import and IndexedDB VM snapshots. See
 start with [AGENTS.md](AGENTS.md); web-based agents can discover the documentation
 index through [llms.txt](llms.txt).
 
-The toolbar's **Agent** panel provides a read-only Deep Agents coding assistant
+The toolbar's **Agent** panel provides a full Deep Agents coding assistant
 backed by the page-local LiteRT-LM WebGPU model. **Configure LLM** imports a
-compatible model into browser OPFS; no extension is required. The agent can list, read, and grep `/root/project`;
-fixed test recipes require confirmation. See
-[the read-only agent guide](docs/read-only-agent.md).
+compatible model into browser OPFS; no extension is required. The agent has
+framework-native planning, filesystem, shell, project-memory, skills, context
+management, and subagent tools. Mutations and every command require explicit
+browser approval. See [the Deep Agents guide](docs/deep-agent.md).
 
 ## Hosting
 

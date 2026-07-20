@@ -1,9 +1,9 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage } from '@langchain/core/messages';
-import { tool } from '@langchain/core/tools';
 import { toJsonSchema } from '@langchain/core/utils/json_schema';
+import { MemorySaver } from '@langchain/langgraph';
 import { createDeepAgent } from 'deepagents/browser';
-import { z } from 'zod';
+import { V86DeepAgentsBackend } from './guest-backend.js';
 
 function contentText(message) {
   if (typeof message.content === 'string') return message.content;
@@ -57,7 +57,7 @@ export class WebGpuToolChatModel extends BaseChatModel {
       max_tokens: this.maxTokens,
       chat_template_kwargs: { enable_thinking: false },
       messages: [
-        { role: 'system', content: `You are a careful read-only coding agent.${protocol}` },
+        { role: 'system', content: `You are a capable coding agent operating in a sandboxed 32-bit Linux guest. Use tools methodically and obtain required approvals.${protocol}` },
         ...messages.map(message => ({ role: message._getType?.() === 'human' ? 'user' : message._getType?.() === 'ai' ? 'assistant' : 'user', content: `${message.name ? `[${message.name}] ` : ''}${contentText(message)}` })),
       ],
     };
@@ -74,49 +74,35 @@ export class WebGpuToolChatModel extends BaseChatModel {
   }
 }
 
-export function createHerdrReadonlyAgent({ llmClient, guest, onActivity = () => {}, approveTest = async () => false }) {
-  const guestList = tool(async ({ path }) => {
-    onActivity({ tool: 'guest_list', input: { path } });
-    return await guest.list(path);
-  }, { name: 'guest_list', description: 'List files under the guest workspace. Read-only. Paths are relative to /root/project.', schema: z.object({ path: z.string().default('.') }) });
-
-  const guestRead = tool(async ({ path }) => {
-    onActivity({ tool: 'guest_read', input: { path } });
-    return await guest.read(path);
-  }, { name: 'guest_read', description: 'Read one text file from the guest workspace, maximum 64 KiB. Read-only.', schema: z.object({ path: z.string() }) });
-
-  const guestGrep = tool(async ({ pattern, path }) => {
-    onActivity({ tool: 'guest_grep', input: { pattern, path } });
-    return await guest.grep(pattern, path);
-  }, { name: 'guest_grep', description: 'Search guest workspace files for a fixed literal string. Read-only.', schema: z.object({ pattern: z.string(), path: z.string().default('.') }) });
-
-  const guestTest = tool(async ({ recipe }) => {
-    onActivity({ tool: 'guest_test', input: { recipe }, approval: true });
-    if (!await approveTest(recipe)) return 'Test execution rejected by user.';
-    return await guest.test(recipe);
-  }, { name: 'guest_test', description: 'Run an explicitly approved fixed test recipe. Valid recipes: make-test, make-check, shell-tests.', schema: z.object({ recipe: z.enum(['make-test', 'make-check', 'shell-tests']) }) });
-
+export function createHerdrAgent({ llmClient, guest, onActivity = () => {}, approveAction = async () => false, sessionId = crypto.randomUUID() }) {
   const model = new WebGpuToolChatModel(llmClient);
+  const backend = new V86DeepAgentsBackend(guest, { approve: approveAction, onActivity });
   const agent = createDeepAgent({
-    name: 'herdr-readonly',
+    name: 'herdr-coding-agent',
     model,
-    tools: [guestList, guestRead, guestGrep, guestTest],
-    permissions: [{ operations: ['write'], paths: ['/**'], mode: 'deny' }],
-    subagents: [],
+    backend,
+    checkpointer: new MemorySaver(),
+    generalPurposeAgent: true,
+    memory: ['/AGENTS.md'],
+    skills: ['/skills/'],
     systemPrompt: {
-      prefix: 'Inspect the guest project using only guest_list, guest_read, guest_grep, and approved guest_test. Never write, edit, delete, install, download, or claim that you changed files. Cite inspected paths in the final answer.',
-      suffix: 'The real project is rooted at /root/project. Built-in virtual filesystem tools do not access it; use only guest_* tools for project evidence.',
+      prefix: 'Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time.',
+      suffix: 'The backend maps Deep Agents path / to the real guest workspace /root/project. The guest is Alpine Linux i386 with BusyBox sh. Do not claim success without reading results and running proportionate checks.',
     },
   });
   return {
     agent,
     async run(prompt, { signal } = {}) {
       onActivity({ state: 'running', prompt });
-      const result = await agent.invoke({ messages: [{ role: 'user', content: prompt }] }, { signal, recursionLimit: 30 });
+      const result = await agent.invoke({ messages: [{ role: 'user', content: prompt }] }, { signal, recursionLimit: 60, configurable: { thread_id: sessionId } });
       const finalMessage = result.messages?.at(-1);
       const output = contentText(finalMessage || { content: 'Agent completed without a final message.' });
       onActivity({ state: 'complete', output });
-      return { output, result };
+      return { output, result, sessionId };
     },
   };
 }
+
+// Backward-compatible export for existing integrations. It now creates the
+// full-capability agent and still requires approval for every mutating action.
+export const createHerdrReadonlyAgent = createHerdrAgent;

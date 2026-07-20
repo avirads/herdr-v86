@@ -34,19 +34,20 @@
     <button id="open-help" title="Guest command reference">Help</button>
     <button id="configure-llm" title="Load a page-local LiteRT-LM WebGPU model">Configure LLM</button>
     <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer" title="Download the approximately 2 GB Gemma E2B WebGPU model">Download LLM model (~2 GB)</a>
-    <button id="toggle-agent" title="Read-only Deep Agents coding assistant">Agent</button>
+    <button id="toggle-agent" title="Full Deep Agents coding assistant">Agent</button>
     <input id="file-input" type="file" hidden>
     <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
   </div>
 </header>
 <div id="term"></div>
 <section id="agent-panel">
-  <strong>Read-only coding agent</strong>
-  <p>Workspace: <code>/root/project</code>. Reads and searches only; fixed tests require approval.</p>
-  <textarea id="agent-prompt" placeholder="Inspect the project and explain the most likely cause of the failing parser test."></textarea>
+  <strong>Deep Agents coding agent</strong>
+  <p>Workspace: <code>/root/project</code>. Planning, filesystem edits, shell commands, and subagents; mutations and commands require approval.</p>
+  <textarea id="agent-prompt" placeholder="Inspect the project, fix the failing parser test, run the tests, and explain the changes."></textarea>
   <div>
     <button id="agent-run">Run analysis</button>
     <button id="agent-stop" disabled>Stop</button>
+    <button id="agent-new-session">New session</button>
   </div>
   <pre id="agent-activity">idle</pre>
   <pre id="agent-output"></pre>
@@ -125,6 +126,7 @@ let hostBridge;
 let webGpuLlmClient;
 let guestReadonlyClient;
 let readonlyAgentController;
+let codingAgentHarness;
 import("./network/browser/v86-host-bridge.js").then(module => {
   hostBridge = new module.V86HostBridge(emulator, { llmClient: webGpuLlmClient });
   window.v86HostBridge = hostBridge;
@@ -183,6 +185,11 @@ document.getElementById("toggle-agent").onclick = () => {
   agentPanel.style.display = agentPanel.style.display === "block" ? "none" : "block";
 };
 document.getElementById("agent-stop").onclick = () => readonlyAgentController?.abort();
+document.getElementById("agent-new-session").onclick = () => {
+  codingAgentHarness = null;
+  agentActivity.textContent = "new agent session";
+  agentOutput.textContent = "";
+};
 document.getElementById("agent-run").onclick = async () => {
   const prompt = document.getElementById("agent-prompt").value.trim();
   if (!prompt) return;
@@ -194,14 +201,14 @@ document.getElementById("agent-run").onclick = async () => {
   agentOutput.textContent = ""; agentActivity.textContent = "starting Deep Agents…";
   readonlyAgentController = new AbortController();
   try {
-    const { createHerdrReadonlyAgent } = await import("./agent/dist/agent.js");
-    const harness = createHerdrReadonlyAgent({
-      llmClient: webGpuLlmClient,
-      guest: guestReadonlyClient,
-      onActivity: event => agentActivity.textContent += "\n" + JSON.stringify(event),
-      approveTest: async recipe => confirm(`Allow the read-only agent to run test recipe "${recipe}" in /root/project?`),
-    });
-    const result = await harness.run(prompt, { signal: readonlyAgentController.signal });
+    const { createHerdrAgent } = await import("./agent/dist/agent.js");
+    codingAgentHarness ||= createHerdrAgent({
+        llmClient: webGpuLlmClient,
+        guest: guestReadonlyClient,
+        onActivity: event => agentActivity.textContent += "\n" + JSON.stringify(event),
+        approveAction: async (operation, detail) => confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
+      });
+    const result = await codingAgentHarness.run(prompt, { signal: readonlyAgentController.signal });
     agentOutput.textContent = result.output;
   } catch (error) {
     agentOutput.textContent = `Agent error: ${error.message}`;
