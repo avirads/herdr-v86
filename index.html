@@ -396,7 +396,7 @@ term.onData((data) => {
     return;
   }
   for (const ch of data) emulator.serial0_send(ch);
-  status("running — type in the terminal. Try: herdr");
+  status(herdrStarted ? "Herdr ready" : "running — type in the terminal");
 });
 term.focus();
 })().catch(error => {
