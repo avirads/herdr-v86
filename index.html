@@ -79,7 +79,7 @@ function finishBoot() {
   clearInterval(bootTicker);
   bootOverlay.classList.remove("error");
   setBootProgress(100, "Ready");
-  status("Herdr ready");
+  status("Shell ready");
   setTimeout(() => {
     term.clear();
     term.write("\x1b[2J\x1b[H");
@@ -94,7 +94,7 @@ function failBoot(message) {
   bootMessage.textContent = message;
 }
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "herdr-rpc-uart-9";
+const DISK_VERSION = "herdr-shell-10";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `herdr-vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -337,12 +337,10 @@ window.onerror = (msg, source) => {
 };
 let gotSerial = false;
 setTimeout(() => { if (!gotSerial) { const message = "No VM output after 120 seconds. Reload to retry automatic compatibility boot."; status(message); failBoot(message); } }, 120000);
-// The kernel serial console has no window size (TIOCGWINSZ reports 0x0), so
-// herdr would render into a 1x1 grid. Set the tty size once at the first
-// shell prompt, matching the xterm.js geometry above.
+// The kernel serial console has no window size (TIOCGWINSZ reports 0x0).
+// Set it once at the first shell prompt, matching the xterm.js geometry above.
 let sttySent = false;
 let recentOutput = "";
-let herdrStarted = false;
 let diskErrorOutput = "";
 let compatibilityRestartScheduled = false;
 emulator.add_listener("serial0-output-byte", (byte) => {
@@ -360,11 +358,6 @@ emulator.add_listener("serial0-output-byte", (byte) => {
   }
   if (!sttySent) {
     recentOutput = (recentOutput + String.fromCharCode(byte)).slice(-64);
-    if (!herdrStarted && recentOutput.includes("__HERDR_STARTING__")) {
-      herdrStarted = true;
-      sttySent = true;
-      finishBoot();
-    }
     if (recentOutput.endsWith(":~# ")) {
       sttySent = true;
       for (const ch of "stty rows 32 cols 100\n") emulator.serial0_send(ch);
@@ -405,7 +398,7 @@ term.onData((data) => {
     return;
   }
   for (const ch of data) emulator.serial0_send(ch);
-  status(herdrStarted ? "Herdr ready" : "running — type in the terminal");
+  status("Shell ready");
 });
 term.focus();
 })().catch(error => {
