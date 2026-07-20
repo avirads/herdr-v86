@@ -31,7 +31,7 @@ url=$1
 
 b64() { printf %s "$1" | base64 | tr -d '\n'; }
 id="$$-$(date +%s)"
-tmp="${output}.vmfetch.$$"
+tmp="/tmp/vmfetch-response.$$"
 trap 'rm -f "$tmp"' EXIT INT TERM
 stty -echo
 trap 'stty echo; rm -f "$tmp"' EXIT INT TERM

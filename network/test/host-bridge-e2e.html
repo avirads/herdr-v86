@@ -43,6 +43,7 @@ emulator.add_listener('serial0-output-byte', byte => {
       await guest.write('src/generated.js', 'export const generated = true;\n');
       const written = await guest.read('src/generated.js');
       const executed = await guest.execute('printf deepagents-shell-ok');
+      const fetchedStdout = await guest.execute(`vmfetch -o - ${location.origin}/network/test/payload.txt`);
       await guest.delete('src/generated.js');
       const { createHerdrAgent } = await import('../../agent/dist/agent.js');
       let modelCalls = 0;
@@ -61,8 +62,8 @@ emulator.add_listener('serial0-output-byte', byte => {
       });
       const fetchResult = await fetchHarness.run('Fetch the browser test file.');
       const agentFetched = await guest.read('agent-fetch.txt');
-      const ok = serial.includes('VMFETCH_CONTENT=browser-bridge-ok') && serial.includes('webgpu-bridge-ok') && list.includes('src') && read.includes('needle') && grep.includes('src/main.js') && written.includes('generated') && executed.includes('deepagents-shell-ok') && agentWritten.includes('created by Deep Agents') && agentResult.output.includes('agent-created.txt') && agentFetched.includes('browser-bridge-ok') && fetchResult.output.includes('vmfetch completed');
-      await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, serial, list, read, grep, written, executed, agentWritten, agentFetched, agentOutput: agentResult.output }) });
+      const ok = serial.includes('VMFETCH_CONTENT=browser-bridge-ok') && serial.includes('webgpu-bridge-ok') && list.includes('src') && read.includes('needle') && grep.includes('src/main.js') && written.includes('generated') && executed.includes('deepagents-shell-ok') && fetchedStdout.includes('browser-bridge-ok') && !fetchedStdout.includes('unrecognized option') && agentWritten.includes('created by Deep Agents') && agentResult.output.includes('agent-created.txt') && agentFetched.includes('browser-bridge-ok') && fetchResult.output.includes('vmfetch completed');
+      await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, serial, list, read, grep, written, executed, fetchedStdout, agentWritten, agentFetched, agentOutput: agentResult.output }) });
     })().catch(error => fetch('/__result', { method: 'POST', body: JSON.stringify({ ok: false, serial: serial + '\n' + error.stack }) }));
   }
 });

@@ -59,6 +59,11 @@ still apply. `vmllm` chat is intentionally not exposed because asking the agent
 to invoke its own underlying model recursively can deadlock or exhaust context;
 the agent already talks directly to that model.
 
+These tools are not browser automation. For example, `vmfetch` cannot search or
+scrape `google.com` because Google does not grant cross-origin fetch access, and
+it cannot click or inspect rendered pages. Use a CORS-enabled search/API service
+or a separately authorized browser-automation integration for that workflow.
+
 ## YOLO mode
 
 **Enable YOLO** removes per-operation approval for the current open page only.

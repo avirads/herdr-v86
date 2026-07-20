@@ -95184,7 +95184,7 @@ function createHerdrAgent({ llmClient, guest, onActivity = () => {
   const vmfetch = tool(async ({ url: url2, output, method, headers, data }) => {
     const command = ["vmfetch", "-o", shellQuote(output), "-X", shellQuote(method), ...headers.flatMap((header) => ["-H", shellQuote(header)]), ...data == null ? [] : ["-d", shellQuote(data)], shellQuote(url2)].join(" ");
     return await approvedCommand("vmfetch", { url: url2, output, method, headers, hasBody: data != null }, command);
-  }, { name: "vmfetch", description: "Use browser fetch when the guest has no network route. HTTPS/localhost only; CORS and 16 MiB limit apply. Requires approval.", schema: external_exports2.object({ url: external_exports2.string().url(), output: external_exports2.string().default("-"), method: external_exports2.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET"), headers: external_exports2.array(external_exports2.string()).default([]), data: external_exports2.string().optional() }) });
+  }, { name: "vmfetch", description: "Fetch a CORS-enabled HTTP API/resource when the guest has no route. This cannot operate interactive websites, scrape Google Search, bypass CORS, click pages, or automate a browser. HTTPS/localhost only; 16 MiB limit. Requires approval.", schema: external_exports2.object({ url: external_exports2.string().url(), output: external_exports2.string().default("-"), method: external_exports2.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET"), headers: external_exports2.array(external_exports2.string()).default([]), data: external_exports2.string().optional() }) });
   const vmgithub = tool(async ({ action, repository, path: path2, ref, output }) => {
     let command;
     if (action === "repo") command = `vmgithub repo ${shellQuote(repository)}`;
@@ -95220,7 +95220,7 @@ function createHerdrAgent({ llmClient, guest, onActivity = () => {
     memory: ["/AGENTS.md"],
     skills: ["/skills/"],
     systemPrompt: {
-      prefix: "Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time.",
+      prefix: "Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. Browser-backed fetch tools access CORS-enabled resources only; they are not browser automation and cannot operate Google Search or interactive websites.",
       suffix: "The backend maps Deep Agents path / to the real guest workspace /root/project. The guest is Alpine Linux i386 with BusyBox sh. Do not claim success without reading results and running proportionate checks."
     }
   });
