@@ -51,7 +51,7 @@
 const status = (m) => document.getElementById("status").textContent = m;
 const networkStatus = (m) => document.getElementById("network-status").textContent = "network: " + m;
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "vmagent-command-1";
+const DISK_VERSION = "vmagent-command-2";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `herdr-vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;

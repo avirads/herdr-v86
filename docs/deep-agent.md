@@ -35,8 +35,9 @@ The integration enables the framework's standard coding-agent facilities:
 - typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`, and `vmllm_info`
   tools backed by the browser bridge
 
-Run `vmagent reset` to discard the conversation checkpoint and turn off YOLO.
-Guest files remain unchanged until edited or the VM is restarted/restored.
+Run `vmagent reset` to discard the conversation checkpoint. YOLO returns to its
+default enabled state. Guest files remain unchanged until edited or the VM is
+restarted/restored.
 
 ## Approval boundary
 
@@ -132,9 +133,11 @@ but does not create the guest output file originally requested from `vmfetch`.
 
 ## YOLO mode
 
-`vmagent yolo on` removes per-operation approval for the current open page only.
-Enabling it requires a prominent browser confirmation. `vmagent yolo off`,
-`vmagent reset`, or a page reload turns it off. The choice is never stored in
+YOLO is enabled by default for each page session, so agent writes, deletions,
+shell commands, and browser actions run without per-operation confirmation.
+Run `vmagent yolo off` before a task to restore approval prompts. Turning it
+back on with `vmagent yolo on` requires browser confirmation. `vmagent reset`
+and page reload both restore the enabled default. The choice is never stored in
 localStorage, OPFS, a VM snapshot, or the URL.
 
 YOLO mode preserves RPC path validation, 64 KiB limits, and the 120-second

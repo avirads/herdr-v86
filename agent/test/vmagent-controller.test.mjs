@@ -36,10 +36,13 @@ test('vmagent reset and YOLO remain command-controlled and session-local', async
     approveAction: async (operation, detail) => { approvals.push([operation, detail]); return true; },
     onOutput: output => outputs.push(output),
   });
+  assert.equal(controller.yolo, true);
+  await controller.handle('yolo', 'off');
+  assert.equal(controller.yolo, false);
   await controller.handle('yolo', 'on');
   assert.equal(controller.yolo, true);
   assert.equal(approvals[0][0], 'enable_yolo');
   await controller.handle('reset');
-  assert.equal(controller.yolo, false);
-  assert.match(outputs.at(-1), /session reset/);
+  assert.equal(controller.yolo, true);
+  assert.match(outputs.at(-1), /YOLO is on by default/);
 });

@@ -13,8 +13,8 @@ usage: vmagent PROMPT...
 Run the browser-hosted Deep Agents coding agent against /root/project.
 The command returns control to the serial bridge while the task runs; keyboard
 input is reserved until the result is printed. Configure the WebGPU model in
-the browser header first. Mutations require browser confirmation unless YOLO
-is enabled for the current page session.
+the browser header first. YOLO is enabled by default, so mutations and shell
+commands run without confirmation. Use `vmagent yolo off` for approval prompts.
 EOF
   exit "${1:-2}"
 }

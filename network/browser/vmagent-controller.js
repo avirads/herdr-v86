@@ -3,7 +3,7 @@ export class VmAgentController {
     Object.assign(this, { createAgent, getLlmClient, getGuest, getBrowserClient, approveAction, onOutput, onActivity, onBusy });
     this.harness = null;
     this.abortController = null;
-    this.yolo = false;
+    this.yolo = true;
   }
 
   resetHarness() { this.harness = null; }
@@ -23,8 +23,8 @@ export class VmAgentController {
       this.abortController?.abort();
       this.abortController = null;
       this.harness = null;
-      this.yolo = false;
-      return this.onOutput('[vmagent] session reset; YOLO is off.');
+      this.yolo = true;
+      return this.onOutput('[vmagent] session reset; YOLO is on by default.');
     }
     if (command === 'yolo') {
       if (value === 'on' && !this.yolo) this.yolo = await this.approveAction('enable_yolo', {

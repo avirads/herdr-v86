@@ -37,7 +37,8 @@ browser approval. Typed browser-bridge tools cover `vmfetch`, `vmgithub`,
 `vmclip`, `vmexport`, `vmai`, and LiteRT status/model discovery. See
 [the Deep Agents guide](docs/deep-agent.md).
 The session-only `vmagent yolo on|off` control can waive individual approvals;
-it is off by default and resets on reload or `vmagent reset`.
+it is on by default and returns to on after reload or `vmagent reset`. Run
+`vmagent yolo off` before a task to require confirmation for each operation.
 Optional **Connect AutoBro** pairing gives the agent authenticated bridge-v3
 browser automation for tabs, navigation, DOM/form interaction, CDP input,
 waits, dialogs, JavaScript, uploads, and domain commands. It remains separate

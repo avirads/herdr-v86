@@ -212,7 +212,8 @@ The guest command `vmagent 'TASK'` uses the page-local WebGPU LLM and maps
 DeepAgentsJS filesystem and shell tools to `/root/project`. Use `vmagent status`,
 `stop`, `reset`, or `yolo on|off` for lifecycle control. The browser temporarily
 reserves terminal input while a task runs because agent tool RPC shares the
-serial channel.
+serial channel. YOLO is on by default; use `vmagent yolo off` to require
+per-operation browser confirmations.
 Reads run automatically; edits and commands require browser confirmation. See
 [the Deep Agents guide](deep-agent.md) for capabilities, skills, approvals, and
 environment limits.
