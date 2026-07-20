@@ -73,7 +73,7 @@ function setBootProgress(value, message) {
   if (message) bootMessage.textContent = message;
 }
 const bootTicker = setInterval(() => {
-  if (bootProgress < 90) setBootProgress(bootProgress + 1, "Starting Alpine guest…");
+  if (bootProgress < 90) setBootProgress(bootProgress + 1, "Starting virtual machine…");
 }, 700);
 function finishBoot() {
   clearInterval(bootTicker);
@@ -346,7 +346,7 @@ let herdrStarted = false;
 let diskErrorOutput = "";
 let compatibilityRestartScheduled = false;
 emulator.add_listener("serial0-output-byte", (byte) => {
-  if (!gotSerial) { gotSerial = true; setBootProgress(68, "Booting Alpine Linux…"); status("VM booting — output live"); }
+  if (!gotSerial) { gotSerial = true; setBootProgress(68, "Starting virtual machine…"); status("VM booting — output live"); }
   writeSerialByte(byte);
   if (!compatibilityBoot && !compatibilityRestartScheduled) {
     diskErrorOutput = (diskErrorOutput + String.fromCharCode(byte)).slice(-256);
