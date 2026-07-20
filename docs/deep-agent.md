@@ -94,7 +94,8 @@ next run receives the `autobro_automate` and `autobro_command` tools.
 `autobro_automate` is preferred for natural-language browser tasks. It collects
 the current page's exact controls, related actions, and relevant AutoBro skills;
 asks the ready page-local WebGPU LLM for a constrained command sequence; validates
-the plan; and executes it. `autobro_command` remains available when the agent
+the plan; executes it once; and returns step results plus the final page to the
+`vmagent` shell. Identical immediate retries are suppressed. `autobro_command` remains available when the agent
 already knows the exact low-level command. Together they cover tab management,
 navigation, page/DOM inventory,
 visible actions, forms, coordinate clicks, text/key input, scrolling, waits,

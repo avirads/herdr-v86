@@ -155,6 +155,32 @@ test('AutoBro automation uses the page-local WebGPU LLM to plan exact commands',
   });
   const result = await harness.run('Type test in the Search field.');
   assert.match(result.output, /Entered test/);
-  assert.deepEqual(browserCalls.map(call => call[0]), ['inventoryCurrentPage', 'relatedActions', 'skills', 'fillInput']);
-  assert.deepEqual(browserCalls.at(-1)[1], { args: ['[name="query"]', 'test'] });
+  assert.deepEqual(browserCalls.map(call => call[0]), ['inventoryCurrentPage', 'relatedActions', 'skills', 'fillInput', 'pageInfo']);
+  assert.deepEqual(browserCalls.at(-2)[1], { args: ['[name="query"]', 'test'] });
+});
+
+test('duplicate AutoBro automation calls return the first execution result without rerunning', async () => {
+  const executed = [];
+  const browserClient = { async command(command) {
+    if (command === 'inventoryCurrentPage') return { url: 'https://example.com' };
+    if (command === 'relatedActions' || command === 'skills') return [];
+    if (command === 'pressKey') executed.push(command);
+    if (command === 'pageInfo') return { url: 'https://example.com/results' };
+    return {};
+  } };
+  const instruction = 'Submit the search form';
+  const harness = createHerdrAgent({
+    llmClient: scriptedClient([
+      { tool: 'autobro_automate', args: { instruction } },
+      { steps: [{ command: 'pressKey', args: ['ENTER'] }] },
+      { tool: 'autobro_automate', args: { instruction } },
+      { final: 'The form was submitted and the browser reached the results page.' },
+    ]),
+    guest: fallbackGuest(async () => '__V86AGENT_EXIT__0\nok'),
+    browserClient,
+    approveAction: async () => true,
+  });
+  const result = await harness.run(instruction);
+  assert.match(result.output, /results page/);
+  assert.deepEqual(executed, ['pressKey']);
 });

@@ -147,6 +147,7 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     name: 'vmllm_info', description: 'Inspect the page-local LiteRT-LM status or cached model list. Chat is intentionally excluded to avoid recursive inference.', schema: z.object({ operation: z.enum(['status', 'models']) }),
   });
   const browserTools = [];
+  const recentAutoBroExecutions = new Map();
   const autoBroAutomationCommands = new Set([
     'pageInfo', 'inventoryCurrentPage', 'visibleActions', 'relatedActions',
     'extractGrids', 'findSearchAction', 'fillInput', 'setSelect', 'elementState',
@@ -169,6 +170,11 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     name: 'browser_search', description: 'Search Google, Bing, or DuckDuckGo in a real AutoBro-controlled Chrome tab. Use this—not vmfetch—when asked to go to a search engine or search the web. Requires approval unless YOLO is active.', schema: z.object({ query: z.string(), engine: z.enum(['google', 'bing', 'duckduckgo']).default('google') }),
   }));
   if (browserClient) browserTools.push(tool(async ({ instruction }) => {
+    const executionKey = instruction.trim().toLowerCase().replace(/\s+/g, ' ');
+    const previous = recentAutoBroExecutions.get(executionKey);
+    if (previous && Date.now() - previous.completedAt < 30_000) {
+      return `AUTOBRO_EXECUTION_COMPLETE\nDuplicate execution suppressed. Report the existing result to the user without running another browser tool.\n${previous.report}`;
+    }
     const detail = { instruction, planner: 'page-local WebGPU LLM', context: 'current page, visible controls, related actions, and AutoBro skills' };
     onActivity({ tool: 'autobro_automate', detail, approval: true });
     if (!await approveAction('autobro_automate', detail)) return 'Browser automation rejected by user.';
@@ -207,7 +213,10 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
       const parameters = { ...(step.args?.length ? { args: step.args } : {}), ...(step.tabId ? { tabId: step.tabId } : {}) };
       results.push({ command: step.command, result: await browserClient.command(step.command, parameters, 120_000) });
     }
-    return JSON.stringify({ planner: 'page-local WebGPU LLM', instruction, steps: results });
+    const finalPage = await browserClient.command('pageInfo', {}, 30_000).catch(() => null);
+    const report = JSON.stringify({ task: instruction, executedOnce: true, steps: results, finalPage });
+    recentAutoBroExecutions.set(executionKey, { completedAt: Date.now(), report });
+    return `AUTOBRO_EXECUTION_COMPLETE\nThe browser task ran exactly once. Report the following execution result in the vmagent shell and do not call another browser tool for this task.\n${report}`;
   }, {
     name: 'autobro_automate',
     description: 'Preferred tool for natural-language browser tasks when AutoBro is connected. It gives the current page, exact visible controls, relevant AutoBro skills, and the requested action to the ready page-local WebGPU LLM; validates the resulting command sequence; then executes it. Use autobro_command only for an already-known low-level command.',
@@ -248,7 +257,7 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     memory: ['/AGENTS.md'],
     skills: ['/skills/'],
     systemPrompt: {
-      prefix: 'Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. When AutoBro is connected, use autobro_automate for natural-language browser tasks so the page-local WebGPU LLM plans commands from exact live-page controls and skills. Use browser_search for explicit web searches, autobro_command only when the exact low-level command is already known, and vmfetch only for CORS-enabled HTTP APIs/resources. Provider tools automatically switch between equivalent vm* and AutoBro capabilities on recoverable failures; inspect switchedProvider results and continue with the active provider.',
+      prefix: 'Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. When AutoBro is connected, use autobro_automate for natural-language browser tasks so the page-local WebGPU LLM plans commands from exact live-page controls and skills. When that tool returns AUTOBRO_EXECUTION_COMPLETE, do not invoke any browser tool again for the same task; report its step results and final page directly in the vmagent shell. Use browser_search for explicit web searches, autobro_command only when the exact low-level command is already known, and vmfetch only for CORS-enabled HTTP APIs/resources. Provider tools automatically switch between equivalent vm* and AutoBro capabilities on recoverable failures; inspect switchedProvider results and continue with the active provider.',
       suffix: 'The backend maps Deep Agents path / to the real guest workspace /root/project. The guest is Alpine Linux i386 with BusyBox sh. Do not claim success without reading results and running proportionate checks.',
     },
   });

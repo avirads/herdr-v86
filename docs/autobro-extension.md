@@ -2,8 +2,8 @@
 
 Download the packaged Manifest V3 extension:
 
-- [AutoBro Web Bridge 0.2.0](../downloads/autobro-web-bridge-0.2.0.zip)
-- SHA-256: `3B257B20080C1C940FF941146CAE69DEB6A21071B981EC2433699F955B9E6042`
+- [AutoBro Web Bridge 0.3.0](../downloads/autobro-web-bridge-0.3.0.zip)
+- SHA-256: `ACB5C1444A875439FAC9AC7B386B79EEB22211DBDDDDEC6AEDCA841337E09AB0`
 
 ## Install in Chrome or Chromium
 
@@ -17,9 +17,10 @@ Download the packaged Manifest V3 extension:
 7. Open [Herdr VM](https://avirads.github.io/herdr-v86/), select
    **Connect AutoBro**, and enter the extension ID and pairing token.
 
-When Herdr is paired, AutoBro uses Herdr's ready page-local WebGPU LLM for chat
-and automation planning. The extension hides its separate model-management
-section until that Herdr provider disconnects.
+AutoBro uses Herdr's ready page-local WebGPU LLM for chat and automation
+planning. It contains no model picker or extension-local LiteRT runtime. Keep
+the paired Herdr page open and configure the model there before using AutoBro's
+LLM-backed actions.
 
 The extension works in desktop Chromium-based browsers that support unpacked
 Manifest V3 extensions. Mobile Chrome does not support installing this
