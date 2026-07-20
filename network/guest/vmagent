@@ -10,10 +10,10 @@ usage: vmagent PROMPT...
        vmagent reset
        vmagent yolo on|off
 
-Run the browser-hosted Deep Agents coding agent against /root/project.
-The command returns control to the serial bridge while the task runs; keyboard
-input is reserved until the result is printed. Configure the WebGPU model in
-the browser header first. YOLO is enabled by default, so mutations and shell
+Run the browser-hosted Deep Agents coding agent against /root/project. After
+the first reply, enter follow-up prompts at `vmagent>`; use /exit to return to
+the guest shell. Configure the WebGPU model in the browser header first. YOLO
+is enabled by default, so mutations and shell
 commands run without confirmation. Use `vmagent yolo off` for approval prompts.
 EOF
   exit "${1:-2}"
@@ -50,6 +50,6 @@ fi
 
 printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > /dev/tty
 case "$operation" in
-  RUN) echo '[vmagent] task submitted; the terminal is reserved until completion.' ;;
+  RUN) echo '[vmagent] conversation started; Ctrl-C stops the current response.' ;;
   *) echo "[vmagent] $operation requested." ;;
 esac

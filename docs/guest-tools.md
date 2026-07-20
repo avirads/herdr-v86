@@ -175,17 +175,6 @@ sha256sum /root/SAFE_FILENAME
 Unsafe filename characters are replaced with underscores. Import uses the
 interactive serial console; avoid typing while a large file is being imported.
 
-## **Save VM** and **Restore VM** controls
-
-- **Save VM** stores a full emulator snapshot in IndexedDB for the current
-  browser profile and site origin.
-- **Restore VM** replaces the running emulator state with that snapshot.
-- Snapshots are local to the browser profile and are not uploaded by the project.
-- Private/incognito browsing, storage eviction, clearing site data, or changing
-  origins can remove or make a snapshot unavailable.
-- Snapshots include guest RAM and can contain tokens, prompts, clipboard data,
-  and unsaved files. Remove credentials before saving.
-
 ## Troubleshooting
 
 | Message or symptom | Meaning | Action |
@@ -210,12 +199,13 @@ security controls.
 
 The guest command `vmagent 'TASK'` uses the page-local WebGPU LLM and maps
 DeepAgentsJS filesystem and shell tools to `/root/project`. Use `vmagent status`,
-`stop`, `reset`, or `yolo on|off` for lifecycle control. The browser temporarily
-reserves terminal input while a task runs because agent tool RPC shares the
-serial channel. YOLO is on by default; use `vmagent yolo off` to require
-per-operation browser confirmations. Running bare `vmagent` displays a
-`vmagent> ` prompt and accepts one task line; stdin pipes can contain longer
-prompts.
+`stop`, `reset`, or `yolo on|off` for lifecycle control. After the first reply,
+the browser keeps a persistent `vmagent>` conversation using the same agent
+checkpoint; enter `/exit` to return to the guest shell. Terminal input is
+reserved while each response runs because agent tool RPC shares the serial
+channel. YOLO is on by default; use `vmagent yolo off` to require per-operation
+browser confirmations. Running bare `vmagent` reads the first prompt; stdin
+pipes can contain longer initial prompts.
 Reads run automatically; edits and commands require browser confirmation. See
 [the Deep Agents guide](deep-agent.md) for capabilities, skills, approvals, and
 environment limits.

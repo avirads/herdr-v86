@@ -1,0 +1,22 @@
+#!/bin/sh
+
+export HOME=/root
+export XDG_RUNTIME_DIR=/tmp/runtime
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+export TERM=xterm-256color
+mkdir -p "$XDG_RUNTIME_DIR" /root/project
+cd /root/project || cd /root
+stty rows 32 cols 100 2>/dev/null || true
+
+if grep -qw 'herdr.shell=1' /proc/cmdline 2>/dev/null; then
+  exec /bin/login -f root
+fi
+
+# The browser consumes this marker while its boot overlay is still covering the
+# serial console, then clears the buffered kernel log before revealing Herdr.
+printf '__HERDR_STARTING__\n'
+/usr/local/bin/herdr
+code=$?
+
+printf '\nherdr exited with status %s; opening recovery shell.\n' "$code" >&2
+exec /bin/login -f root

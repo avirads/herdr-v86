@@ -15,7 +15,7 @@ const emulator = new V86({
   wasm_path: '../../v86-network.wasm', memory_size: 256 << 20, vga_memory_size: 2 << 20,
   bios: { url: '../../seabios.bin' }, vga_bios: { url: '../../vgabios.bin' },
   bzimage: { url: '../../bzImage-network' },
-  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic${compatibilityBoot ? ' libata.force=pio4' : ''}`,
+  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic herdr.shell=1${compatibilityBoot ? ' libata.force=pio4' : ''}`,
   hda: { url: '../../herdr-vm-network-ext4.img', async: !compatibilityBoot, size: 100663296 },
   screen_container: document.querySelector('#screen_container'), autostart: true,
 });

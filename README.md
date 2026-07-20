@@ -23,7 +23,7 @@ short-lived gateway session in its URL fragment. See [network/README.md](network
 
 The demo also includes a gateway-free browser bridge. Its `vmfetch`, `vmclip`,
 `vmexport`, `vmgithub`, `vmai`, and `vmllm` guest commands use browser APIs instead of a
-NIC. The toolbar provides file import and IndexedDB VM snapshots. See
+NIC. The toolbar provides file import. See
 [the guest-tools command reference](docs/guest-tools.md). Coding agents should
 start with [AGENTS.md](AGENTS.md); web-based agents can discover the documentation
 index through [llms.txt](llms.txt).
@@ -53,14 +53,14 @@ HTTP Range requests** (206). GitHub Pages, nginx, caddy, and `npx http-server`
 work; `python -m http.server` does not (returns 200/full-body, v86 aborts the
 read, and the guest kernel spirals into ATA timeouts before dropping to PIO).
 
-The demo checks Range delivery before starting. If the check fails, or the user
-selects **Compatibility boot**, it downloads the complete 96 MiB disk before
-startup and adds `libata.force=pio4` to avoid virtual ATA DMA interrupt failures.
+The demo checks Range delivery before starting. If the check fails, it downloads
+the complete 96 MiB disk before startup and adds `libata.force=pio4` to avoid
+virtual ATA DMA interrupt failures.
 Compatibility mode uses more browser memory and starts more slowly, but is the
 recommended fallback for machines showing `READ DMA`, `lost interrupt`, or
 `I/O error, dev sda` during boot. If those errors are detected in normal mode,
-the page automatically restarts once in compatibility mode. It is also
-available manually as `?compat=1`.
+the page automatically restarts once in compatibility mode. Operators can
+still force this internal mode with `?compat=1` for diagnostics.
 
 ## Known issues (herdr 0.7.4 i686)
 

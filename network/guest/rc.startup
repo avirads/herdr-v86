@@ -7,6 +7,7 @@ mount -t devpts devpts /dev/pts 2>/dev/null
 mount -t tmpfs -o mode=1777 tmpfs /tmp 2>/dev/null
 mount -t tmpfs tmpfs /run 2>/dev/null
 hostname herdr-vm
+dmesg -n 1 2>/dev/null || true
 
 # Networking is deliberately non-blocking: the shell and herdr still start if
 # the browser has no network session or the gateway is temporarily offline.

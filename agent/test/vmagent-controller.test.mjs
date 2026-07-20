@@ -20,10 +20,13 @@ test('vmagent command controller runs a persistent harness and reports in the te
   });
   await controller.handle('run', 'inspect project');
   await controller.handle('run', 'run tests');
+  assert.equal(controller.conversationActive, true);
   assert.equal(creations, 1);
   assert.deepEqual(prompts, ['inspect project', 'run tests']);
   assert.match(outputs.at(-1), /done: run tests/);
   assert.deepEqual(busy, [true, false, true, false]);
+  controller.closeConversation();
+  assert.equal(controller.conversationActive, false);
 });
 
 test('vmagent reset and YOLO remain command-controlled and session-local', async () => {
@@ -43,6 +46,7 @@ test('vmagent reset and YOLO remain command-controlled and session-local', async
   assert.equal(controller.yolo, true);
   assert.equal(approvals[0][0], 'enable_yolo');
   await controller.handle('reset');
+  assert.equal(controller.conversationActive, false);
   assert.equal(controller.yolo, true);
   assert.match(outputs.at(-1), /YOLO is on by default/);
 });

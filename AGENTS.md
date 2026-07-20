@@ -38,17 +38,15 @@ clipboard, file-transfer, GitHub, or AI operations.
    permissions as browser policy failures—not guest DNS or TCP failures.
 9. Respect limits: `vmfetch` responses are at most 16 MiB; browser imports and
    `vmexport` files are at most 8 MiB.
-10. VM snapshots contain RAM and therefore may contain secrets. Do not save a
-    snapshot while credentials remain in guest memory.
-11. Use `vmllm` for the page-local WebGPU model. It runs in the browser host,
+10. Use `vmllm` for the page-local WebGPU model. It runs in the browser host,
     not on the i386 guest, and requires a model loaded with **Configure LLM**.
-12. The browser Deep Agents backend maps `/` to `/root/project`. Reads are
+11. The browser Deep Agents backend maps `/` to `/root/project`. Reads are
     automatic; file mutations and every shell command require browser approval.
-13. Project-specific agent instructions belong in `/root/project/AGENTS.md` and
+12. Project-specific agent instructions belong in `/root/project/AGENTS.md` and
     skills in `/root/project/skills/NAME/SKILL.md`.
-14. Deep Agents has typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`,
+13. Deep Agents has typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`,
     and `vmllm_info` tools. Do not use recursive `vmllm chat` from the agent.
-15. Launch Deep Agents from the guest terminal with `vmagent 'TASK'`; lifecycle
+14. Launch Deep Agents from the guest terminal with `vmagent 'TASK'`; lifecycle
     commands are `vmagent status|stop|reset|yolo on|yolo off`. There is no
     separate agent panel.
 15. When paired, `autobro_command` performs authenticated browser tasks. Treat

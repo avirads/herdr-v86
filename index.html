@@ -10,7 +10,16 @@
   header { padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
   header h1 { font-size: 15px; margin: 0; }
   #status { font-size: 12px; color: #8b949e; }
-  #term { padding: 0 8px 8px; }
+  #term { padding: 0 8px 8px; visibility: hidden; }
+  #boot-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #0d1117; transition: opacity .35s ease; }
+  #boot-overlay.done { opacity: 0; pointer-events: none; }
+  #boot-loader { display: grid; justify-items: center; gap: 18px; }
+  #boot-ring { width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(#58a6ff var(--progress, 1%), #21262d 0); position: relative; transition: background .25s linear; }
+  #boot-ring::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: #0d1117; }
+  #boot-percent { position: relative; font: 600 24px/1 monospace; color: #f0f6fc; }
+  #boot-message { color: #8b949e; font-size: 13px; }
+  #boot-overlay.error #boot-ring { background: #da3633; }
+  #boot-overlay.error #boot-message { color: #ff7b72; max-width: 80vw; text-align: center; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
@@ -18,16 +27,18 @@
 </style>
 </head>
 <body>
+<div id="boot-overlay" role="status" aria-live="polite">
+  <div id="boot-loader">
+    <div id="boot-ring"><span id="boot-percent">1%</span></div>
+    <div id="boot-message">Preparing virtual machine…</div>
+  </div>
+</div>
 <header>
   <h1>herdr-vm</h1>
   <div id="status">loading v86…</div>
-  <div id="network-status">network: disabled</div>
   <div id="llm-status">WebGPU LLM: not paired</div>
   <div id="browser-status">AutoBro: not connected</div>
   <div id="tools">
-    <button id="save-state">Save VM</button>
-    <button id="restore-state">Restore VM</button>
-    <button id="compat-boot" title="Reload with the full disk preloaded and ATA DMA disabled">Compatibility boot</button>
     <button id="import-file">Import file</button>
     <button id="open-help" title="Guest command reference">Help</button>
     <button id="configure-llm" title="Load a page-local LiteRT-LM WebGPU model">Configure LLM</button>
@@ -49,21 +60,48 @@
 "use strict";
 (async () => {
 const status = (m) => document.getElementById("status").textContent = m;
-const networkStatus = (m) => document.getElementById("network-status").textContent = "network: " + m;
+const networkStatus = () => {};
+const bootOverlay = document.getElementById("boot-overlay");
+const bootRing = document.getElementById("boot-ring");
+const bootPercent = document.getElementById("boot-percent");
+const bootMessage = document.getElementById("boot-message");
+let bootProgress = 1;
+function setBootProgress(value, message) {
+  bootProgress = Math.max(bootProgress, Math.min(100, Math.round(value)));
+  bootRing.style.setProperty("--progress", `${bootProgress}%`);
+  bootPercent.textContent = `${bootProgress}%`;
+  if (message) bootMessage.textContent = message;
+}
+const bootTicker = setInterval(() => {
+  if (bootProgress < 90) setBootProgress(bootProgress + 1, "Starting Alpine guest…");
+}, 700);
+function finishBoot() {
+  clearInterval(bootTicker);
+  bootOverlay.classList.remove("error");
+  setBootProgress(100, "Ready");
+  status("Herdr ready");
+  setTimeout(() => {
+    term.clear();
+    term.write("\x1b[2J\x1b[H");
+    bootOverlay.classList.add("done");
+    document.getElementById("term").style.visibility = "visible";
+    term.focus();
+  }, 300);
+}
+function failBoot(message) {
+  clearInterval(bootTicker);
+  bootOverlay.classList.add("error");
+  bootMessage.textContent = message;
+}
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "vmagent-command-3";
+const DISK_VERSION = "herdr-direct-6";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `herdr-vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
 
-document.getElementById("compat-boot").onclick = () => {
-  const next = new URL(location.href);
-  next.searchParams.set("compat", "1");
-  location.href = next.href;
-};
-
 async function rangePreflight() {
   try {
+    setBootProgress(3, "Checking disk delivery…");
     status("checking disk delivery…");
     const response = await fetch(diskURL, {
       headers: { Range: "bytes=0-0" },
@@ -72,6 +110,7 @@ async function rangePreflight() {
     const contentRange = response.headers.get("content-range") || "";
     const valid = response.status === 206 && contentRange === `bytes 0-0/${DISK_SIZE}`;
     await response.arrayBuffer();
+    setBootProgress(8, valid ? "Loading virtual machine…" : "Preparing compatibility boot…");
     return valid;
   } catch {
     return false;
@@ -114,6 +153,27 @@ let autobroClient;
 let guestReadonlyClient;
 let vmAgentController;
 let agentBusy = false;
+let agentInput = "";
+const hiddenSerialMarkers = ["__V86AGENT_RESPONSE__", "__V86RPC__", "vmagent-rpc agent-"];
+let serialDisplayLine = "";
+let suppressSerialLine = false;
+function writeSerialByte(byte) {
+  const character = String.fromCharCode(byte);
+  if (character === "\n") {
+    if (!suppressSerialLine) term.write(Uint8Array.of(byte));
+    serialDisplayLine = "";
+    suppressSerialLine = false;
+    return;
+  }
+  if (suppressSerialLine) return;
+  serialDisplayLine = (serialDisplayLine + character).slice(-512);
+  if (hiddenSerialMarkers.some(marker => serialDisplayLine.includes(marker))) {
+    suppressSerialLine = true;
+    term.write("\r\x1b[2K");
+    return;
+  }
+  term.write(Uint8Array.of(byte));
+}
 import("./network/browser/v86-host-bridge.js").then(module => {
   hostBridge = new module.V86HostBridge(emulator, { llmClient: webGpuLlmClient });
   window.v86HostBridge = hostBridge;
@@ -130,26 +190,22 @@ import("./network/browser/v86-host-bridge.js").then(module => {
         getGuest: () => guestReadonlyClient,
         getBrowserClient: () => autobroClient,
         approveAction: async (operation, detail) => confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
-        onActivity: event => {
-          const label = event.tool || event.state;
-          if (label && label !== "running" && label !== "complete") term.write(`\r\n[vmagent] ${label}\r\n`);
+        onActivity: () => {},
+        onOutput: output => {
+          const clean = String(output).split(/\r?\n/)
+            .filter(line => !hiddenSerialMarkers.some(marker => line.includes(marker)) && !/\bagent-\d{6,}-\d+\b/.test(line))
+            .join("\r\n");
+          if (clean) term.write(`\r\n${clean}\r\n`);
         },
-        onOutput: output => term.write(`\r\n${String(output).replace(/\n/g, "\r\n")}\r\n`),
-        onBusy: busy => { agentBusy = busy; status(busy ? "vmagent running — Ctrl-C to stop" : "running — type in the terminal. Try: vmagent --help"); },
+        onBusy: busy => {
+          agentBusy = busy;
+          status(busy ? "vmagent responding — Ctrl-C to stop" : "vmagent conversation active — /exit returns to shell");
+          if (!busy && vmAgentController?.conversationActive) term.write("vmagent> ");
+        },
       });
       hostBridge.setAgentHandler((command, value) => vmAgentController.handle(command, value));
     });
   });
-  document.getElementById("save-state").onclick = async () => {
-    status("saving VM state…");
-    try { await module.saveVMState(emulator); status("VM state saved in this browser"); }
-    catch (error) { status("save failed — " + error.message); }
-  };
-  document.getElementById("restore-state").onclick = async () => {
-    status("restoring VM state…");
-    try { await module.restoreVMState(emulator); status("VM state restored"); }
-    catch (error) { status("restore failed — " + error.message); }
-  };
 }).catch(error => status("host bridge failed — " + error.message));
 
 const llmStatus = message => document.getElementById("llm-status").textContent = "WebGPU LLM: " + message;
@@ -249,28 +305,40 @@ if (gatewayURL && sessionToken) {
     .catch(error => networkStatus("error — " + error.message));
 }
 
-emulator.add_listener("emulator-ready", () => status(`emulator ready — booting${compatibilityBoot ? " in compatibility mode" : ""}… (first boot ~30-90s)`));
+emulator.add_listener("emulator-ready", () => {
+  setBootProgress(28, compatibilityBoot ? "Starting compatibility boot…" : "Starting virtual machine…");
+  status(`emulator ready — booting${compatibilityBoot ? " in compatibility mode" : ""}… (first boot ~30-90s)`);
+});
 emulator.add_listener("download-progress", (e) => {
-  if (e.file_name && e.loaded != null && e.total)
+  if (e.file_name && e.loaded != null && e.total) {
+    const fraction = Math.max(0, Math.min(1, e.loaded / e.total));
+    setBootProgress(10 + fraction * 55, `Downloading ${e.file_name}…`);
     status("downloading " + e.file_name + " " + Math.round(100*e.loaded/e.total) + "%");
+  }
 });
 emulator.add_listener("download-error", (e) => {
-  status("DOWNLOAD FAILED: " + (e.file_name || "?") + " — reload to retry");
-  term.write("\r\n[asset download failed: " + (e.file_name || "?") + "]\r\n");
+  const message = "Download failed: " + (e.file_name || "?") + ". Reload to retry.";
+  status(message);
+  failBoot(message);
 });
-window.onerror = (msg) => { status("JS ERROR: " + msg); };
+window.onerror = (msg, source) => {
+  if (source && !source.startsWith(location.origin)) return;
+  status("JS ERROR: " + msg);
+  failBoot("Startup error: " + msg);
+};
 let gotSerial = false;
-setTimeout(() => { if (!gotSerial) status("no VM output after 120s — likely kernel/disk fetch problem; reload"); }, 120000);
+setTimeout(() => { if (!gotSerial) { const message = "No VM output after 120 seconds. Reload to retry automatic compatibility boot."; status(message); failBoot(message); } }, 120000);
 // The kernel serial console has no window size (TIOCGWINSZ reports 0x0), so
 // herdr would render into a 1x1 grid. Set the tty size once at the first
 // shell prompt, matching the xterm.js geometry above.
 let sttySent = false;
 let recentOutput = "";
+let herdrStarted = false;
 let diskErrorOutput = "";
 let compatibilityRestartScheduled = false;
 emulator.add_listener("serial0-output-byte", (byte) => {
-  if (!gotSerial) { gotSerial = true; status("VM booting — output live"); }
-  term.write(Uint8Array.of(byte));
+  if (!gotSerial) { gotSerial = true; setBootProgress(68, "Booting Alpine Linux…"); status("VM booting — output live"); }
+  writeSerialByte(byte);
   if (!compatibilityBoot && !compatibilityRestartScheduled) {
     diskErrorOutput = (diskErrorOutput + String.fromCharCode(byte)).slice(-256);
     if (diskErrorOutput.includes("lost interrupt") || diskErrorOutput.includes("I/O error, dev sda")) {
@@ -282,10 +350,16 @@ emulator.add_listener("serial0-output-byte", (byte) => {
     }
   }
   if (!sttySent) {
-    recentOutput = (recentOutput + String.fromCharCode(byte)).slice(-16);
+    recentOutput = (recentOutput + String.fromCharCode(byte)).slice(-64);
+    if (!herdrStarted && recentOutput.includes("__HERDR_STARTING__")) {
+      herdrStarted = true;
+      sttySent = true;
+      finishBoot();
+    }
     if (recentOutput.endsWith(":~# ")) {
       sttySent = true;
       for (const ch of "stty rows 32 cols 100\n") emulator.serial0_send(ch);
+      finishBoot();
     }
   }
 });
@@ -294,12 +368,43 @@ term.onData((data) => {
     if (data === "\x03") vmAgentController?.handle("stop");
     return;
   }
+  if (vmAgentController?.conversationActive) {
+    for (const ch of data) {
+      if (ch === "\r" || ch === "\n") {
+        term.write("\r\n");
+        const prompt = agentInput.trim();
+        agentInput = "";
+        if (!prompt) { term.write("vmagent> "); continue; }
+        if (prompt === "/exit" || prompt === "/quit") {
+          vmAgentController.closeConversation();
+          status("running — type in the terminal. Try: vmagent --help");
+          term.write("[conversation closed]\r\n");
+          emulator.serial0_send("\n");
+          continue;
+        }
+        vmAgentController.handle("run", prompt);
+      } else if (ch === "\x7f" || ch === "\b") {
+        if (agentInput) { agentInput = agentInput.slice(0, -1); term.write("\b \b"); }
+      } else if (ch === "\x03") {
+        agentInput = "";
+        term.write("^C\r\nvmagent> ");
+      } else if (ch >= " ") {
+        agentInput += ch;
+        term.write(ch);
+      }
+    }
+    return;
+  }
   for (const ch of data) emulator.serial0_send(ch);
   status("running — type in the terminal. Try: herdr");
 });
 term.focus();
 })().catch(error => {
   document.getElementById("status").textContent = "BOOT FAILED: " + error.message;
+  const overlay = document.getElementById("boot-overlay");
+  overlay?.classList.add("error");
+  const message = document.getElementById("boot-message");
+  if (message) message.textContent = "Boot failed: " + error.message;
 });
 </script>
 </body>

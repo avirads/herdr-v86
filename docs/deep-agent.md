@@ -7,7 +7,7 @@ and does not require a browser extension or cloud API.
 
 ```sh
 vmagent 'Inspect the project, fix the failing test, and verify the change.'
-vmagent                       # shows vmagent> and reads one task line
+vmagent                       # starts a persistent vmagent> conversation
 cat task.txt | vmagent
 vmagent status
 vmagent stop
@@ -16,9 +16,11 @@ vmagent yolo on
 vmagent yolo off
 ```
 
-The command submits the task and the browser temporarily reserves terminal
-input while DeepAgents uses the serial bridge for guest tools. Results and
-activity are printed in the same terminal. Press Ctrl-C to request a stop.
+The command starts a persistent conversation in the terminal. DeepAgents keeps
+the same in-memory checkpoint for follow-up prompts. Enter `/exit` or `/quit`
+at `vmagent>` to return to the guest shell. The browser temporarily reserves
+terminal input while a response is running; press Ctrl-C to request a stop.
+Internal serial RPC records and request/session identifiers are not displayed.
 
 ## Framework capabilities
 

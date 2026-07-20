@@ -4,9 +4,11 @@ export class VmAgentController {
     this.harness = null;
     this.abortController = null;
     this.yolo = true;
+    this.conversationActive = false;
   }
 
   resetHarness() { this.harness = null; }
+  closeConversation() { this.conversationActive = false; }
 
   async handle(command, value = '') {
     if (command === 'status') {
@@ -24,6 +26,7 @@ export class VmAgentController {
       this.abortController = null;
       this.harness = null;
       this.yolo = true;
+      this.conversationActive = false;
       return this.onOutput('[vmagent] session reset; YOLO is on by default.');
     }
     if (command === 'yolo') {
@@ -41,9 +44,9 @@ export class VmAgentController {
     if (!llmClient) return this.onOutput('[vmagent] WebGPU LLM is not ready; use Configure LLM in the browser header.');
     if (!guest) return this.onOutput('[vmagent] guest bridge is still initializing.');
 
+    this.conversationActive = true;
     this.abortController = new AbortController();
     this.onBusy(true);
-    this.onOutput('[vmagent] Deep Agents started.');
     try {
       this.harness ||= await this.createAgent({
         llmClient,
@@ -55,7 +58,7 @@ export class VmAgentController {
       const result = await this.harness.run(value, { signal: this.abortController.signal });
       this.onOutput(result.output);
     } catch (error) {
-      this.onOutput(`[vmagent] Agent error: ${error.message}`);
+      this.onOutput(`Error: ${error.message}`);
     } finally {
       this.abortController = null;
       this.onBusy(false);
