@@ -24,6 +24,12 @@
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
   .tool-link { color: #58a6ff; align-self: center; font-size: 12px; white-space: nowrap; }
+  dialog { color: #c9d1d9; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 18px; width: min(420px, calc(100vw - 48px)); }
+  dialog::backdrop { background: rgb(0 0 0 / .65); }
+  dialog h2 { margin: 0 0 14px; font-size: 17px; }
+  dialog label { display: grid; gap: 5px; margin: 12px 0; font-size: 12px; color: #8b949e; }
+  dialog input { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 8px; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 </style>
 </head>
 <body>
@@ -49,6 +55,21 @@
     <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
   </div>
 </header>
+<dialog id="autobro-dialog">
+  <form id="autobro-form">
+    <h2>Connect AutoBro</h2>
+    <label>Extension ID
+      <input id="autobro-extension-id" name="extensionId" required autocomplete="off" spellcheck="false" placeholder="Chrome extension ID">
+    </label>
+    <label>Pairing token
+      <input id="autobro-pairing-token" name="pairingToken" type="password" required autocomplete="off" spellcheck="false" placeholder="Token from the AutoBro panel">
+    </label>
+    <div class="dialog-actions">
+      <button id="cancel-autobro" type="button">Cancel</button>
+      <button type="submit">Connect</button>
+    </div>
+  </form>
+</dialog>
 <div id="term"></div>
 <div id="screen_container">
   <div style="white-space:pre; font:14px monospace"></div>
@@ -227,13 +248,18 @@ import("./network/browser/v86-host-bridge.js").then(module => {
 
 const llmStatus = message => document.getElementById("llm-status").textContent = "WebGPU LLM: " + message;
 const browserStatus = message => document.getElementById("browser-status").textContent = "AutoBro: " + message;
-async function connectAutoBro({ interactive = true } = {}) {
+async function connectAutoBro({ interactive = true, extensionId = null, token = null } = {}) {
   const storedId = localStorage.getItem("herdr.autobroExtensionId") || "";
   const storedToken = sessionStorage.getItem("herdr.autobroPairingToken") || "";
-  const extensionId = interactive ? prompt("AutoBro extension ID", storedId) : storedId;
-  if (!extensionId) return;
-  const token = interactive ? prompt("AutoBro pairing token (kept for this tab only)", storedToken) : storedToken;
-  if (!token) return;
+  if (interactive) {
+    document.getElementById("autobro-extension-id").value = storedId;
+    document.getElementById("autobro-pairing-token").value = storedToken;
+    document.getElementById("autobro-dialog").showModal();
+    return;
+  }
+  extensionId ??= storedId;
+  token ??= storedToken;
+  if (!extensionId || !token) return;
   browserStatus("pairing…");
   try {
     const { AutoBroClient } = await import("./network/browser/autobro-client.js");
@@ -249,6 +275,16 @@ async function connectAutoBro({ interactive = true } = {}) {
   }
 }
 document.getElementById("connect-autobro").onclick = () => connectAutoBro();
+const autobroDialog = document.getElementById("autobro-dialog");
+document.getElementById("cancel-autobro").onclick = () => autobroDialog.close();
+document.getElementById("autobro-form").onsubmit = event => {
+  event.preventDefault();
+  const extensionId = document.getElementById("autobro-extension-id").value.trim();
+  const token = document.getElementById("autobro-pairing-token").value.trim();
+  if (!extensionId || !token) return;
+  autobroDialog.close();
+  connectAutoBro({ interactive: false, extensionId, token });
+};
 if (localStorage.getItem("herdr.autobroExtensionId") && sessionStorage.getItem("herdr.autobroPairingToken")) connectAutoBro({ interactive: false });
 const llmFileInput = document.getElementById("llm-file-input");
 document.getElementById("configure-llm").onclick = () => llmFileInput.click();
