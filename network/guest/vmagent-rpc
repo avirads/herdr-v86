@@ -87,8 +87,9 @@ case "$operation" in
   execute)
     command=$(decode "${1:-}") || fail 'invalid base64 command'
     [ -n "$command" ] || fail 'command is empty'
+    cd "$workspace_real"
     set +e
-    timeout 120 sh -lc "$command" > "$tmp.out" 2>&1
+    timeout 120 sh -c "$command" > "$tmp.out" 2>&1
     code=$?
     set -e
     { printf '__V86AGENT_EXIT__%s\n' "$code"; head -c "$MAX_BYTES" "$tmp.out"; } > "$tmp"

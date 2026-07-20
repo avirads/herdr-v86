@@ -17,6 +17,8 @@ The integration enables the framework's standard coding-agent facilities:
 - project instructions from `/root/project/AGENTS.md`
 - project skills discovered under `/root/project/skills/*/SKILL.md`
 - an in-memory conversation checkpoint retained across prompts in the panel
+- typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`, and `vmllm_info`
+  tools backed by the browser bridge
 
 Choose **New session** to discard the panel's conversation checkpoint. Guest
 files remain unchanged until edited or the VM is restarted/restored.
@@ -36,6 +38,26 @@ Approval is enforced in the guest backend, not merely requested in the model
 prompt. Rejecting an operation returns a tool error to the agent. Shell approval
 is intentionally required because a shell can mutate files, use credentials,
 or access the network when a gateway is attached.
+
+## Browser-backed `vm*` tools
+
+The agent receives typed schemas for the gateway-free guest commands instead
+of having to construct opaque shell strings:
+
+| Agent tool | Guest capability |
+|---|---|
+| `vmfetch` | HTTPS/localhost browser fetch with method, headers, body, and output path |
+| `vmgithub` | Repository metadata, API requests, and source archives |
+| `vmclip` | Browser clipboard read or write |
+| `vmexport` | Download a guest file through the browser |
+| `vmai` | OpenAI-compatible Responses API through browser fetch |
+| `vmllm_info` | Page-local LiteRT-LM status and model discovery |
+
+All except the read-only `vmllm_info` require approval, or active YOLO mode.
+Browser CORS, permission, response-size, credential, and user-gesture rules
+still apply. `vmllm` chat is intentionally not exposed because asking the agent
+to invoke its own underlying model recursively can deadlock or exhaust context;
+the agent already talks directly to that model.
 
 ## YOLO mode
 

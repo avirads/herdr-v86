@@ -38,7 +38,7 @@ test('Deep Agents invokes the native guest backend and returns evidence', async 
   assert.deepEqual(guestCalls, [['list', 'skills/'], ['read', 'AGENTS.md'], ['list', '.']]);
   assert.match(result.output, /src\/main\.js/);
   const protocol = firstRequest.messages[0].content;
-  for (const name of ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']) {
+  for (const name of ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'vmfetch', 'vmgithub', 'vmclip', 'vmexport', 'vmai', 'vmllm_info']) {
     assert.match(protocol, new RegExp(`"name":"${name}"`));
   }
 });

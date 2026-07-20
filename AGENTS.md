@@ -46,6 +46,8 @@ clipboard, file-transfer, GitHub, or AI operations.
     automatic; file mutations and every shell command require browser approval.
 13. Project-specific agent instructions belong in `/root/project/AGENTS.md` and
     skills in `/root/project/skills/NAME/SKILL.md`.
+14. Deep Agents has typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`,
+    and `vmllm_info` tools. Do not use recursive `vmllm chat` from the agent.
 
 ## Quick capability check
 

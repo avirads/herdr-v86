@@ -6,7 +6,7 @@ case "${1:-read}" in
   -h|--help|help) echo 'usage: vmclip [read|write]'; echo 'Read the browser clipboard, or write stdin to it.' ;;
   read)
     stty -echo; trap 'stty echo' EXIT INT TERM
-    printf '__V86RPC__\tCLIPBOARD_READ\t%s\n' "$id"
+    printf '__V86RPC__\tCLIPBOARD_READ\t%s\n' "$id" > /dev/tty
     while IFS="$(printf '\t')" read -r prefix response_id kind value; do
       [ "$prefix:$response_id" = "__V86RPC_RESPONSE__:$id" ] || continue
       [ "$kind" = DATA ] && printf %s "$value" | base64 -d
@@ -15,6 +15,6 @@ case "${1:-read}" in
     done
     stty echo; trap - EXIT INT TERM ;;
   write)
-    value=$(cat); printf '__V86RPC__\tCLIPBOARD_WRITE\t%s\t%s\n' "$id" "$(b64 "$value")" ;;
+    value=$(cat); printf '__V86RPC__\tCLIPBOARD_WRITE\t%s\t%s\n' "$id" "$(b64 "$value")" > /dev/tty ;;
   *) echo 'usage: vmclip [read|write]' >&2; exit 2 ;;
 esac

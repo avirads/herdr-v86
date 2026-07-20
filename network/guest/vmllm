@@ -37,7 +37,7 @@ case "$operation" in
 esac
 stty -echo
 trap 'stty echo' EXIT INT TERM
-printf '__V86RPC__\t%s\t%s\t%s\n' "$rpc" "$id" "$body64"
+printf '__V86RPC__\t%s\t%s\t%s\n' "$rpc" "$id" "$body64" > /dev/tty
 while IFS="$(printf '\t')" read -r prefix response_id kind value; do
   [ "$prefix:$response_id" = "__V86RPC_RESPONSE__:$id" ] || continue
   case "$kind" in

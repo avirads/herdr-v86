@@ -33,7 +33,9 @@ backed by the page-local LiteRT-LM WebGPU model. **Configure LLM** imports a
 compatible model into browser OPFS; no extension is required. The agent has
 framework-native planning, filesystem, shell, project-memory, skills, context
 management, and subagent tools. Mutations and every command require explicit
-browser approval. See [the Deep Agents guide](docs/deep-agent.md).
+browser approval. Typed browser-bridge tools cover `vmfetch`, `vmgithub`,
+`vmclip`, `vmexport`, `vmai`, and LiteRT status/model discovery. See
+[the Deep Agents guide](docs/deep-agent.md).
 An explicit session-only **YOLO** toggle can waive individual approvals; it is
 off by default, visibly marked, and resets on reload or **New session**.
 
