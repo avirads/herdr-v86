@@ -17,6 +17,7 @@
   #agent-panel pre { max-height: 220px; overflow: auto; white-space: pre-wrap; color: #b1bac4; }
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
+  .tool-link { color: #58a6ff; align-self: center; font-size: 12px; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -32,6 +33,7 @@
     <button id="import-file">Import file</button>
     <button id="open-help" title="Guest command reference">Help</button>
     <button id="configure-llm" title="Load a page-local LiteRT-LM WebGPU model">Configure LLM</button>
+    <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer" title="Download the approximately 2 GB Gemma E2B WebGPU model">Download LLM model (~2 GB)</a>
     <button id="toggle-agent" title="Read-only Deep Agents coding assistant">Agent</button>
     <input id="file-input" type="file" hidden>
     <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
