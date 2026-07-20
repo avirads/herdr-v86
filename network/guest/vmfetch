@@ -3,13 +3,15 @@ set -eu
 
 usage() {
   echo "usage: vmfetch [-o FILE] [-X METHOD] [-H 'NAME: VALUE'] [-d DATA] URL" >&2
-  exit 2
+  echo "Browser-backed HTTP client; HTTPS/localhost only, CORS applies, 16 MiB response limit." >&2
+  exit "${1:-2}"
 }
 
 output=""
 method=GET
 body=""
 headers=''
+[ "${1:-}" = --help ] && usage 0
 while getopts 'o:X:H:d:h' option; do
   case "$option" in
     o) output=$OPTARG ;;
@@ -17,11 +19,12 @@ while getopts 'o:X:H:d:h' option; do
     H) headers="${headers}${headers:+
 }${OPTARG}" ;;
     d) body=$OPTARG; [ "$method" = GET ] && method=POST ;;
-    *) usage ;;
+    h) usage 0 ;;
+    *) usage 2 ;;
   esac
 done
 shift $((OPTIND - 1))
-[ "$#" -eq 1 ] || usage
+[ "$#" -eq 1 ] || usage 2
 url=$1
 [ -n "$output" ] || output=$(basename "${url%%\?*}")
 [ -n "$output" ] || output=index.html

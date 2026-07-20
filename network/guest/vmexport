@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+case "${1:-}" in -h|--help) echo 'usage: vmexport FILE'; echo 'Download one guest file through the browser (maximum 8 MiB).'; exit 0;; esac
 [ "$#" -eq 1 ] && [ -f "$1" ] || { echo 'usage: vmexport FILE' >&2; exit 2; }
 size=$(wc -c < "$1")
 [ "$size" -le 8388608 ] || { echo 'vmexport: files are limited to 8 MiB' >&2; exit 1; }

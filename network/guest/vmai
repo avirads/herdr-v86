@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+case "${1:-}" in -h|--help) echo 'usage: OPENAI_API_KEY=... vmai PROMPT...'; echo 'Calls an OpenAI-compatible /responses endpoint through browser fetch; CORS applies.'; exit 0;; esac
 [ "$#" -ge 1 ] || { echo 'usage: OPENAI_API_KEY=... vmai PROMPT...' >&2; exit 2; }
 [ -n "${OPENAI_API_KEY:-}" ] || { echo 'vmai: set OPENAI_API_KEY' >&2; exit 2; }
 prompt=$(printf '%s ' "$@" | sed 's/["\\]/\\&/g')

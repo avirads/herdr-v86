@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 case "${1:-}" in
+  -h|--help|help)
+    echo 'usage: vmgithub repo OWNER/REPO'
+    echo '       vmgithub archive OWNER/REPO [REF] [FILE]'
+    echo '       vmgithub api /PATH'
+    echo 'Focused browser-backed GitHub API/archive helper; not a Git replacement.' ;;
   repo)
     [ "$#" -eq 2 ] || { echo 'usage: vmgithub repo OWNER/REPO' >&2; exit 2; }
     exec vmfetch -H 'Accept: application/vnd.github+json' -o - "https://api.github.com/repos/$2" ;;

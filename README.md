@@ -24,7 +24,9 @@ short-lived gateway session in its URL fragment. See [network/README.md](network
 The demo also includes a gateway-free browser bridge. Its `vmfetch`, `vmclip`,
 `vmexport`, `vmgithub`, and `vmai` guest commands use browser APIs instead of a
 NIC. The toolbar provides file import and IndexedDB VM snapshots. See
-[network/docs/host-bridge.md](network/docs/host-bridge.md).
+[the guest-tools command reference](docs/guest-tools.md). Coding agents should
+start with [AGENTS.md](AGENTS.md); web-based agents can discover the documentation
+index through [llms.txt](llms.txt).
 
 ## Hosting
 

@@ -1,0 +1,19 @@
+# herdr-v86
+
+> A 32-bit Alpine Linux development guest running in the v86 browser emulator,
+> with optional full IPv4 networking and gateway-free browser RPC tools.
+
+Canonical documentation:
+
+- [Guest tools reference](https://avirads.github.io/herdr-v86/docs/guest-tools.md): Syntax, examples, limits, exit behavior, and troubleshooting for vmfetch, vmclip, vmexport, vmgithub, vmai, file import, and VM snapshots.
+- [Agent instructions](https://avirads.github.io/herdr-v86/AGENTS.md): Operational constraints and rules for coding agents working in the guest.
+- [Browser bridge](https://avirads.github.io/herdr-v86/network/docs/host-bridge.md): Architecture, browser security model, and bridge limitations.
+- [IPv4 gateway](https://avirads.github.io/herdr-v86/network/README.md): Linux TAP, DHCP, DNS, NAT, secure sessions, and deployment.
+- [Project README](https://avirads.github.io/herdr-v86/README.md): Artifacts, hosting requirements, and known issues.
+
+Important constraints:
+
+- v86 is 32-bit x86; x86-64 binaries cannot execute.
+- vmfetch uses browser fetch and is subject to CORS and mixed-content policy.
+- Full DHCP, DNS, ICMP, TCP, and UDP require the external Linux gateway.
+- Browser-import and export files are limited to 8 MiB; vmfetch responses to 16 MiB.

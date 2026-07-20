@@ -25,6 +25,7 @@
     <button id="save-state">Save VM</button>
     <button id="restore-state">Restore VM</button>
     <button id="import-file">Import file</button>
+    <button id="open-help" title="Guest command reference">Help</button>
     <input id="file-input" type="file" hidden>
   </div>
 </header>
@@ -83,6 +84,7 @@ import("./network/browser/v86-host-bridge.js").then(module => {
 
 const fileInput = document.getElementById("file-input");
 document.getElementById("import-file").onclick = () => fileInput.click();
+document.getElementById("open-help").onclick = () => window.open("docs/guest-tools.md", "_blank", "noopener");
 fileInput.onchange = async () => {
   const file = fileInput.files[0];
   if (!file) return;
