@@ -27,7 +27,8 @@ const server = createServer((request, response) => {
 await new Promise(resolve => server.listen(8091, '127.0.0.1', resolve));
 const profile = mkdtempSync(join(tmpdir(), 'v86-host-bridge-'));
 const testQuery = process.env.V86_TEST_QUERY || '';
-const child = spawn(chrome, ['--headless', '--disable-gpu', '--no-sandbox', `--user-data-dir=${profile}`, `http://127.0.0.1:8091/network/test/host-bridge-e2e.html${testQuery}`], { stdio: ['ignore', 'ignore', 'pipe'] });
+const testPage = process.env.V86_TEST_PAGE || 'network/test/host-bridge-e2e.html';
+const child = spawn(chrome, ['--headless', '--disable-gpu', '--no-sandbox', `--user-data-dir=${profile}`, `http://127.0.0.1:8091/${testPage}${testQuery}`], { stdio: ['ignore', 'ignore', 'pipe'] });
 let errors = ''; child.stderr.on('data', chunk => errors += chunk);
 try {
   let timeoutID;

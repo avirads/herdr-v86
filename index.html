@@ -31,9 +31,10 @@
     <button id="compat-boot" title="Reload with the full disk preloaded and ATA DMA disabled">Compatibility boot</button>
     <button id="import-file">Import file</button>
     <button id="open-help" title="Guest command reference">Help</button>
-    <button id="configure-llm" title="Pair AutoBro Web Bridge">Configure LLM</button>
+    <button id="configure-llm" title="Load a page-local LiteRT-LM WebGPU model">Configure LLM</button>
     <button id="toggle-agent" title="Read-only Deep Agents coding assistant">Agent</button>
     <input id="file-input" type="file" hidden>
+    <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
   </div>
 </header>
 <div id="term"></div>
@@ -142,30 +143,35 @@ import("./network/browser/v86-host-bridge.js").then(module => {
 }).catch(error => status("host bridge failed — " + error.message));
 
 const llmStatus = message => document.getElementById("llm-status").textContent = "WebGPU LLM: " + message;
-async function configureWebGpuLlm({ interactive = true } = {}) {
-  const storedId = localStorage.getItem("herdr.llmExtensionId") || "";
-  const storedToken = sessionStorage.getItem("herdr.llmPairingToken") || "";
-  const extensionId = interactive ? prompt("AutoBro Web Bridge extension ID", storedId) : storedId;
-  if (!extensionId) return;
-  const token = interactive ? prompt("Web Bridge pairing token (kept for this tab only)", storedToken) : storedToken;
-  if (!token) return;
-  llmStatus("pairing…");
-  try {
-    const { WebGpuLlmClient } = await import("./network/browser/webgpu-llm-client.js");
-    const client = new WebGpuLlmClient({ extensionId: extensionId.trim(), token: token.trim() });
-    const result = await client.pair();
-    localStorage.setItem("herdr.llmExtensionId", extensionId.trim());
-    sessionStorage.setItem("herdr.llmPairingToken", token.trim());
-    webGpuLlmClient = client;
+const llmFileInput = document.getElementById("llm-file-input");
+document.getElementById("configure-llm").onclick = () => llmFileInput.click();
+try {
+  const { LiteRtLmClient } = await import("./network/browser/litert-lm-client.js");
+  const client = new LiteRtLmClient();
+  webGpuLlmClient = client;
+  client.addEventListener("activity", event => llmStatus(event.detail.message));
+  hostBridge?.setLlmClient(client);
+  const initialization = client.initialize();
+  initialization.then(result => {
     hostBridge?.setLlmClient(client);
-    llmStatus(`${result.modelName || "connected"}${result.webgpu ? " — WebGPU" : " — WebGPU unavailable"}`);
-  } catch (error) {
-    llmStatus("error — " + error.message);
-  }
-}
-document.getElementById("configure-llm").onclick = () => configureWebGpuLlm();
-if (localStorage.getItem("herdr.llmExtensionId") && sessionStorage.getItem("herdr.llmPairingToken")) {
-  configureWebGpuLlm({ interactive: false });
+    llmStatus(result.modelName ? `ready — ${result.modelName}` : "ready — choose Configure LLM to load a model");
+  }).catch(error => llmStatus("unavailable — " + error.message));
+  llmFileInput.onchange = async () => {
+    const file = llmFileInput.files[0];
+    if (!file) return;
+    try {
+      await initialization;
+      await client.importModel(file);
+      hostBridge?.setLlmClient(client);
+      llmStatus(`ready — ${client.modelName}`);
+    } catch (error) {
+      llmStatus("error — " + error.message);
+    } finally {
+      llmFileInput.value = "";
+    }
+  };
+} catch (error) {
+  llmStatus("unavailable — " + error.message);
 }
 
 const agentPanel = document.getElementById("agent-panel");

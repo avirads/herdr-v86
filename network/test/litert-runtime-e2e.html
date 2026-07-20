@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<script type="module">
+try {
+  const runtime = await import('../../llm/vendor/litert-lm/dist/index.js');
+  const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+  const client = new LiteRtLmClient();
+  const root = await navigator.storage.getDirectory();
+  const directory = await root.getDirectoryHandle('herdr-litert-test', { create: true });
+  await directory.getFileHandle('probe', { create: true });
+  await root.removeEntry('herdr-litert-test', { recursive: true });
+  const wasm = await fetch('../../llm/vendor/litert-lm/wasm/litertlm_wasm_asyncify_internal.wasm', { headers: { Range: 'bytes=0-7' } });
+  const ok = typeof runtime.Engine?.create === 'function' && typeof runtime.loadLiteRtLm === 'function' &&
+    typeof client.chat === 'function' && wasm.status === 206 && (await wasm.arrayBuffer()).byteLength === 8;
+  await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok }) });
+} catch (error) {
+  await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok: false, serial: error.stack || error.message }) });
+}
+</script>

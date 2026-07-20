@@ -143,24 +143,22 @@ VMLLM_SYSTEM='Return only a unified diff.' VMLLM_MAX_TOKENS=2048 \
   vmllm 'Patch the parser to reject an empty name.'
 ```
 
-`vmllm` runs inference in the PC's Chrome WebGPU implementation, not inside the
-32-bit guest. It connects to the authenticated AutoBro Web Bridge extension and
-uses its loaded LiteRT-LM model. No network gateway or cloud API key is needed.
+`vmllm` runs inference in the PC's browser WebGPU implementation, not inside the
+32-bit guest. The herdr page directly hosts LiteRT-LM and stores the selected
+model in its origin-private filesystem. No extension, network gateway, native
+process, or cloud API key is needed.
 
 Before using it:
 
-1. Install/reload the extension from `web-bridge/extension` after its herdr
-   origin allow-list change.
-2. Load a compatible model in the extension panel. The model may be restored
-   automatically from the extension's OPFS cache.
-3. Open herdr-v86 in Chrome and click **Configure LLM**.
-4. Enter the extension ID and its pairing token. The token is retained only in
-   the current browser tab's `sessionStorage`.
+1. Open herdr-v86 in a WebGPU-capable desktop browser.
+2. Click **Configure LLM** and select a compatible `.litertlm` or `.task` file.
+3. Wait while the page copies it to OPFS and compiles the WebGPU kernels.
+4. On later visits, the last cached model loads automatically.
 5. Verify with `vmllm status`, then run a prompt.
 
 Optional variables are `VMLLM_SYSTEM`, `VMLLM_MODEL`, and `VMLLM_MAX_TOKENS`.
-Closing/reloading the extension, losing the offscreen host, using a browser
-without WebGPU, or having no model loaded causes a clear command error.
+Using a browser without WebGPU, clearing site storage, insufficient OPFS quota,
+or having no model loaded causes a clear command error.
 
 ## Browser **Import file** control
 
@@ -197,8 +195,8 @@ interactive serial console; avoid typing while a large file is being imported.
 | `browser-forbidden header` | JavaScript is not allowed to set that header | Remove the header or use full gateway-backed `curl` |
 | `response exceeds ... limit` | Response passed 16 MiB | Use the full gateway or request a smaller/ranged resource |
 | Clipboard permission error | Browser denied clipboard access | Focus the page, grant permission, and retry after a click |
-| `WebGPU LLM is not paired` | The herdr page has no authenticated extension client | Click **Configure LLM** and enter the extension ID/token |
-| `WebGPU LLM host not running` or `no model loaded` | Extension runtime/model is unavailable | Reload the extension and load a model in its panel |
+| `no page-local LiteRT-LM model loaded` | No model is ready in this site origin | Click **Configure LLM** and select a compatible model |
+| `WebGPU is unavailable` | Browser/GPU cannot expose WebGPU | Use current desktop Chrome/Edge with compatible GPU drivers |
 | `curl: could not resolve host` without a route | No full gateway connection | Use `vmfetch` or configure the network gateway |
 
 ## Security boundary

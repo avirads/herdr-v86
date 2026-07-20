@@ -1,9 +1,10 @@
 # Read-only coding agent
 
 The browser demo includes a Deep Agents–based coding assistant that can inspect
-a project inside the v86 guest. In the toolbar, click **Configure LLM** and pair
-the AutoBro WebGPU model, then open **Agent**, enter a question, and choose
-**Run analysis**.
+a project inside the v86 guest. In the toolbar, click **Configure LLM** and
+select a compatible LiteRT-LM model, then open **Agent**, enter a question, and
+choose **Run analysis**. The model runs directly in the page through WebGPU; no
+browser extension is required.
 
 ## Guest contract
 
@@ -48,4 +49,3 @@ node network/test/host-bridge-runner.mjs
 The final command needs Chrome through `CHROME_BIN`. It boots v86 and verifies
 vmfetch, the WebGPU bridge contract, list/read/grep RPC, and a scripted agent
 tool call without requiring a real model response.
-

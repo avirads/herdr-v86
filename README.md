@@ -29,7 +29,8 @@ start with [AGENTS.md](AGENTS.md); web-based agents can discover the documentati
 index through [llms.txt](llms.txt).
 
 The toolbar's **Agent** panel provides a read-only Deep Agents coding assistant
-backed by the paired WebGPU model. It can list, read, and grep `/root/project`;
+backed by the page-local LiteRT-LM WebGPU model. **Configure LLM** imports a
+compatible model into browser OPFS; no extension is required. The agent can list, read, and grep `/root/project`;
 fixed test recipes require confirmation. See
 [the read-only agent guide](docs/read-only-agent.md).
 

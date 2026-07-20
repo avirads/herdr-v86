@@ -40,9 +40,8 @@ clipboard, file-transfer, GitHub, or AI operations.
    `vmexport` files are at most 8 MiB.
 10. VM snapshots contain RAM and therefore may contain secrets. Do not save a
     snapshot while credentials remain in guest memory.
-11. Use `vmllm` for a paired local WebGPU model. It runs on the Chrome host, not
-    on the i386 guest, and requires the AutoBro Web Bridge extension plus a
-    loaded model.
+11. Use `vmllm` for the page-local WebGPU model. It runs in the browser host,
+    not on the i386 guest, and requires a model loaded with **Configure LLM**.
 12. The browser's read-only agent may inspect only `/root/project`. Its
     `guest_test` fixed recipes require explicit user approval; it cannot edit.
 

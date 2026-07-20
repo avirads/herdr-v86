@@ -17,6 +17,6 @@ Important constraints:
 - v86 is 32-bit x86; x86-64 binaries cannot execute.
 - vmfetch uses browser fetch and is subject to CORS and mixed-content policy.
 - Full DHCP, DNS, ICMP, TCP, and UDP require the external Linux gateway.
-- vmllm uses an authenticated AutoBro Chrome extension and its local WebGPU LiteRT-LM model; it does not run inference inside the guest.
+- vmllm uses herdr's built-in page-local WebGPU LiteRT-LM provider; it does not run inference inside the guest and requires no extension.
 - Browser-import and export files are limited to 8 MiB; vmfetch responses to 16 MiB.
 - The read-only agent is restricted to `/root/project`; tests need confirmation and no write tool is exposed.
