@@ -30,7 +30,7 @@
 <div id="boot-overlay" role="status" aria-live="polite">
   <div id="boot-loader">
     <div id="boot-ring"><span id="boot-percent">1%</span></div>
-    <div id="boot-message">Preparing virtual machine…</div>
+    <div id="boot-message">Preparing VM…</div>
   </div>
 </div>
 <header>
@@ -110,7 +110,7 @@ async function rangePreflight() {
     const contentRange = response.headers.get("content-range") || "";
     const valid = response.status === 206 && contentRange === `bytes 0-0/${DISK_SIZE}`;
     await response.arrayBuffer();
-    setBootProgress(8, valid ? "Loading virtual machine…" : "Preparing compatibility boot…");
+    setBootProgress(8, valid ? "Loading VM…" : "Preparing compatibility boot…");
     return valid;
   } catch {
     return false;
@@ -315,7 +315,7 @@ if (gatewayURL && sessionToken) {
 }
 
 emulator.add_listener("emulator-ready", () => {
-  setBootProgress(28, compatibilityBoot ? "Starting compatibility boot…" : "Starting virtual machine…");
+  setBootProgress(28, compatibilityBoot ? "Starting compatibility boot…" : "Starting VM…");
   status(`emulator ready — booting${compatibilityBoot ? " in compatibility mode" : ""}… (first boot ~30-90s)`);
 });
 emulator.add_listener("download-progress", (e) => {
