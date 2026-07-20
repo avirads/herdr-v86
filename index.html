@@ -15,6 +15,7 @@
   #agent-panel { display: none; margin: 0 10px 10px; padding: 10px; border: 1px solid #30363d; border-radius: 6px; background: #161b22; }
   #agent-panel textarea { box-sizing: border-box; width: 100%; min-height: 70px; color: #c9d1d9; background: #0d1117; border: 1px solid #30363d; padding: 7px; }
   #agent-panel pre { max-height: 220px; overflow: auto; white-space: pre-wrap; color: #b1bac4; }
+  #agent-yolo-warning { display: none; color: #ff7b72; font-weight: 700; }
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
   .tool-link { color: #58a6ff; align-self: center; font-size: 12px; white-space: nowrap; }
@@ -48,7 +49,9 @@
     <button id="agent-run">Run analysis</button>
     <button id="agent-stop" disabled>Stop</button>
     <button id="agent-new-session">New session</button>
+    <button id="agent-yolo" aria-pressed="false">Enable YOLO</button>
   </div>
+  <p id="agent-yolo-warning">YOLO ACTIVE — writes and shell commands run without further approval.</p>
   <pre id="agent-activity">idle</pre>
   <pre id="agent-output"></pre>
 </section>
@@ -127,6 +130,7 @@ let webGpuLlmClient;
 let guestReadonlyClient;
 let readonlyAgentController;
 let codingAgentHarness;
+let yoloMode = false;
 import("./network/browser/v86-host-bridge.js").then(module => {
   hostBridge = new module.V86HostBridge(emulator, { llmClient: webGpuLlmClient });
   window.v86HostBridge = hostBridge;
@@ -185,7 +189,26 @@ document.getElementById("toggle-agent").onclick = () => {
   agentPanel.style.display = agentPanel.style.display === "block" ? "none" : "block";
 };
 document.getElementById("agent-stop").onclick = () => readonlyAgentController?.abort();
+const yoloButton = document.getElementById("agent-yolo");
+const yoloWarning = document.getElementById("agent-yolo-warning");
+function setYoloMode(enabled) {
+  yoloMode = enabled;
+  yoloButton.textContent = enabled ? "Disable YOLO" : "Enable YOLO";
+  yoloButton.setAttribute("aria-pressed", String(enabled));
+  yoloWarning.style.display = enabled ? "block" : "none";
+}
+yoloButton.onclick = () => {
+  if (yoloMode) return setYoloMode(false);
+  const accepted = confirm(
+    "Enable YOLO mode for this page session?\n\n" +
+    "The agent may overwrite or delete files and run arbitrary guest shell commands WITHOUT further approval. " +
+    "Shell commands can affect the entire VM, use credentials, install software, and access networks available to the guest.\n\n" +
+    "Reload the page or use New session to disable it."
+  );
+  if (accepted) setYoloMode(true);
+};
 document.getElementById("agent-new-session").onclick = () => {
+  setYoloMode(false);
   codingAgentHarness = null;
   agentActivity.textContent = "new agent session";
   agentOutput.textContent = "";
@@ -206,7 +229,7 @@ document.getElementById("agent-run").onclick = async () => {
         llmClient: webGpuLlmClient,
         guest: guestReadonlyClient,
         onActivity: event => agentActivity.textContent += "\n" + JSON.stringify(event),
-        approveAction: async (operation, detail) => confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
+        approveAction: async (operation, detail) => yoloMode || confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
       });
     const result = await codingAgentHarness.run(prompt, { signal: readonlyAgentController.signal });
     agentOutput.textContent = result.output;

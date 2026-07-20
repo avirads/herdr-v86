@@ -37,6 +37,19 @@ prompt. Rejecting an operation returns a tool error to the agent. Shell approval
 is intentionally required because a shell can mutate files, use credentials,
 or access the network when a gateway is attached.
 
+## YOLO mode
+
+**Enable YOLO** removes per-operation approval for the current open page only.
+Enabling it requires a prominent confirmation and displays a persistent red
+warning. **Disable YOLO**, **New session**, or a page reload turns it off. The
+choice is never stored in localStorage, OPFS, a VM snapshot, or the URL.
+
+YOLO mode preserves RPC path validation, 64 KiB limits, and the 120-second
+command timeout. However, an approved arbitrary shell is not confined to the
+project directory: it starts in `/root/project` but can alter the entire guest,
+read guest credentials, install software, and use any attached network. Use it
+only with a disposable VM/project and no secrets.
+
 ## Environment limits
 
 This is feature parity with the DeepAgentsJS coding loop, adapted to the v86
@@ -66,4 +79,3 @@ Example:
 Inspect the parser, reproduce the failing test, fix the smallest underlying
 bug, rerun the relevant tests, and summarize changed files and evidence.
 ```
-
