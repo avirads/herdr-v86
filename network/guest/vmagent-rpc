@@ -1,0 +1,71 @@
+#!/bin/sh
+set -eu
+
+MAX_BYTES=65536
+WORKSPACE=${VMAGENT_WORKSPACE:-/root/project}
+
+fail() {
+  message=$1
+  encoded=$(printf %s "$message" | base64 | tr -d '\n')
+  printf '__V86AGENT_RESPONSE__\t%s\tERROR\t%s\n' "$request_id" "$encoded"
+  exit 1
+}
+
+respond() {
+  file=$1
+  size=$(wc -c < "$file")
+  [ "$size" -le "$MAX_BYTES" ] || fail "result exceeds $MAX_BYTES bytes"
+  encoded=$(base64 < "$file" | tr -d '\n')
+  printf '__V86AGENT_RESPONSE__\t%s\tOK\t%s\n' "$request_id" "$encoded"
+}
+
+decode() { printf %s "$1" | base64 -d; }
+
+[ "$#" -ge 2 ] || exit 2
+request_id=$1
+operation=$2
+shift 2
+case "$request_id" in *[!A-Za-z0-9_-]*|'') exit 2;; esac
+
+mkdir -p "$WORKSPACE"
+workspace_real=$(readlink -f "$WORKSPACE") || fail 'workspace unavailable'
+resolve_existing() {
+  relative=$(decode "${1:-}") || fail 'invalid base64 path'
+  case "$relative" in /*|*'..'*) fail 'path must be relative and cannot contain ..';; esac
+  target=$(readlink -f "$workspace_real/$relative") || fail "path not found: $relative"
+  case "$target" in "$workspace_real"|"$workspace_real"/*) printf %s "$target";; *) fail 'path escapes workspace';; esac
+}
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT INT TERM
+case "$operation" in
+  list)
+    target=$(resolve_existing "${1:-}")
+    [ -d "$target" ] || fail 'list target is not a directory'
+    find "$target" -mindepth 1 -maxdepth 2 2>&1 | head -n 500 \
+      | while IFS= read -r item; do stat -c '%F\t%n\t%s' "$item"; done \
+      | sed "s|$workspace_real/||" > "$tmp" ;;
+  read)
+    target=$(resolve_existing "${1:-}")
+    [ -f "$target" ] || fail 'read target is not a regular file'
+    size=$(wc -c < "$target")
+    [ "$size" -le "$MAX_BYTES" ] || fail "file exceeds $MAX_BYTES bytes"
+    cat "$target" > "$tmp" ;;
+  grep)
+    pattern=$(decode "${1:-}") || fail 'invalid base64 pattern'
+    [ -n "$pattern" ] || fail 'grep pattern is empty'
+    target=$(resolve_existing "${2:-}")
+    grep -R -n -F -- "$pattern" "$target" 2>/dev/null \
+      | sed "s|$workspace_real/||" | head -n 300 > "$tmp" || true ;;
+  test)
+    recipe=$(decode "${1:-}") || fail 'invalid test recipe'
+    cd "$workspace_real"
+    case "$recipe" in
+      make-test) make test > "$tmp" 2>&1;;
+      make-check) make check > "$tmp" 2>&1;;
+      shell-tests) for file in test/*.sh tests/*.sh; do [ -f "$file" ] && sh "$file"; done > "$tmp" 2>&1;;
+      *) fail 'unsupported test recipe';;
+    esac || { code=$?; printf '\n[exit %s]\n' "$code" >> "$tmp"; respond "$tmp"; exit "$code"; } ;;
+  *) fail "unsupported read-only operation: $operation" ;;
+esac
+respond "$tmp"

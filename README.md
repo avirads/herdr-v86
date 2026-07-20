@@ -28,6 +28,11 @@ NIC. The toolbar provides file import and IndexedDB VM snapshots. See
 start with [AGENTS.md](AGENTS.md); web-based agents can discover the documentation
 index through [llms.txt](llms.txt).
 
+The toolbar's **Agent** panel provides a read-only Deep Agents coding assistant
+backed by the paired WebGPU model. It can list, read, and grep `/root/project`;
+fixed test recipes require confirmation. See
+[the read-only agent guide](docs/read-only-agent.md).
+
 ## Hosting
 
 The disk image is loaded with `async: true`, so the web server **must support

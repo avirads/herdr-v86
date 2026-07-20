@@ -12,6 +12,9 @@
   #status { font-size: 12px; color: #8b949e; }
   #term { padding: 0 8px 8px; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
+  #agent-panel { display: none; margin: 0 10px 10px; padding: 10px; border: 1px solid #30363d; border-radius: 6px; background: #161b22; }
+  #agent-panel textarea { box-sizing: border-box; width: 100%; min-height: 70px; color: #c9d1d9; background: #0d1117; border: 1px solid #30363d; padding: 7px; }
+  #agent-panel pre { max-height: 220px; overflow: auto; white-space: pre-wrap; color: #b1bac4; }
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
 </style>
@@ -28,10 +31,22 @@
     <button id="import-file">Import file</button>
     <button id="open-help" title="Guest command reference">Help</button>
     <button id="configure-llm" title="Pair AutoBro Web Bridge">Configure LLM</button>
+    <button id="toggle-agent" title="Read-only Deep Agents coding assistant">Agent</button>
     <input id="file-input" type="file" hidden>
   </div>
 </header>
 <div id="term"></div>
+<section id="agent-panel">
+  <strong>Read-only coding agent</strong>
+  <p>Workspace: <code>/root/project</code>. Reads and searches only; fixed tests require approval.</p>
+  <textarea id="agent-prompt" placeholder="Inspect the project and explain the most likely cause of the failing parser test."></textarea>
+  <div>
+    <button id="agent-run">Run analysis</button>
+    <button id="agent-stop" disabled>Stop</button>
+  </div>
+  <pre id="agent-activity">idle</pre>
+  <pre id="agent-output"></pre>
+</section>
 <div id="screen_container">
   <div style="white-space:pre; font:14px monospace"></div>
   <canvas></canvas>
@@ -70,9 +85,15 @@ const emulator = new V86({
 
 let hostBridge;
 let webGpuLlmClient;
+let guestReadonlyClient;
+let readonlyAgentController;
 import("./network/browser/v86-host-bridge.js").then(module => {
   hostBridge = new module.V86HostBridge(emulator, { llmClient: webGpuLlmClient });
   window.v86HostBridge = hostBridge;
+  import("./network/browser/v86-guest-readonly.js").then(({ V86GuestReadonlyClient }) => {
+    guestReadonlyClient = new V86GuestReadonlyClient(emulator, hostBridge);
+    window.v86GuestReadonly = guestReadonlyClient;
+  });
   document.getElementById("save-state").onclick = async () => {
     status("saving VM state…");
     try { await module.saveVMState(emulator); status("VM state saved in this browser"); }
@@ -111,6 +132,40 @@ document.getElementById("configure-llm").onclick = () => configureWebGpuLlm();
 if (localStorage.getItem("herdr.llmExtensionId") && sessionStorage.getItem("herdr.llmPairingToken")) {
   configureWebGpuLlm({ interactive: false });
 }
+
+const agentPanel = document.getElementById("agent-panel");
+const agentActivity = document.getElementById("agent-activity");
+const agentOutput = document.getElementById("agent-output");
+document.getElementById("toggle-agent").onclick = () => {
+  agentPanel.style.display = agentPanel.style.display === "block" ? "none" : "block";
+};
+document.getElementById("agent-stop").onclick = () => readonlyAgentController?.abort();
+document.getElementById("agent-run").onclick = async () => {
+  const prompt = document.getElementById("agent-prompt").value.trim();
+  if (!prompt) return;
+  if (!webGpuLlmClient) return agentActivity.textContent = "Pair WebGPU LLM first.";
+  if (!guestReadonlyClient) return agentActivity.textContent = "Guest bridge is still loading.";
+  const runButton = document.getElementById("agent-run");
+  const stopButton = document.getElementById("agent-stop");
+  runButton.disabled = true; stopButton.disabled = false;
+  agentOutput.textContent = ""; agentActivity.textContent = "starting Deep Agents…";
+  readonlyAgentController = new AbortController();
+  try {
+    const { createHerdrReadonlyAgent } = await import("./agent/dist/agent.js");
+    const harness = createHerdrReadonlyAgent({
+      llmClient: webGpuLlmClient,
+      guest: guestReadonlyClient,
+      onActivity: event => agentActivity.textContent += "\n" + JSON.stringify(event),
+      approveTest: async recipe => confirm(`Allow the read-only agent to run test recipe "${recipe}" in /root/project?`),
+    });
+    const result = await harness.run(prompt, { signal: readonlyAgentController.signal });
+    agentOutput.textContent = result.output;
+  } catch (error) {
+    agentOutput.textContent = `Agent error: ${error.message}`;
+  } finally {
+    runButton.disabled = false; stopButton.disabled = true; readonlyAgentController = null;
+  }
+};
 
 const fileInput = document.getElementById("file-input");
 document.getElementById("import-file").onclick = () => fileInput.click();

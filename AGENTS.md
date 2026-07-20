@@ -16,6 +16,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 ## Canonical command documentation
 
 - `docs/guest-tools.md`: complete guest command reference and examples, including `vmllm`.
+- `docs/read-only-agent.md`: browser coding-agent tools, security boundary, and tests.
 - `network/docs/host-bridge.md`: browser-bridge protocol, limits, and security.
 - `network/README.md`: full IPv4 gateway deployment and testing.
 - Run `<command> --help` inside the guest for concise local usage.
@@ -42,6 +43,8 @@ clipboard, file-transfer, GitHub, or AI operations.
 11. Use `vmllm` for a paired local WebGPU model. It runs on the Chrome host, not
     on the i386 guest, and requires the AutoBro Web Bridge extension plus a
     loaded model.
+12. The browser's read-only agent may inspect only `/root/project`. Its
+    `guest_test` fixed recipes require explicit user approval; it cannot edit.
 
 ## Quick capability check
 
