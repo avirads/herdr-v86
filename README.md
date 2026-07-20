@@ -5,6 +5,11 @@ Artifacts for running [herdr](https://herdr.dev) inside a v86 browser VM.
 AutoBro browser automation extension: see
 [installation and download instructions](docs/autobro-extension.md).
 
+On load, the UI completes VM boot behind a two-step setup wizard: configure the
+page-local WebGPU LLM, then pair AutoBro. The guest shell is revealed only after
+both providers report ready; cached model and current-tab pairing state are
+detected automatically.
+
 - `herdr-vm-ext4.img` — bootable ext4 root filesystem (Alpine 3.22.5 x86 + herdr 0.7.4,
   static i686-musl). Init mounts proc/sysfs/devpts/tmpfs and spawns shells on ttyS0 + tty1.
 - `herdr-alpine-x86-rootfs.tar.gz` — same tree, for 9p setups.

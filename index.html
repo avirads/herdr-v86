@@ -20,6 +20,17 @@
   #boot-message { color: #8b949e; font-size: 13px; }
   #boot-overlay.error #boot-ring { background: #da3633; }
   #boot-overlay.error #boot-message { color: #ff7b72; max-width: 80vw; text-align: center; }
+  #setup-overlay { position: fixed; inset: 0; z-index: 900; display: none; place-items: center; background: #0d1117; padding: 20px; }
+  #setup-overlay.active { display: grid; }
+  .setup-card { box-sizing: border-box; width: min(520px, 100%); background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 22px; }
+  .setup-card h2 { margin: 0 0 6px; font-size: 20px; }
+  .setup-progress { color: #8b949e; font-size: 12px; margin-bottom: 20px; }
+  .setup-step h3 { margin: 0 0 8px; font-size: 16px; }
+  .setup-step p { color: #8b949e; line-height: 1.45; }
+  .setup-step label { display: grid; gap: 5px; margin: 12px 0; color: #8b949e; font-size: 12px; }
+  .setup-step input { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 9px; }
+  .setup-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
+  .setup-status { margin-top: 12px; color: #8b949e; font-size: 12px; min-height: 1.2em; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
@@ -37,6 +48,38 @@
   <div id="boot-loader">
     <div id="boot-ring"><span id="boot-percent">1%</span></div>
     <div id="boot-message">Preparing VM…</div>
+  </div>
+</div>
+<div id="setup-overlay" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+  <div class="setup-card">
+    <h2 id="setup-title">Set up Herdr VM</h2>
+    <div id="setup-progress" class="setup-progress">Step 1 of 2</div>
+    <section id="setup-step-llm" class="setup-step">
+      <h3>Configure WebGPU LLM</h3>
+      <p>Load the page-local LiteRT-LM model used by <code>vmagent</code> and AutoBro. The model remains in this browser.</p>
+      <div class="setup-actions">
+        <button id="setup-configure-llm" type="button">Choose model file</button>
+        <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download model (~2 GB)</a>
+      </div>
+      <div id="setup-llm-status" class="setup-status">Checking for a configured model…</div>
+    </section>
+    <section id="setup-step-autobro" class="setup-step" hidden>
+      <h3>Connect AutoBro</h3>
+      <p>Install AutoBro 0.3.0, then enter the extension ID and pairing token shown in its panel.</p>
+      <form id="setup-autobro-form">
+        <label>Extension ID
+          <input id="setup-autobro-extension-id" required autocomplete="off" spellcheck="false" placeholder="Chrome extension ID">
+        </label>
+        <label>Pairing token
+          <input id="setup-autobro-token" type="password" required autocomplete="off" spellcheck="false" placeholder="Token from the AutoBro panel">
+        </label>
+        <div class="setup-actions">
+          <a class="tool-link" href="downloads/autobro-web-bridge-0.3.0.zip" download>Download AutoBro</a>
+          <button type="submit">Connect and open shell</button>
+        </div>
+      </form>
+      <div id="setup-autobro-status" class="setup-status">AutoBro is not connected.</div>
+    </section>
   </div>
 </div>
 <header>
@@ -87,6 +130,28 @@ const bootOverlay = document.getElementById("boot-overlay");
 const bootRing = document.getElementById("boot-ring");
 const bootPercent = document.getElementById("boot-percent");
 const bootMessage = document.getElementById("boot-message");
+const setupOverlay = document.getElementById("setup-overlay");
+let bootReady = false;
+let llmReady = false;
+let autobroReady = false;
+let setupFinished = false;
+function updateSetupWizard() {
+  if (!bootReady || setupFinished) return;
+  if (llmReady && autobroReady) {
+    setupFinished = true;
+    setupOverlay.classList.remove("active");
+    document.getElementById("term").style.visibility = "visible";
+    status("Shell ready");
+    term.focus();
+    return;
+  }
+  setupOverlay.classList.add("active");
+  const onAutoBro = llmReady;
+  document.getElementById("setup-step-llm").hidden = onAutoBro;
+  document.getElementById("setup-step-autobro").hidden = !onAutoBro;
+  document.getElementById("setup-progress").textContent = onAutoBro ? "Step 2 of 2" : "Step 1 of 2";
+  status(onAutoBro ? "Setup: connect AutoBro" : "Setup: configure WebGPU LLM");
+}
 let bootProgress = 1;
 function setBootProgress(value, message) {
   bootProgress = Math.max(bootProgress, Math.min(100, Math.round(value)));
@@ -101,14 +166,14 @@ function finishBoot() {
   clearInterval(bootTicker);
   bootOverlay.classList.remove("error");
   setBootProgress(100, "Ready");
-  status("Shell ready");
+  status("Setup required");
   setTimeout(() => {
     term.clear();
     term.write("\x1b[2J\x1b[H");
     emulator.serial0_send("\n");
     bootOverlay.classList.add("done");
-    document.getElementById("term").style.visibility = "visible";
-    term.focus();
+    bootReady = true;
+    updateSetupWizard();
   }, 300);
 }
 function failBoot(message) {
@@ -270,8 +335,16 @@ async function connectAutoBro({ interactive = true, extensionId = null, token = 
     localStorage.setItem("herdr.autobroExtensionId", extensionId.trim());
     sessionStorage.setItem("herdr.autobroPairingToken", token.trim());
     browserStatus(`connected — bridge v${health.bridgeVersion || "?"}`);
+    autobroReady = true;
+    document.getElementById("setup-autobro-status").textContent = `Connected — bridge v${health.bridgeVersion || "?"}`;
+    updateSetupWizard();
+    return true;
   } catch (error) {
     browserStatus("error — " + error.message);
+    autobroReady = false;
+    document.getElementById("setup-autobro-status").textContent = "Connection failed: " + error.message;
+    updateSetupWizard();
+    return false;
   }
 }
 document.getElementById("connect-autobro").onclick = () => connectAutoBro();
@@ -285,20 +358,41 @@ document.getElementById("autobro-form").onsubmit = event => {
   autobroDialog.close();
   connectAutoBro({ interactive: false, extensionId, token });
 };
+document.getElementById("setup-autobro-form").onsubmit = event => {
+  event.preventDefault();
+  const extensionId = document.getElementById("setup-autobro-extension-id").value.trim();
+  const token = document.getElementById("setup-autobro-token").value.trim();
+  if (!extensionId || !token) return;
+  document.getElementById("setup-autobro-status").textContent = "Pairing…";
+  connectAutoBro({ interactive: false, extensionId, token });
+};
+document.getElementById("setup-autobro-extension-id").value = localStorage.getItem("herdr.autobroExtensionId") || "";
+document.getElementById("setup-autobro-token").value = sessionStorage.getItem("herdr.autobroPairingToken") || "";
 if (localStorage.getItem("herdr.autobroExtensionId") && sessionStorage.getItem("herdr.autobroPairingToken")) connectAutoBro({ interactive: false });
 const llmFileInput = document.getElementById("llm-file-input");
 document.getElementById("configure-llm").onclick = () => llmFileInput.click();
+document.getElementById("setup-configure-llm").onclick = () => llmFileInput.click();
 try {
   const { LiteRtLmClient } = await import("./network/browser/litert-lm-client.js");
   const client = new LiteRtLmClient();
   webGpuLlmClient = client;
-  client.addEventListener("activity", event => llmStatus(event.detail.message));
+  client.addEventListener("activity", event => {
+    llmStatus(event.detail.message);
+    document.getElementById("setup-llm-status").textContent = event.detail.message;
+  });
   hostBridge?.setLlmClient(client);
   const initialization = client.initialize();
   initialization.then(result => {
     hostBridge?.setLlmClient(client);
     llmStatus(result.modelName ? `ready — ${result.modelName}` : "ready — choose Configure LLM to load a model");
-  }).catch(error => llmStatus("unavailable — " + error.message));
+    llmReady = Boolean(result.modelName);
+    document.getElementById("setup-llm-status").textContent = result.modelName ? `Ready — ${result.modelName}` : "Choose a .litertlm or .task model file.";
+    updateSetupWizard();
+  }).catch(error => {
+    llmStatus("unavailable — " + error.message);
+    document.getElementById("setup-llm-status").textContent = "WebGPU LLM unavailable: " + error.message;
+    updateSetupWizard();
+  });
   llmFileInput.onchange = async () => {
     const file = llmFileInput.files[0];
     if (!file) return;
@@ -307,8 +401,13 @@ try {
       await client.importModel(file);
       hostBridge?.setLlmClient(client);
       llmStatus(`ready — ${client.modelName}`);
+      llmReady = true;
+      document.getElementById("setup-llm-status").textContent = `Ready — ${client.modelName}`;
+      updateSetupWizard();
     } catch (error) {
       llmStatus("error — " + error.message);
+      llmReady = false;
+      document.getElementById("setup-llm-status").textContent = "Model error: " + error.message;
     } finally {
       llmFileInput.value = "";
     }
@@ -445,7 +544,7 @@ term.onData((data) => {
     return;
   }
   for (const ch of data) emulator.serial0_send(ch);
-  status("Shell ready");
+  if (setupFinished) status("Shell ready");
 });
 term.focus();
 })().catch(error => {
