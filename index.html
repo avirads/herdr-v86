@@ -28,6 +28,7 @@
   <div id="tools">
     <button id="save-state">Save VM</button>
     <button id="restore-state">Restore VM</button>
+    <button id="compat-boot" title="Reload with the full disk preloaded and ATA DMA disabled">Compatibility boot</button>
     <button id="import-file">Import file</button>
     <button id="open-help" title="Guest command reference">Help</button>
     <button id="configure-llm" title="Pair AutoBro Web Bridge">Configure LLM</button>
@@ -56,8 +57,41 @@
 <script src="libv86-network.js"></script>
 <script>
 "use strict";
+(async () => {
 const status = (m) => document.getElementById("status").textContent = m;
 const networkStatus = (m) => document.getElementById("network-status").textContent = "network: " + m;
+const DISK_SIZE = 100663296;
+const DISK_VERSION = "readonly-agent-1";
+const bootOptions = new URLSearchParams(location.search);
+let compatibilityBoot = bootOptions.get("compat") === "1";
+const diskURL = `herdr-vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
+
+document.getElementById("compat-boot").onclick = () => {
+  const next = new URL(location.href);
+  next.searchParams.set("compat", "1");
+  location.href = next.href;
+};
+
+async function rangePreflight() {
+  try {
+    status("checking disk delivery…");
+    const response = await fetch(diskURL, {
+      headers: { Range: "bytes=0-0" },
+      cache: "no-store",
+    });
+    const contentRange = response.headers.get("content-range") || "";
+    const valid = response.status === 206 && contentRange === `bytes 0-0/${DISK_SIZE}`;
+    await response.arrayBuffer();
+    return valid;
+  } catch {
+    return false;
+  }
+}
+
+if (!compatibilityBoot && !await rangePreflight()) {
+  compatibilityBoot = true;
+  status("Range delivery unavailable — using compatibility boot");
+}
 
 const term = new Terminal({
   cols: 100, rows: 32,
@@ -69,6 +103,7 @@ const term = new Terminal({
 });
 term.open(document.getElementById("term"));
 
+if (compatibilityBoot) status("compatibility boot — downloading full 96 MiB disk…");
 const emulator = new V86({
   wasm_path: "v86-network.wasm",
   memory_size: 256 * 1024 * 1024,
@@ -76,8 +111,8 @@ const emulator = new V86({
   bios: { url: "seabios.bin" },
   vga_bios: { url: "vgabios.bin" },
   bzimage: { url: "bzImage-network" },
-  cmdline: "root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic",
-  hda: { url: "herdr-vm-network-ext4.img", async: true, size: 100663296 },
+  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic${compatibilityBoot ? " libata.force=pio4" : ""}`,
+  hda: { url: diskURL, async: !compatibilityBoot, size: DISK_SIZE },
   net_device: { type: "virtio" },
   screen_container: document.getElementById("screen_container"),
   autostart: true,
@@ -208,7 +243,7 @@ if (gatewayURL && sessionToken) {
     .catch(error => networkStatus("error — " + error.message));
 }
 
-emulator.add_listener("emulator-ready", () => status("emulator ready — booting… (first boot ~30-90s)"));
+emulator.add_listener("emulator-ready", () => status(`emulator ready — booting${compatibilityBoot ? " in compatibility mode" : ""}… (first boot ~30-90s)`));
 emulator.add_listener("download-progress", (e) => {
   if (e.file_name && e.loaded != null && e.total)
     status("downloading " + e.file_name + " " + Math.round(100*e.loaded/e.total) + "%");
@@ -225,9 +260,21 @@ setTimeout(() => { if (!gotSerial) status("no VM output after 120s — likely ke
 // shell prompt, matching the xterm.js geometry above.
 let sttySent = false;
 let recentOutput = "";
+let diskErrorOutput = "";
+let compatibilityRestartScheduled = false;
 emulator.add_listener("serial0-output-byte", (byte) => {
   if (!gotSerial) { gotSerial = true; status("VM booting — output live"); }
   term.write(Uint8Array.of(byte));
+  if (!compatibilityBoot && !compatibilityRestartScheduled) {
+    diskErrorOutput = (diskErrorOutput + String.fromCharCode(byte)).slice(-256);
+    if (diskErrorOutput.includes("lost interrupt") || diskErrorOutput.includes("I/O error, dev sda")) {
+      compatibilityRestartScheduled = true;
+      status("virtual disk DMA failed — restarting in compatibility mode…");
+      const next = new URL(location.href);
+      next.searchParams.set("compat", "1");
+      setTimeout(() => location.replace(next.href), 1500);
+    }
+  }
   if (!sttySent) {
     recentOutput = (recentOutput + String.fromCharCode(byte)).slice(-16);
     if (recentOutput.endsWith(":~# ")) {
@@ -241,6 +288,9 @@ term.onData((data) => {
   status("running — type in the terminal. Try: herdr");
 });
 term.focus();
+})().catch(error => {
+  document.getElementById("status").textContent = "BOOT FAILED: " + error.message;
+});
 </script>
 </body>
 </html>

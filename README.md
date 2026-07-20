@@ -40,6 +40,15 @@ HTTP Range requests** (206). GitHub Pages, nginx, caddy, and `npx http-server`
 work; `python -m http.server` does not (returns 200/full-body, v86 aborts the
 read, and the guest kernel spirals into ATA timeouts before dropping to PIO).
 
+The demo checks Range delivery before starting. If the check fails, or the user
+selects **Compatibility boot**, it downloads the complete 96 MiB disk before
+startup and adds `libata.force=pio4` to avoid virtual ATA DMA interrupt failures.
+Compatibility mode uses more browser memory and starts more slowly, but is the
+recommended fallback for machines showing `READ DMA`, `lost interrupt`, or
+`I/O error, dev sda` during boot. If those errors are detected in normal mode,
+the page automatically restarts once in compatibility mode. It is also
+available manually as `?compat=1`.
+
 ## Known issues (herdr 0.7.4 i686)
 
 - **`herdr --session <name>` fails with `lost connection to server: Connection
