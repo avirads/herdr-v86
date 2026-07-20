@@ -94,9 +94,15 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
   const approvedCommand = async (toolName, detail, command) => {
     onActivity({ tool: toolName, detail, approval: true });
     if (!await approveAction(toolName, detail)) return 'Operation rejected by user.';
-    return commandResult(await guest.execute(command));
+    try { return commandResult(await guest.execute(command)); }
+    catch (error) { return `Error: ${error.message}`; }
   };
   const vmfetch = tool(async ({ url, output, method, headers, data }) => {
+    if (/^https?:\/\/(?:www\.)?(?:google\.[^/]+|bing\.com|duckduckgo\.com)(?:\/|$)/i.test(url)) {
+      return browserClient
+        ? 'Interactive search sites cannot be fetched because of CORS. Use browser_search or autobro_command instead.'
+        : 'Interactive search sites cannot be fetched because of CORS. AutoBro is not connected; use Connect AutoBro in the VM header.';
+    }
     const command = ['vmfetch', '-o', shellQuote(output), '-X', shellQuote(method), ...headers.flatMap(header => ['-H', shellQuote(header)]), ...(data == null ? [] : ['-d', shellQuote(data)]), shellQuote(url)].join(' ');
     return await approvedCommand('vmfetch', { url, output, method, headers, hasBody: data != null }, command);
   }, { name: 'vmfetch', description: 'Fetch a CORS-enabled HTTP API/resource when the guest has no route. This cannot operate interactive websites, scrape Google Search, bypass CORS, click pages, or automate a browser. HTTPS/localhost only; 16 MiB limit. Requires approval.', schema: z.object({ url: z.string().url(), output: z.string().default('-'), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).default('GET'), headers: z.array(z.string()).default([]), data: z.string().optional() }) });
@@ -122,11 +128,28 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     name: 'vmllm_info', description: 'Inspect the page-local LiteRT-LM status or cached model list. Chat is intentionally excluded to avoid recursive inference.', schema: z.object({ operation: z.enum(['status', 'models']) }),
   });
   const browserTools = [];
+  if (browserClient) browserTools.push(tool(async ({ query, engine }) => {
+    const base = engine === 'bing' ? 'https://www.bing.com/search?q=' : engine === 'duckduckgo' ? 'https://duckduckgo.com/?q=' : 'https://www.google.com/search?q=';
+    const url = base + encodeURIComponent(query);
+    const detail = { engine, query, url };
+    onActivity({ tool: 'browser_search', detail, approval: true });
+    if (!await approveAction('browser_search', detail)) return 'Browser search rejected by user.';
+    try {
+      const tab = await browserClient.command('newTab', { url }, 120_000);
+      await browserClient.command('waitForLoad', { tabId: tab.tabId, timeout: 20 }, 30_000).catch(() => undefined);
+      const page = await browserClient.command('pageInfo', { tabId: tab.tabId }, 30_000).catch(() => tab);
+      return JSON.stringify({ engine, query, tab, page });
+    } catch (error) { return `Browser search error: ${error.message}`; }
+  }, {
+    name: 'browser_search', description: 'Search Google, Bing, or DuckDuckGo in a real AutoBro-controlled Chrome tab. Use this—not vmfetch—when asked to go to a search engine or search the web. Requires approval unless YOLO is active.', schema: z.object({ query: z.string(), engine: z.enum(['google', 'bing', 'duckduckgo']).default('google') }),
+  }));
   if (browserClient) browserTools.push(tool(async ({ command, parameters }) => {
     const detail = { command, parameters };
     onActivity({ tool: 'autobro_command', detail, approval: true });
     if (!await approveAction('autobro_command', detail)) return 'Browser operation rejected by user.';
-    const result = await browserClient.command(command, parameters, 120_000);
+    let result;
+    try { result = await browserClient.command(command, parameters, 120_000); }
+    catch (error) { return `AutoBro error: ${error.message}`; }
     if (command === 'captureScreenshot' && result?.data) return JSON.stringify({ ...result, data: '<omitted from text context>', byteLength: Math.ceil(result.data.length * 3 / 4) });
     const output = typeof result === 'string' ? result : JSON.stringify(result);
     return output.length > 60000 ? `${output.slice(0, 60000)}\n[AutoBro result truncated]` : output;
@@ -145,7 +168,7 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     memory: ['/AGENTS.md'],
     skills: ['/skills/'],
     systemPrompt: {
-      prefix: 'Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. Browser-backed fetch tools access CORS-enabled resources only; they are not browser automation and cannot operate Google Search or interactive websites.',
+      prefix: 'Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. Use browser_search or autobro_command for search engines, rendered pages, navigation, clicks, and typing. Use vmfetch only for CORS-enabled HTTP APIs/resources; never use it for Google Search or interactive websites.',
       suffix: 'The backend maps Deep Agents path / to the real guest workspace /root/project. The guest is Alpine Linux i386 with BusyBox sh. Do not claim success without reading results and running proportionate checks.',
     },
   });

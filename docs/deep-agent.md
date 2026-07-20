@@ -82,6 +82,12 @@ Go to google.com, search for test, and report the result-page title and URL.
 Open a new tab, navigate to the application, inspect visible actions, and stop.
 ```
 
+For search-engine prompts, the agent also receives a dedicated
+`browser_search` tool supporting Google, Bing, and DuckDuckGo. It opens a real
+AutoBro-controlled tab, waits for load, and returns page metadata. Interactive
+search-engine URLs passed to `vmfetch` produce a recoverable instruction to use
+`browser_search` rather than aborting the agent graph.
+
 Every AutoBro call requires approval unless YOLO is active, including read-only
 inspection, because logged-in pages may contain private information. The
 extension retains its own origin allow-list and pairing-token checks. Chrome

@@ -66,12 +66,12 @@ emulator.add_listener('serial0-output-byte', byte => {
       const browserCalls = [];
       const browserHarness = createHerdrAgent({
         guest,
-        browserClient: { command: async (command, parameters) => { browserCalls.push({ command, parameters }); return { title: 'Google', url: 'https://www.google.com/search?q=test' }; } },
-        llmClient: { chat: async () => ({ choices: [{ message: { content: ++browserModelCalls === 1 ? '{"tool":"autobro_command","args":{"command":"gotoUrl","parameters":{"url":"https://www.google.com/search?q=test"}}}' : '{"final":"Browser navigation completed."}' } }] }) },
+        browserClient: { command: async (command, parameters) => { browserCalls.push({ command, parameters }); return command === 'newTab' ? { tabId: 42, title: 'Google', url: parameters.url } : { title: 'test - Google Search', url: 'https://www.google.com/search?q=test' }; } },
+        llmClient: { chat: async () => ({ choices: [{ message: { content: ++browserModelCalls === 1 ? '{"tool":"browser_search","args":{"query":"test","engine":"google"}}' : '{"final":"Browser search completed."}' } }] }) },
         approveAction: async () => true,
       });
       const browserResult = await browserHarness.run('Go to Google and search for test.');
-      const ok = serial.includes('VMFETCH_CONTENT=browser-bridge-ok') && serial.includes('webgpu-bridge-ok') && list.includes('src') && read.includes('needle') && grep.includes('src/main.js') && written.includes('generated') && executed.includes('deepagents-shell-ok') && fetchedStdout.includes('browser-bridge-ok') && !fetchedStdout.includes('unrecognized option') && agentWritten.includes('created by Deep Agents') && agentResult.output.includes('agent-created.txt') && agentFetched.includes('browser-bridge-ok') && fetchResult.output.includes('vmfetch completed') && browserCalls[0]?.command === 'gotoUrl' && browserCalls[0]?.parameters?.url.includes('google.com/search') && browserResult.output.includes('navigation completed');
+      const ok = serial.includes('VMFETCH_CONTENT=browser-bridge-ok') && serial.includes('webgpu-bridge-ok') && list.includes('src') && read.includes('needle') && grep.includes('src/main.js') && written.includes('generated') && executed.includes('deepagents-shell-ok') && fetchedStdout.includes('browser-bridge-ok') && !fetchedStdout.includes('unrecognized option') && agentWritten.includes('created by Deep Agents') && agentResult.output.includes('agent-created.txt') && agentFetched.includes('browser-bridge-ok') && fetchResult.output.includes('vmfetch completed') && browserCalls[0]?.command === 'newTab' && browserCalls[0]?.parameters?.url.includes('google.com/search') && browserResult.output.includes('search completed');
       await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, serial, list, read, grep, written, executed, fetchedStdout, agentWritten, agentFetched, agentOutput: agentResult.output }) });
     })().catch(error => fetch('/__result', { method: 'POST', body: JSON.stringify({ ok: false, serial: serial + '\n' + error.stack }) }));
   }
