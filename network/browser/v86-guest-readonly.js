@@ -23,7 +23,7 @@ export class V86GuestReadonlyClient extends EventTarget {
     this.pending = new Map();
     this.queue = Promise.resolve();
     this.onByte = byte => this.consume(byte);
-    emulator.add_listener('serial0-output-byte', this.onByte);
+    emulator.add_listener('serial1-output-byte', this.onByte);
   }
 
   consume(byte) {
@@ -69,7 +69,7 @@ export class V86GuestReadonlyClient extends EventTarget {
   execute(command) { return this.request('execute', command); }
   test(recipe) { return this.request('test', recipe); }
 
-  destroy() { this.emulator.remove_listener?.('serial0-output-byte', this.onByte); }
+  destroy() { this.emulator.remove_listener?.('serial1-output-byte', this.onByte); }
 }
 
 // Preferred name now that the RPC supports the complete coding-agent backend.

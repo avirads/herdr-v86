@@ -94,7 +94,7 @@ function failBoot(message) {
   bootMessage.textContent = message;
 }
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "herdr-direct-6";
+const DISK_VERSION = "herdr-rpc-uart-9";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `herdr-vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -143,6 +143,7 @@ const emulator = new V86({
   cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic${compatibilityBoot ? " libata.force=pio4" : ""}`,
   hda: { url: diskURL, async: !compatibilityBoot, size: DISK_SIZE },
   net_device: { type: "virtio" },
+  uart1: true,
   screen_container: document.getElementById("screen_container"),
   autostart: true,
 });
@@ -157,6 +158,11 @@ let agentInput = "";
 const hiddenSerialMarkers = ["__V86AGENT_RESPONSE__", "__V86RPC__", "vmagent-rpc agent-"];
 let serialDisplayLine = "";
 let suppressSerialLine = false;
+async function writeAgentTerminal(output) {
+  const text = String(output).replace(/\r?\n/g, "\n") + "\n";
+  await guestReadonlyClient.write(".herdr-vmagent-output", text);
+  await hostBridge.sendConsole("cat /root/project/.herdr-vmagent-output; rm -f /root/project/.herdr-vmagent-output");
+}
 function writeSerialByte(byte) {
   const character = String.fromCharCode(byte);
   if (character === "\n") {
@@ -191,19 +197,22 @@ import("./network/browser/v86-host-bridge.js").then(module => {
         getBrowserClient: () => autobroClient,
         approveAction: async (operation, detail) => confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
         onActivity: () => {},
-        onOutput: output => {
+        onOutput: async output => {
           const clean = String(output).split(/\r?\n/)
             .filter(line => !hiddenSerialMarkers.some(marker => line.includes(marker)) && !/\bagent-\d{6,}-\d+\b/.test(line))
-            .join("\r\n");
-          if (clean) term.write(`\r\n${clean}\r\n`);
+            .join("\n");
+          if (clean) await writeAgentTerminal(clean);
         },
-        onBusy: busy => {
+        onBusy: async busy => {
           agentBusy = busy;
           status(busy ? "vmagent responding — Ctrl-C to stop" : "vmagent conversation active — /exit returns to shell");
-          if (!busy && vmAgentController?.conversationActive) term.write("vmagent> ");
+          if (!busy && vmAgentController?.conversationActive) await hostBridge.sendConsole("printf 'vmagent> '");
         },
       });
       hostBridge.setAgentHandler((command, value) => vmAgentController.handle(command, value));
+      setInterval(() => {
+        if (!agentBusy && !vmAgentController?.conversationActive) hostBridge.send("vmagent-poll").catch(() => {});
+      }, 500);
     });
   });
 }).catch(error => status("host bridge failed — " + error.message));

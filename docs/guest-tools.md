@@ -201,9 +201,9 @@ The guest command `vmagent 'TASK'` uses the page-local WebGPU LLM and maps
 DeepAgentsJS filesystem and shell tools to `/root/project`. Use `vmagent status`,
 `stop`, `reset`, or `yolo on|off` for lifecycle control. After the first reply,
 the browser keeps a persistent `vmagent>` conversation using the same agent
-checkpoint; enter `/exit` to return to the guest shell. Terminal input is
-reserved while each response runs because agent tool RPC shares the serial
-channel. YOLO is on by default; use `vmagent yolo off` to require per-operation
+checkpoint; enter `/exit` to return to the guest shell. A hidden second UART
+carries agent tool RPC while Herdr retains the visible primary console. YOLO is
+on by default; use `vmagent yolo off` to require per-operation
 browser confirmations. Running bare `vmagent` reads the first prompt; stdin
 pipes can contain longer initial prompts.
 Reads run automatically; edits and commands require browser confirmation. See

@@ -48,7 +48,9 @@ if [ "$operation" = RUN ]; then
 fi
 [ "$#" -eq 0 ] || usage 2
 
-printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > /dev/tty
+request_tmp="/run/vmagent-request.$$"
+printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > "$request_tmp"
+mv "$request_tmp" /run/vmagent-request
 case "$operation" in
   RUN) echo '[vmagent] conversation started; Ctrl-C stops the current response.' ;;
   *) echo "[vmagent] $operation requested." ;;

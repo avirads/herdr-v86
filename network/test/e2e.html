@@ -27,6 +27,7 @@ const emulator = new V86({
   cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic herdr.shell=1',
   hda: { url: '../../herdr-vm-network-ext4.img', async: true, size: 100663296 },
   net_device: { type: 'virtio' },
+  uart1: true,
   screen_container: document.querySelector('#screen_container'),
   autostart: true,
 });

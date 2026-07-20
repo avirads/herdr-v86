@@ -1,0 +1,5 @@
+#!/bin/sh
+request=/run/vmagent-request
+[ -s "$request" ] || exit 0
+cat "$request"
+rm -f "$request"

@@ -22,52 +22,66 @@ function encodeBytes(bytes) {
 }
 
 export class V86HostBridge extends EventTarget {
-  constructor(emulator, { maxFetchBytes = 16 << 20, chunkBytes = 12 << 10, llmClient = null, agentHandler = null } = {}) {
+  constructor(emulator, { maxFetchBytes = 16 << 20, chunkBytes = 12 << 10, llmClient = null, agentHandler = null, rpcSerial = 1 } = {}) {
     super();
     this.emulator = emulator;
     this.maxFetchBytes = maxFetchBytes;
     this.chunkBytes = chunkBytes;
     this.llmClient = llmClient;
     this.agentHandler = agentHandler;
-    this.line = "";
+    this.rpcSerial = rpcSerial;
+    this.lines = ["", ""];
+    this.replyChannels = new Map();
     this.sendQueue = Promise.resolve();
-    this.onByte = byte => this.consumeByte(byte);
-    emulator.add_listener("serial0-output-byte", this.onByte);
+    this.onByte0 = byte => this.consumeByte(byte, 0);
+    this.onByte1 = byte => this.consumeByte(byte, 1);
+    emulator.add_listener("serial0-output-byte", this.onByte0);
+    emulator.add_listener("serial1-output-byte", this.onByte1);
   }
 
-  consumeByte(byte) {
+  consumeByte(byte, serial = this.rpcSerial) {
     const character = String.fromCharCode(byte);
     if (character === "\n") {
-      const line = this.line.replace(/\r$/, "");
-      this.line = "";
+      const line = this.lines[serial].replace(/\r$/, "");
+      this.lines[serial] = "";
       const marker = line.indexOf(PREFIX);
       if (marker >= 0) {
         const request = line.slice(marker + PREFIX.length);
+        const id = request.split("\t")[1] || "0";
+        this.replyChannels.set(id, serial);
         this.handle(request).catch(error => {
-          const id = request.split("\t")[1] || "0";
           this.reply(id, "ERROR", encodeText(error.message));
         });
       }
-    } else if (this.line.length < 131072) {
-      this.line += character;
+    } else if (this.lines[serial].length < 131072) {
+      this.lines[serial] += character;
     } else {
-      this.line = "";
+      this.lines[serial] = "";
     }
   }
 
-  send(line) {
+  send(line, serial = this.rpcSerial) {
     this.sendQueue = this.sendQueue.then(async () => {
       const text = line + "\n";
       for (let offset = 0; offset < text.length; offset += 128) {
-        for (const character of text.slice(offset, offset + 128)) this.emulator.serial0_send(character);
+        const chunk = text.slice(offset, offset + 128);
+        if (serial === 0) {
+          for (const character of chunk) this.emulator.serial0_send(character);
+        } else {
+          this.emulator.serial_send_bytes(serial, new TextEncoder().encode(chunk));
+        }
         await new Promise(resolve => setTimeout(resolve, 2));
       }
     });
     return this.sendQueue;
   }
 
-  reply(id, kind, value = "") {
-    return this.send(`__V86RPC_RESPONSE__\t${id}\t${kind}\t${value}`);
+  sendConsole(line) { return this.send(line, 0); }
+
+  async reply(id, kind, value = "") {
+    const serial = this.replyChannels.get(id) ?? this.rpcSerial;
+    await this.send(`__V86RPC_RESPONSE__\t${id}\t${kind}\t${value}`, serial);
+    if (kind === "END" || kind === "ERROR") this.replyChannels.delete(id);
   }
 
   async handle(message) {
@@ -175,7 +189,8 @@ export class V86HostBridge extends EventTarget {
   }
 
   destroy() {
-    this.emulator.remove_listener?.("serial0-output-byte", this.onByte);
+    this.emulator.remove_listener?.("serial0-output-byte", this.onByte0);
+    this.emulator.remove_listener?.("serial1-output-byte", this.onByte1);
   }
 }
 

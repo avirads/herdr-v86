@@ -17,6 +17,7 @@ const emulator = new V86({
   bzimage: { url: '../../bzImage-network' },
   cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic herdr.shell=1${compatibilityBoot ? ' libata.force=pio4' : ''}`,
   hda: { url: '../../herdr-vm-network-ext4.img', async: !compatibilityBoot, size: 100663296 },
+  uart1: true,
   screen_container: document.querySelector('#screen_container'), autostart: true,
 });
 const hostBridge = new V86HostBridge(emulator, {
@@ -28,6 +29,7 @@ const hostBridge = new V86HostBridge(emulator, {
 });
 const vmagentCommands = [];
 hostBridge.setAgentHandler(async (command, value) => vmagentCommands.push({ command, value }));
+setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
 const guest = new V86GuestReadonlyClient(emulator, hostBridge);
 emulator.add_listener('serial0-output-byte', byte => {
   serial = (serial + String.fromCharCode(byte)).slice(-100000);

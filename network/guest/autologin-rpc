@@ -1,0 +1,4 @@
+#!/bin/sh
+export HOME=/root PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+cd /root/project 2>/dev/null || cd /root
+exec /bin/login -f root
