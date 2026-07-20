@@ -12,6 +12,8 @@
   #status { font-size: 12px; color: #8b949e; }
   #term { padding: 0 8px 8px; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
+  #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
+  button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
 </style>
 </head>
 <body>
@@ -19,6 +21,12 @@
   <h1>herdr-vm</h1>
   <div id="status">loading v86…</div>
   <div id="network-status">network: disabled</div>
+  <div id="tools">
+    <button id="save-state">Save VM</button>
+    <button id="restore-state">Restore VM</button>
+    <button id="import-file">Import file</button>
+    <input id="file-input" type="file" hidden>
+  </div>
 </header>
 <div id="term"></div>
 <div id="screen_container">
@@ -56,6 +64,42 @@ const emulator = new V86({
   screen_container: document.getElementById("screen_container"),
   autostart: true,
 });
+
+let hostBridge;
+import("./network/browser/v86-host-bridge.js").then(module => {
+  hostBridge = new module.V86HostBridge(emulator);
+  window.v86HostBridge = hostBridge;
+  document.getElementById("save-state").onclick = async () => {
+    status("saving VM state…");
+    try { await module.saveVMState(emulator); status("VM state saved in this browser"); }
+    catch (error) { status("save failed — " + error.message); }
+  };
+  document.getElementById("restore-state").onclick = async () => {
+    status("restoring VM state…");
+    try { await module.restoreVMState(emulator); status("VM state restored"); }
+    catch (error) { status("restore failed — " + error.message); }
+  };
+}).catch(error => status("host bridge failed — " + error.message));
+
+const fileInput = document.getElementById("file-input");
+document.getElementById("import-file").onclick = () => fileInput.click();
+fileInput.onchange = async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) return status("import limited to 8 MiB");
+  const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_") || "imported-file";
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  const encoded = btoa(binary);
+  const command = `printf %s '${encoded}' | base64 -d > '/root/${safeName}'\n`;
+  status(`importing ${safeName}…`);
+  if (!hostBridge) return status("host bridge is still loading");
+  await hostBridge.send(command.replace(/\n$/, ""));
+  status(`imported /root/${safeName}`);
+  fileInput.value = "";
+};
 
 // A backend creates a short-lived session through POST /v1/sessions and gives
 // the browser the gateway URL + token in the fragment (fragments are not sent

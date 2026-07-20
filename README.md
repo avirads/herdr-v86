@@ -21,6 +21,11 @@ Needs an i686 kernel with 8250 serial + ext4 (or 9p/virtio for the tarball route
 The default `index.html` uses the network-enabled artifacts and accepts a
 short-lived gateway session in its URL fragment. See [network/README.md](network/README.md).
 
+The demo also includes a gateway-free browser bridge. Its `vmfetch`, `vmclip`,
+`vmexport`, `vmgithub`, and `vmai` guest commands use browser APIs instead of a
+NIC. The toolbar provides file import and IndexedDB VM snapshots. See
+[network/docs/host-bridge.md](network/docs/host-bridge.md).
+
 ## Hosting
 
 The disk image is loaded with `async: true`, so the web server **must support

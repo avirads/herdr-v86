@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in
+  repo)
+    [ "$#" -eq 2 ] || { echo 'usage: vmgithub repo OWNER/REPO' >&2; exit 2; }
+    exec vmfetch -H 'Accept: application/vnd.github+json' -o - "https://api.github.com/repos/$2" ;;
+  archive)
+    [ "$#" -ge 2 ] || { echo 'usage: vmgithub archive OWNER/REPO [REF] [FILE]' >&2; exit 2; }
+    ref=${3:-HEAD}; output=${4:-$(basename "$2")-$ref.tar.gz}
+    exec vmfetch -o "$output" "https://api.github.com/repos/$2/tarball/$ref" ;;
+  api)
+    [ "$#" -eq 2 ] || { echo 'usage: GITHUB_TOKEN=... vmgithub api /user' >&2; exit 2; }
+    token_header=""; [ -n "${GITHUB_TOKEN:-}" ] && token_header="Authorization: Bearer $GITHUB_TOKEN"
+    if [ -n "$token_header" ]; then exec vmfetch -H "$token_header" -H 'Accept: application/vnd.github+json' -o - "https://api.github.com$2"; fi
+    exec vmfetch -H 'Accept: application/vnd.github+json' -o - "https://api.github.com$2" ;;
+  *) echo 'usage: vmgithub {repo OWNER/REPO|archive OWNER/REPO [REF] [FILE]|api PATH}' >&2; exit 2 ;;
+esac

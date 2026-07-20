@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  echo "usage: vmfetch [-o FILE] [-X METHOD] [-H 'NAME: VALUE'] [-d DATA] URL" >&2
+  exit 2
+}
+
+output=""
+method=GET
+body=""
+headers=''
+while getopts 'o:X:H:d:h' option; do
+  case "$option" in
+    o) output=$OPTARG ;;
+    X) method=$OPTARG ;;
+    H) headers="${headers}${headers:+
+}${OPTARG}" ;;
+    d) body=$OPTARG; [ "$method" = GET ] && method=POST ;;
+    *) usage ;;
+  esac
+done
+shift $((OPTIND - 1))
+[ "$#" -eq 1 ] || usage
+url=$1
+[ -n "$output" ] || output=$(basename "${url%%\?*}")
+[ -n "$output" ] || output=index.html
+
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+id="$$-$(date +%s)"
+tmp="${output}.vmfetch.$$"
+trap 'rm -f "$tmp"' EXIT INT TERM
+stty -echo
+trap 'stty echo; rm -f "$tmp"' EXIT INT TERM
+printf '__V86RPC__\tFETCH\t%s\t%s\t%s\t%s\t%s\n' \
+  "$id" "$(b64 "$method")" "$(b64 "$url")" "$(b64 "$headers")" "$(b64 "$body")"
+
+status=1
+while IFS="$(printf '\t')" read -r prefix response_id kind value; do
+  [ "$prefix" = '__V86RPC_RESPONSE__' ] || continue
+  [ "$response_id" = "$id" ] || continue
+  case "$kind" in
+    META) printf %s "$value" | base64 -d >&2; echo >&2 ;;
+    DATA) printf %s "$value" | base64 -d >> "$tmp" ;;
+    ERROR) printf 'vmfetch: ' >&2; printf %s "$value" | base64 -d >&2; echo >&2; exit 1 ;;
+    END) status=$value; break ;;
+  esac
+done
+stty echo
+if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
+  if [ "$output" = - ]; then cat "$tmp"; rm -f "$tmp"; else mv "$tmp" "$output"; echo "saved $output"; fi
+  trap - EXIT INT TERM
+  exit 0
+fi
+echo "vmfetch: HTTP status $status" >&2
+exit 22
