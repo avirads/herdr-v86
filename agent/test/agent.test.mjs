@@ -69,3 +69,66 @@ test('guest backend rejects mutations when approval is denied', async () => {
   assert.match((await backend.write('/no.txt', 'no')).error, /rejected/);
   assert.equal((await backend.execute('rm -rf .')).exitCode, 126);
 });
+
+function scriptedClient(decisions) {
+  let index = 0;
+  return { async chat() { return { choices: [{ message: { content: JSON.stringify(decisions[index++]) } }] }; } };
+}
+
+function fallbackGuest(execute) {
+  return {
+    async list(path) { return path === 'skills/' ? '' : 'directory\t.\t0'; },
+    async read() { return ''; },
+    async grep() { return ''; },
+    async glob() { return ''; },
+    async write() { return 'ok'; },
+    async delete() { return 'ok'; },
+    execute,
+    async test() { return 'ok'; },
+  };
+}
+
+test('vmfetch automatically switches interactive sites to AutoBro', async () => {
+  const browserCalls = [];
+  const browserClient = { async command(command, parameters) {
+    browserCalls.push([command, parameters]);
+    if (command === 'newTab') return { tabId: 9, url: parameters.url };
+    if (command === 'pageInfo') return { tabId: 9, title: 'Google' };
+    return { ok: true };
+  } };
+  const guest = fallbackGuest(async () => { throw new Error('vmfetch must not run for an interactive site'); });
+  const harness = createHerdrAgent({
+    llmClient: scriptedClient([
+      { tool: 'vmfetch', args: { url: 'https://www.google.com/search?q=test', output: '-', method: 'GET', headers: [] } },
+      { final: 'Switched to the browser.' },
+    ]),
+    guest,
+    browserClient,
+    approveAction: async () => true,
+  });
+  const result = await harness.run('Open Google search.');
+  assert.match(result.output, /Switched to the browser/);
+  assert.deepEqual(browserCalls.map(call => call[0]), ['newTab', 'waitForLoad', 'pageInfo']);
+});
+
+test('failed AutoBro navigation automatically switches to vmfetch', async () => {
+  const approvals = [];
+  const guestCommands = [];
+  const guest = fallbackGuest(async command => {
+    guestCommands.push(command);
+    return '__V86AGENT_EXIT__0\nraw page';
+  });
+  const harness = createHerdrAgent({
+    llmClient: scriptedClient([
+      { tool: 'autobro_command', args: { command: 'gotoUrl', parameters: { url: 'https://example.com/data' } } },
+      { final: 'Fetched raw content.' },
+    ]),
+    guest,
+    browserClient: { async command() { throw new Error('extension unavailable'); } },
+    approveAction: async (operation, detail) => { approvals.push([operation, detail]); return true; },
+  });
+  const result = await harness.run('Open the resource.');
+  assert.match(result.output, /Fetched raw content/);
+  assert.match(guestCommands.at(-1), /^vmfetch -o - 'https:\/\/example\.com\/data'$/);
+  assert.equal(approvals.at(-1)[1].fallback, 'vmfetch raw GET if AutoBro navigation fails');
+});

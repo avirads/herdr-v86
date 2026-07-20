@@ -95,6 +95,26 @@ internal pages cannot be automated. Screenshot image data is omitted from the
 text model context to prevent context exhaustion; DOM inventory is the primary
 inspection path for the current text-only LiteRT model.
 
+## Automatic provider switching
+
+Equivalent operations now switch providers automatically after one disclosed
+approval. Tool results include `switchedProvider` so the agent can continue with
+the provider that actually completed the operation:
+
+| Primary operation | Automatic fallback |
+|---|---|
+| `vmfetch` GET fails, or targets an interactive search site | Open and inspect the URL with AutoBro |
+| `vmgithub repo` or `archive` fails | Open the repository page with AutoBro |
+| `vmclip write` fails | Type the text into AutoBro's focused page element |
+| AutoBro `newTab` or `gotoUrl` fails for an HTTPS URL | Read raw content with `vmfetch` |
+
+The approval dialog identifies the possible fallback before execution; YOLO
+applies to the same combined operation. Switching is intentionally unavailable
+where the operations are not equivalent: non-GET HTTP requests, GitHub API
+calls, clipboard reads, exports, AI API calls, clicks/forms, screenshots,
+uploads, dialogs, and arbitrary JavaScript/CDP. An AutoBro fallback opens a page
+but does not create the guest output file originally requested from `vmfetch`.
+
 ## YOLO mode
 
 **Enable YOLO** removes per-operation approval for the current open page only.

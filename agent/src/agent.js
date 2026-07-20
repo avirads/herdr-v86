@@ -97,25 +97,44 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     try { return commandResult(await guest.execute(command)); }
     catch (error) { return `Error: ${error.message}`; }
   };
+  const openWithAutoBro = async (url, reason) => {
+    if (!browserClient) return `Error: ${reason}. AutoBro is not connected.`;
+    try {
+      const tab = await browserClient.command('newTab', { url }, 120_000);
+      await browserClient.command('waitForLoad', { tabId: tab.tabId, timeout: 20 }, 30_000).catch(() => undefined);
+      const page = await browserClient.command('pageInfo', { tabId: tab.tabId }, 30_000).catch(() => tab);
+      return JSON.stringify({ switchedProvider: 'autobro', reason, tab, page });
+    } catch (error) { return `Error: ${reason}; AutoBro fallback also failed: ${error.message}`; }
+  };
   const vmfetch = tool(async ({ url, output, method, headers, data }) => {
-    if (/^https?:\/\/(?:www\.)?(?:google\.[^/]+|bing\.com|duckduckgo\.com)(?:\/|$)/i.test(url)) {
-      return browserClient
-        ? 'Interactive search sites cannot be fetched because of CORS. Use browser_search or autobro_command instead.'
-        : 'Interactive search sites cannot be fetched because of CORS. AutoBro is not connected; use Connect AutoBro in the VM header.';
-    }
+    const detail = { url, output, method, headers, hasBody: data != null, fallback: browserClient ? 'AutoBro navigation/inspection on browser-fetch failure' : 'none (AutoBro disconnected)' };
+    onActivity({ tool: 'vmfetch', detail, approval: true });
+    if (!await approveAction('vmfetch', detail)) return 'Operation rejected by user.';
+    if (/^https?:\/\/(?:www\.)?(?:google\.[^/]+|bing\.com|duckduckgo\.com)(?:\/|$)/i.test(url)) return await openWithAutoBro(url, 'interactive search sites cannot be fetched through CORS');
     const command = ['vmfetch', '-o', shellQuote(output), '-X', shellQuote(method), ...headers.flatMap(header => ['-H', shellQuote(header)]), ...(data == null ? [] : ['-d', shellQuote(data)]), shellQuote(url)].join(' ');
-    return await approvedCommand('vmfetch', { url, output, method, headers, hasBody: data != null }, command);
+    try { return commandResult(await guest.execute(command)); }
+    catch (error) {
+      if (method === 'GET') return await openWithAutoBro(url, `vmfetch failed: ${error.message}`);
+      return `Error: ${error.message}; automatic browser fallback is disabled for non-GET requests`;
+    }
   }, { name: 'vmfetch', description: 'Fetch a CORS-enabled HTTP API/resource when the guest has no route. This cannot operate interactive websites, scrape Google Search, bypass CORS, click pages, or automate a browser. HTTPS/localhost only; 16 MiB limit. Requires approval.', schema: z.object({ url: z.string().url(), output: z.string().default('-'), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).default('GET'), headers: z.array(z.string()).default([]), data: z.string().optional() }) });
   const vmgithub = tool(async ({ action, repository, path, ref, output }) => {
     let command;
     if (action === 'repo') command = `vmgithub repo ${shellQuote(repository)}`;
     else if (action === 'api') command = `vmgithub api ${shellQuote(path)}`;
     else command = `vmgithub archive ${shellQuote(repository)} ${shellQuote(ref)} ${shellQuote(output)}`;
-    return await approvedCommand('vmgithub', { action, repository, path, ref, output }, command);
+    const result = await approvedCommand('vmgithub', { action, repository, path, ref, output, fallback: browserClient && action !== 'api' ? 'AutoBro GitHub page' : 'none' }, command);
+    if (result.startsWith('Error:') && browserClient && action !== 'api') return await openWithAutoBro(`https://github.com/${repository}`, `vmgithub ${action} failed`);
+    return result;
   }, { name: 'vmgithub', description: 'Read GitHub metadata/API or download a repository archive through browser fetch. Not full Git; CORS/rate limits apply. Requires approval.', schema: z.object({ action: z.enum(['repo', 'api', 'archive']), repository: z.string().default(''), path: z.string().default(''), ref: z.string().default('HEAD'), output: z.string().default('source.tar.gz') }) });
   const vmclip = tool(async ({ action, text }) => {
     const command = action === 'read' ? 'vmclip read' : `printf %s ${shellQuote(text || '')} | vmclip write`;
-    return await approvedCommand('vmclip', { action, textLength: text?.length || 0 }, command);
+    const result = await approvedCommand('vmclip', { action, textLength: text?.length || 0, fallback: browserClient && action === 'write' ? 'AutoBro typeText into focused element' : 'none' }, command);
+    if (result.startsWith('Error:') && browserClient && action === 'write') {
+      try { return JSON.stringify({ switchedProvider: 'autobro', reason: result, result: await browserClient.command('typeText', { text: text || '' }, 30_000) }); }
+      catch (error) { return `${result}; AutoBro typing fallback also failed: ${error.message}`; }
+    }
+    return result;
   }, { name: 'vmclip', description: 'Read or write the system clipboard through the browser. Browser permission/user gesture may be required. Requires approval.', schema: z.object({ action: z.enum(['read', 'write']), text: z.string().optional() }) });
   const vmexport = tool(async ({ path }) => await approvedCommand('vmexport', { path }, `vmexport ${shellQuote(path)}`), {
     name: 'vmexport', description: 'Download one guest file through the browser, maximum 8 MiB. Requires approval.', schema: z.object({ path: z.string() }),
@@ -144,12 +163,22 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     name: 'browser_search', description: 'Search Google, Bing, or DuckDuckGo in a real AutoBro-controlled Chrome tab. Use this—not vmfetch—when asked to go to a search engine or search the web. Requires approval unless YOLO is active.', schema: z.object({ query: z.string(), engine: z.enum(['google', 'bing', 'duckduckgo']).default('google') }),
   }));
   if (browserClient) browserTools.push(tool(async ({ command, parameters }) => {
-    const detail = { command, parameters };
+    const fallbackUrl = ['gotoUrl', 'newTab'].includes(command) ? parameters?.url : null;
+    const canFetchFallback = fallbackUrl && /^https:\/\//i.test(fallbackUrl);
+    const detail = { command, parameters, fallback: canFetchFallback ? 'vmfetch raw GET if AutoBro navigation fails' : 'none' };
     onActivity({ tool: 'autobro_command', detail, approval: true });
     if (!await approveAction('autobro_command', detail)) return 'Browser operation rejected by user.';
     let result;
     try { result = await browserClient.command(command, parameters, 120_000); }
-    catch (error) { return `AutoBro error: ${error.message}`; }
+    catch (error) {
+      if (canFetchFallback) {
+        try {
+          const raw = commandResult(await guest.execute(`vmfetch -o - ${shellQuote(fallbackUrl)}`));
+          return JSON.stringify({ switchedProvider: 'vmfetch', reason: `AutoBro ${command} failed: ${error.message}`, content: raw });
+        } catch (fetchError) { return `AutoBro error: ${error.message}; vmfetch fallback also failed: ${fetchError.message}`; }
+      }
+      return `AutoBro error: ${error.message}; no equivalent vm* fallback exists for ${command}`;
+    }
     if (command === 'captureScreenshot' && result?.data) return JSON.stringify({ ...result, data: '<omitted from text context>', byteLength: Math.ceil(result.data.length * 3 / 4) });
     const output = typeof result === 'string' ? result : JSON.stringify(result);
     return output.length > 60000 ? `${output.slice(0, 60000)}\n[AutoBro result truncated]` : output;
@@ -168,7 +197,7 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     memory: ['/AGENTS.md'],
     skills: ['/skills/'],
     systemPrompt: {
-      prefix: 'Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. Use browser_search or autobro_command for search engines, rendered pages, navigation, clicks, and typing. Use vmfetch only for CORS-enabled HTTP APIs/resources; never use it for Google Search or interactive websites.',
+      prefix: 'Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. Use browser_search or autobro_command for search engines, rendered pages, navigation, clicks, and typing. Use vmfetch for CORS-enabled HTTP APIs/resources. Provider tools automatically switch between equivalent vm* and AutoBro capabilities on recoverable failures; inspect switchedProvider results and continue with the active provider.',
       suffix: 'The backend maps Deep Agents path / to the real guest workspace /root/project. The guest is Alpine Linux i386 with BusyBox sh. Do not claim success without reading results and running proportionate checks.',
     },
   });

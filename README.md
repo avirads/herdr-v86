@@ -41,7 +41,9 @@ off by default, visibly marked, and resets on reload or **New session**.
 Optional **Connect AutoBro** pairing gives the agent authenticated bridge-v3
 browser automation for tabs, navigation, DOM/form interaction, CDP input,
 waits, dialogs, JavaScript, uploads, and domain commands. It remains separate
-from the built-in page-local LiteRT inference provider.
+from the built-in page-local LiteRT inference provider. The agent automatically
+switches between equivalent AutoBro and `vm*` operations when the primary
+provider fails.
 
 ## Hosting
 
