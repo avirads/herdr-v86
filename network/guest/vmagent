@@ -36,7 +36,14 @@ case "${1:-}" in
 esac
 
 if [ "$operation" = RUN ]; then
-  if [ "$#" -gt 0 ]; then payload=$*; else payload=$(cat); fi
+  if [ "$#" -gt 0 ]; then
+    payload=$*
+  elif [ -t 0 ]; then
+    printf 'vmagent> '
+    IFS= read -r payload || exit 1
+  else
+    payload=$(cat)
+  fi
   [ -n "$payload" ] || usage 2
 fi
 [ "$#" -eq 0 ] || usage 2

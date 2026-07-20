@@ -7,6 +7,7 @@ and does not require a browser extension or cloud API.
 
 ```sh
 vmagent 'Inspect the project, fix the failing test, and verify the change.'
+vmagent                       # shows vmagent> and reads one task line
 cat task.txt | vmagent
 vmagent status
 vmagent stop
