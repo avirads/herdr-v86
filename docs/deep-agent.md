@@ -89,9 +89,14 @@ Install/load the AutoBro Web Bridge extension from `web-bridge/extension`, then
 click **Connect AutoBro** in the VM header and enter its extension ID and pairing
 token. The ID is retained in localStorage; the token exists only in the current
 tab's sessionStorage. Connecting AutoBro resets the current agent harness so the
-next run receives the `autobro_command` tool.
+next run receives the `autobro_automate` and `autobro_command` tools.
 
-That tool covers bridge-v3 tab management, navigation, page/DOM inventory,
+`autobro_automate` is preferred for natural-language browser tasks. It collects
+the current page's exact controls, related actions, and relevant AutoBro skills;
+asks the ready page-local WebGPU LLM for a constrained command sequence; validates
+the plan; and executes it. `autobro_command` remains available when the agent
+already knows the exact low-level command. Together they cover tab management,
+navigation, page/DOM inventory,
 visible actions, forms, coordinate clicks, text/key input, scrolling, waits,
 dialogs, screenshots, JavaScript/CDP, uploads, skills, and enabled domain
 commands. Example prompts include:

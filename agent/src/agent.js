@@ -147,6 +147,12 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     name: 'vmllm_info', description: 'Inspect the page-local LiteRT-LM status or cached model list. Chat is intentionally excluded to avoid recursive inference.', schema: z.object({ operation: z.enum(['status', 'models']) }),
   });
   const browserTools = [];
+  const autoBroAutomationCommands = new Set([
+    'pageInfo', 'inventoryCurrentPage', 'visibleActions', 'relatedActions',
+    'extractGrids', 'findSearchAction', 'fillInput', 'setSelect', 'elementState',
+    'dispatchKey', 'clickAtXY', 'typeText', 'pressKey', 'scroll', 'waitForElement',
+    'waitForLoad', 'waitNetworkIdle', 'gotoUrl', 'currentTab', 'newTab', 'gwClick',
+  ]);
   if (browserClient) browserTools.push(tool(async ({ query, engine }) => {
     const base = engine === 'bing' ? 'https://www.bing.com/search?q=' : engine === 'duckduckgo' ? 'https://duckduckgo.com/?q=' : 'https://www.google.com/search?q=';
     const url = base + encodeURIComponent(query);
@@ -161,6 +167,51 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     } catch (error) { return `Browser search error: ${error.message}`; }
   }, {
     name: 'browser_search', description: 'Search Google, Bing, or DuckDuckGo in a real AutoBro-controlled Chrome tab. Use this—not vmfetch—when asked to go to a search engine or search the web. Requires approval unless YOLO is active.', schema: z.object({ query: z.string(), engine: z.enum(['google', 'bing', 'duckduckgo']).default('google') }),
+  }));
+  if (browserClient) browserTools.push(tool(async ({ instruction }) => {
+    const detail = { instruction, planner: 'page-local WebGPU LLM', context: 'current page, visible controls, related actions, and AutoBro skills' };
+    onActivity({ tool: 'autobro_automate', detail, approval: true });
+    if (!await approveAction('autobro_automate', detail)) return 'Browser automation rejected by user.';
+
+    const page = await browserClient.command('inventoryCurrentPage', {}, 30_000)
+      .catch(() => browserClient.command('pageInfo', {}, 30_000).catch(() => ({})));
+    const relatedActions = await browserClient.command('relatedActions', { args: [instruction, 12] }, 30_000).catch(() => []);
+    const skills = await browserClient.command('skills', { q: instruction, limit: 2, maxChars: 1200 }, 30_000).catch(() => []);
+    const compactPage = {
+      url: page?.url,
+      title: page?.title || page?.pageTitle,
+      controls: (page?.controls || []).slice(0, 30).map(({ tag, type, id, name, label, disabled, readonly }) => ({ tag, type, id, name, label, disabled, readonly })),
+      actions: (page?.actions || []).slice(0, 20).map(({ id, text, tag, dataGwClick }) => ({ id, text, tag, dataGwClick })),
+      relatedActions: (relatedActions || []).slice(0, 12),
+    };
+    const skillContext = (Array.isArray(skills) ? skills : skills?.skills || []).slice(0, 2)
+      .map(skill => ({ path: skill.path, content: String(skill.content || '').slice(0, 1200) }));
+    const completion = await llmClient.chat({
+      model: llmClient.modelName,
+      temperature: 0,
+      max_tokens: 1024,
+      chat_template_kwargs: { enable_thinking: false },
+      messages: [
+        { role: 'system', content: 'Convert the browser task into the smallest safe AutoBro command sequence. Return only JSON: {"steps":[{"command":"commandName","args":[],"tabId":1}]}. Use exact selectors and action IDs from page context; never invent selectors. Use newTab for a requested new page, fillInput for fields, and pressKey or an exact visible action to submit.' },
+        { role: 'user', content: `Task: ${instruction}\nAllowed commands: ${[...autoBroAutomationCommands].join(', ')}\nCurrent page: ${JSON.stringify(compactPage)}\nRelevant skills: ${JSON.stringify(skillContext)}` },
+      ],
+    });
+    const raw = completion?.choices?.[0]?.message?.content ?? completion;
+    const plan = parseDecision(raw);
+    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+    if (!steps.length || steps.length > 12) throw new Error('WebGPU planner returned no usable AutoBro steps');
+    const results = [];
+    for (const step of steps) {
+      if (!step || !autoBroAutomationCommands.has(step.command)) throw new Error(`WebGPU planner selected unsupported AutoBro command: ${step?.command || '<missing>'}`);
+      if (step.args != null && !Array.isArray(step.args)) throw new Error(`AutoBro ${step.command} args must be an array`);
+      const parameters = { ...(step.args?.length ? { args: step.args } : {}), ...(step.tabId ? { tabId: step.tabId } : {}) };
+      results.push({ command: step.command, result: await browserClient.command(step.command, parameters, 120_000) });
+    }
+    return JSON.stringify({ planner: 'page-local WebGPU LLM', instruction, steps: results });
+  }, {
+    name: 'autobro_automate',
+    description: 'Preferred tool for natural-language browser tasks when AutoBro is connected. It gives the current page, exact visible controls, relevant AutoBro skills, and the requested action to the ready page-local WebGPU LLM; validates the resulting command sequence; then executes it. Use autobro_command only for an already-known low-level command.',
+    schema: z.object({ instruction: z.string().min(1) }),
   }));
   if (browserClient) browserTools.push(tool(async ({ command, parameters }) => {
     const fallbackUrl = ['gotoUrl', 'newTab'].includes(command) ? parameters?.url : null;
@@ -197,7 +248,7 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     memory: ['/AGENTS.md'],
     skills: ['/skills/'],
     systemPrompt: {
-      prefix: 'Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. Use browser_search or autobro_command for search engines, rendered pages, navigation, clicks, and typing. Use vmfetch for CORS-enabled HTTP APIs/resources. Provider tools automatically switch between equivalent vm* and AutoBro capabilities on recoverable failures; inspect switchedProvider results and continue with the active provider.',
+      prefix: 'Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. When AutoBro is connected, use autobro_automate for natural-language browser tasks so the page-local WebGPU LLM plans commands from exact live-page controls and skills. Use browser_search for explicit web searches, autobro_command only when the exact low-level command is already known, and vmfetch only for CORS-enabled HTTP APIs/resources. Provider tools automatically switch between equivalent vm* and AutoBro capabilities on recoverable failures; inspect switchedProvider results and continue with the active provider.',
       suffix: 'The backend maps Deep Agents path / to the real guest workspace /root/project. The guest is Alpine Linux i386 with BusyBox sh. Do not claim success without reading results and running proportionate checks.',
     },
   });

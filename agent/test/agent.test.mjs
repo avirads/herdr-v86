@@ -38,7 +38,7 @@ test('Deep Agents invokes the native guest backend and returns evidence', async 
   assert.deepEqual(guestCalls, [['list', 'skills/'], ['read', 'AGENTS.md'], ['list', '.']]);
   assert.match(result.output, /src\/main\.js/);
   const protocol = firstRequest.messages[0].content;
-  for (const name of ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'vmfetch', 'vmgithub', 'vmclip', 'vmexport', 'vmai', 'vmllm_info', 'browser_search', 'autobro_command']) {
+  for (const name of ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'vmfetch', 'vmgithub', 'vmclip', 'vmexport', 'vmai', 'vmllm_info', 'browser_search', 'autobro_automate', 'autobro_command']) {
     assert.match(protocol, new RegExp(`"name":"${name}"`));
   }
 });
@@ -131,4 +131,30 @@ test('failed AutoBro navigation automatically switches to vmfetch', async () => 
   assert.match(result.output, /Fetched raw content/);
   assert.match(guestCommands.at(-1), /^vmfetch -o - 'https:\/\/example\.com\/data'$/);
   assert.equal(approvals.at(-1)[1].fallback, 'vmfetch raw GET if AutoBro navigation fails');
+});
+
+test('AutoBro automation uses the page-local WebGPU LLM to plan exact commands', async () => {
+  const browserCalls = [];
+  const browserClient = { async command(command, parameters) {
+    browserCalls.push([command, parameters]);
+    if (command === 'inventoryCurrentPage') return { url: 'https://example.com', controls: [{ name: 'query', label: 'Search' }] };
+    if (command === 'relatedActions') return [];
+    if (command === 'skills') return [];
+    if (command === 'fillInput') return { changed: true };
+    return {};
+  } };
+  const harness = createHerdrAgent({
+    llmClient: scriptedClient([
+      { tool: 'autobro_automate', args: { instruction: 'Type test in the Search field' } },
+      { steps: [{ command: 'fillInput', args: ['[name="query"]', 'test'] }] },
+      { final: 'Entered test in the Search field.' },
+    ]),
+    guest: fallbackGuest(async () => '__V86AGENT_EXIT__0\nok'),
+    browserClient,
+    approveAction: async () => true,
+  });
+  const result = await harness.run('Type test in the Search field.');
+  assert.match(result.output, /Entered test/);
+  assert.deepEqual(browserCalls.map(call => call[0]), ['inventoryCurrentPage', 'relatedActions', 'skills', 'fillInput']);
+  assert.deepEqual(browserCalls.at(-1)[1], { args: ['[name="query"]', 'test'] });
 });

@@ -49,7 +49,9 @@ clipboard, file-transfer, GitHub, or AI operations.
 14. Launch Deep Agents from the guest terminal with `vmagent 'TASK'`; lifecycle
     commands are `vmagent status|stop|reset|yolo on|yolo off`. There is no
     separate agent panel.
-15. When paired, `autobro_command` performs authenticated browser tasks. Treat
+15. When paired, prefer `autobro_automate` for natural-language browser tasks;
+    it uses the page-local WebGPU LLM and live page context to select validated
+    AutoBro commands. Use `autobro_command` for known low-level commands. Treat
     all page reads and actions as external operations; approval/YOLO applies.
 
 ## Quick capability check
