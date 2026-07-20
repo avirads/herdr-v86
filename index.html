@@ -68,6 +68,9 @@
     <section id="setup-step-autobro" class="setup-step" hidden>
       <h3>Connect AutoBro</h3>
       <p>Install AutoBro 0.3.0, then enter the extension ID and pairing token shown in its panel.</p>
+      <div id="autobro-unavailable" class="setup-status" hidden>
+        Chrome extensions are not supported in this mobile browser. You can continue without AutoBro; VM commands and <code>vmagent</code> remain available, but browser automation will not work.
+      </div>
       <form id="setup-autobro-form">
         <label>Extension ID
           <input id="setup-autobro-extension-id" required autocomplete="off" spellcheck="false" placeholder="Chrome extension ID">
@@ -78,6 +81,7 @@
         <div class="setup-actions">
           <a class="tool-link" href="downloads/autobro-web-bridge-0.3.0.zip" download>Download AutoBro</a>
           <button type="submit">Connect and open shell</button>
+          <button id="skip-autobro" type="button" hidden>Skip AutoBro and open shell</button>
         </div>
       </form>
       <div id="setup-autobro-status" class="setup-status">AutoBro is not connected.</div>
@@ -137,6 +141,7 @@ const setupOverlay = document.getElementById("setup-overlay");
 let bootReady = false;
 let llmReady = false;
 let autobroReady = false;
+let autobroSkipped = localStorage.getItem("herdr.autobroSkipped") === "true";
 let llmCheckComplete = false;
 let autobroCheckComplete = false;
 let setupFinished = false;
@@ -386,7 +391,9 @@ document.getElementById("reset-autobro").onclick = () => {
   autobroClient = null;
   autobroReady = false;
   autobroCheckComplete = true;
+  autobroSkipped = false;
   localStorage.removeItem("herdr.autobroExtensionId");
+  localStorage.removeItem("herdr.autobroSkipped");
   sessionStorage.removeItem("herdr.autobroPairingToken");
   document.getElementById("setup-autobro-extension-id").value = "";
   document.getElementById("setup-autobro-token").value = "";
@@ -404,10 +411,29 @@ document.getElementById("setup-autobro-form").onsubmit = event => {
   document.getElementById("setup-autobro-status").textContent = "Pairing…";
   connectAutoBro({ extensionId, token });
 };
+const extensionMessagingUnavailable = !globalThis.chrome?.runtime?.sendMessage;
+const mobileBrowser = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+if (mobileBrowser && extensionMessagingUnavailable) {
+  document.getElementById("autobro-unavailable").hidden = false;
+  document.getElementById("skip-autobro").hidden = false;
+  document.getElementById("setup-autobro-form").querySelectorAll("input, button[type=submit]").forEach(element => { element.disabled = true; });
+}
+document.getElementById("skip-autobro").onclick = () => {
+  autobroSkipped = true;
+  localStorage.setItem("herdr.autobroSkipped", "true");
+  autobroReady = true;
+  autobroCheckComplete = true;
+  browserStatus("skipped — unavailable on mobile");
+  updateSetupWizard();
+};
 document.getElementById("setup-autobro-extension-id").value = localStorage.getItem("herdr.autobroExtensionId") || "";
 document.getElementById("setup-autobro-token").value = sessionStorage.getItem("herdr.autobroPairingToken") || "";
 if (localStorage.getItem("herdr.autobroExtensionId") && sessionStorage.getItem("herdr.autobroPairingToken")) connectAutoBro();
-else autobroCheckComplete = true;
+else if (mobileBrowser && extensionMessagingUnavailable && autobroSkipped) {
+  autobroReady = true;
+  autobroCheckComplete = true;
+  browserStatus("skipped — unavailable on mobile");
+} else autobroCheckComplete = true;
 const llmFileInput = document.getElementById("llm-file-input");
 document.getElementById("setup-configure-llm").onclick = () => llmFileInput.click();
 try {
