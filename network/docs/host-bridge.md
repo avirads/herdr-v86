@@ -15,6 +15,8 @@ vmexport /root/result.txt
 vmgithub repo owner/repository
 vmgithub archive owner/repository main source.tar.gz
 OPENAI_API_KEY=... vmai 'Summarize this project'
+vmllm status
+vmllm 'Summarize this project locally'
 ```
 
 `vmfetch` supports GET and other HTTP methods, repeatable request headers,
@@ -35,3 +37,8 @@ API does not permit browser-originated requests.
 The existing WebRTC DataChannel adapter is a transport for a separately paired
 peer. Signaling, identity verification, and a remote peer are deployment-owned;
 WebRTC alone cannot provide Internet access or bypass CORS.
+
+`vmllm` is a separate authenticated RPC path to the AutoBro Web Bridge Chrome
+extension. The extension owns the LiteRT-LM WebGPU runtime, model cache, and
+offscreen inference document. The guest sends OpenAI-style chat messages and
+receives the final assistant text through the bounded serial bridge.

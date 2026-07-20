@@ -39,6 +39,7 @@ install -m 0755 "$PROJECT_DIR/network/guest/vmclip" "$MOUNT_DIR/usr/local/bin/vm
 install -m 0755 "$PROJECT_DIR/network/guest/vmexport" "$MOUNT_DIR/usr/local/bin/vmexport"
 install -m 0755 "$PROJECT_DIR/network/guest/vmgithub" "$MOUNT_DIR/usr/local/bin/vmgithub"
 install -m 0755 "$PROJECT_DIR/network/guest/vmai" "$MOUNT_DIR/usr/local/bin/vmai"
+install -m 0755 "$PROJECT_DIR/network/guest/vmllm" "$MOUNT_DIR/usr/local/bin/vmllm"
 
 chroot "$MOUNT_DIR" /usr/bin/curl --version
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"

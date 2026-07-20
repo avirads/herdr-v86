@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  cat >&2 <<'EOF'
+usage: vmllm PROMPT...
+       vmllm chat PROMPT...
+       vmllm status
+       vmllm models
+
+Use the paired Chrome Web Bridge WebGPU model. Prompt may also come from stdin.
+Environment: VMLLM_SYSTEM, VMLLM_MODEL, VMLLM_MAX_TOKENS (default 1024).
+EOF
+  exit "${1:-2}"
+}
+
+case "${1:-}" in -h|--help|help) usage 0;; esac
+operation=chat
+case "${1:-}" in status|models) operation=$1; shift;; chat) shift;; esac
+
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+escape_json() { sed ':a;N;$!ba;s/\\/\\\\/g;s/"/\\"/g;s/\n/\\n/g'; }
+id="$$-$(date +%s)"
+body64=''
+if [ "$operation" = chat ]; then
+  if [ "$#" -gt 0 ]; then prompt=$*; else prompt=$(cat); fi
+  [ -n "$prompt" ] || usage 2
+  prompt_json=$(printf %s "$prompt" | escape_json)
+  system_json=$(printf %s "${VMLLM_SYSTEM:-You are a concise coding assistant.}" | escape_json)
+  model_json=$(printf %s "${VMLLM_MODEL:-webgpu}" | escape_json)
+  body="{\"model\":\"$model_json\",\"max_tokens\":${VMLLM_MAX_TOKENS:-1024},\"messages\":[{\"role\":\"system\",\"content\":\"$system_json\"},{\"role\":\"user\",\"content\":\"$prompt_json\"}]}"
+  body64=$(b64 "$body")
+fi
+
+case "$operation" in
+  chat) rpc=LLM_CHAT;; status) rpc=LLM_STATUS;; models) rpc=LLM_MODELS;;
+esac
+stty -echo
+trap 'stty echo' EXIT INT TERM
+printf '__V86RPC__\t%s\t%s\t%s\n' "$rpc" "$id" "$body64"
+while IFS="$(printf '\t')" read -r prefix response_id kind value; do
+  [ "$prefix:$response_id" = "__V86RPC_RESPONSE__:$id" ] || continue
+  case "$kind" in
+    DATA) printf %s "$value" | base64 -d;;
+    ERROR) printf 'vmllm: ' >&2; printf %s "$value" | base64 -d >&2; echo >&2; exit 1;;
+    END) echo; break;;
+  esac
+done
+stty echo
+trap - EXIT INT TERM

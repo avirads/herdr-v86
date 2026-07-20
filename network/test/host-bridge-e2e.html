@@ -7,6 +7,7 @@
 import { V86HostBridge } from '../browser/v86-host-bridge.js';
 let serial = '';
 let started = false;
+setTimeout(() => fetch('/__result', { method: 'POST', body: JSON.stringify({ ok: false, serial }) }), 60000);
 const emulator = new V86({
   wasm_path: '../../v86-network.wasm', memory_size: 256 << 20, vga_memory_size: 2 << 20,
   bios: { url: '../../seabios.bin' }, vga_bios: { url: '../../vgabios.bin' },
@@ -15,16 +16,22 @@ const emulator = new V86({
   hda: { url: '../../herdr-vm-network-ext4.img', async: true, size: 100663296 },
   screen_container: document.querySelector('#screen_container'), autostart: true,
 });
-new V86HostBridge(emulator);
+new V86HostBridge(emulator, {
+  llmClient: {
+    status: async () => ({ webgpu: true, modelName: 'e2e-model' }),
+    models: async () => ({ object: 'list', data: [{ id: 'e2e-model' }] }),
+    chat: async () => ({ choices: [{ message: { content: 'webgpu-bridge-ok' } }] }),
+  },
+});
 emulator.add_listener('serial0-output-byte', byte => {
   serial = (serial + String.fromCharCode(byte)).slice(-100000);
   document.querySelector('#serial').textContent = serial;
   if (!started && /(?:herdr-vm:~#|~\s*[#%])\s*$/.test(serial)) {
     started = true;
-    emulator.serial0_send("vmfetch -o /tmp/payload http://127.0.0.1:8091/network/test/payload.txt && printf 'VMFETCH_CONTENT=' && cat /tmp/payload; echo; echo VMFETCH_E2E_END\n");
+    emulator.serial0_send("vmfetch -o /tmp/payload http://127.0.0.1:8091/network/test/payload.txt && printf 'VMFETCH_CONTENT=' && cat /tmp/payload; echo; printf 'VMLLM_CONTENT='; vmllm 'hello'; echo VMFETCH_E2E_END\n");
   }
   if (/\r?\nVMFETCH_E2E_END\r?\n/.test(serial)) {
-    fetch('/__result', { method: 'POST', body: JSON.stringify({ ok: serial.includes('VMFETCH_CONTENT=browser-bridge-ok'), serial }) });
+    fetch('/__result', { method: 'POST', body: JSON.stringify({ ok: serial.includes('VMFETCH_CONTENT=browser-bridge-ok') && serial.includes('webgpu-bridge-ok'), serial }) });
   }
 });
 </script>

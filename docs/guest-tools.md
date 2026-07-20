@@ -123,6 +123,45 @@ origin via CORS. The command returns raw JSON. Credentials cross the trusted
 hosting page; use short-lived, narrow-scope keys. Never save a VM snapshot while
 a key remains in the environment or shell history.
 
+## `vmllm` — local WebGPU model through AutoBro Web Bridge
+
+```text
+vmllm PROMPT...
+vmllm chat PROMPT...
+vmllm status
+vmllm models
+```
+
+Examples:
+
+```sh
+vmllm status
+vmllm models
+vmllm 'Explain the build failure in one paragraph'
+cat main.c | vmllm chat
+VMLLM_SYSTEM='Return only a unified diff.' VMLLM_MAX_TOKENS=2048 \
+  vmllm 'Patch the parser to reject an empty name.'
+```
+
+`vmllm` runs inference in the PC's Chrome WebGPU implementation, not inside the
+32-bit guest. It connects to the authenticated AutoBro Web Bridge extension and
+uses its loaded LiteRT-LM model. No network gateway or cloud API key is needed.
+
+Before using it:
+
+1. Install/reload the extension from `web-bridge/extension` after its herdr
+   origin allow-list change.
+2. Load a compatible model in the extension panel. The model may be restored
+   automatically from the extension's OPFS cache.
+3. Open herdr-v86 in Chrome and click **Configure LLM**.
+4. Enter the extension ID and its pairing token. The token is retained only in
+   the current browser tab's `sessionStorage`.
+5. Verify with `vmllm status`, then run a prompt.
+
+Optional variables are `VMLLM_SYSTEM`, `VMLLM_MODEL`, and `VMLLM_MAX_TOKENS`.
+Closing/reloading the extension, losing the offscreen host, using a browser
+without WebGPU, or having no model loaded causes a clear command error.
+
 ## Browser **Import file** control
 
 1. Select **Import file** in the toolbar.
@@ -158,6 +197,8 @@ interactive serial console; avoid typing while a large file is being imported.
 | `browser-forbidden header` | JavaScript is not allowed to set that header | Remove the header or use full gateway-backed `curl` |
 | `response exceeds ... limit` | Response passed 16 MiB | Use the full gateway or request a smaller/ranged resource |
 | Clipboard permission error | Browser denied clipboard access | Focus the page, grant permission, and retry after a click |
+| `WebGPU LLM is not paired` | The herdr page has no authenticated extension client | Click **Configure LLM** and enter the extension ID/token |
+| `WebGPU LLM host not running` or `no model loaded` | Extension runtime/model is unavailable | Reload the extension and load a model in its panel |
 | `curl: could not resolve host` without a route | No full gateway connection | Use `vmfetch` or configure the network gateway |
 
 ## Security boundary

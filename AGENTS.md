@@ -15,7 +15,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 
 ## Canonical command documentation
 
-- `docs/guest-tools.md`: complete guest command reference and examples.
+- `docs/guest-tools.md`: complete guest command reference and examples, including `vmllm`.
 - `network/docs/host-bridge.md`: browser-bridge protocol, limits, and security.
 - `network/README.md`: full IPv4 gateway deployment and testing.
 - Run `<command> --help` inside the guest for concise local usage.
@@ -39,11 +39,14 @@ clipboard, file-transfer, GitHub, or AI operations.
    `vmexport` files are at most 8 MiB.
 10. VM snapshots contain RAM and therefore may contain secrets. Do not save a
     snapshot while credentials remain in guest memory.
+11. Use `vmllm` for a paired local WebGPU model. It runs on the Chrome host, not
+    on the i386 guest, and requires the AutoBro Web Bridge extension plus a
+    loaded model.
 
 ## Quick capability check
 
 ```sh
-command -v vmfetch vmclip vmexport vmgithub vmai
+command -v vmfetch vmclip vmexport vmgithub vmai vmllm
 ip route
 vmfetch --help
 ```

@@ -22,11 +22,12 @@ function encodeBytes(bytes) {
 }
 
 export class V86HostBridge extends EventTarget {
-  constructor(emulator, { maxFetchBytes = 16 << 20, chunkBytes = 12 << 10 } = {}) {
+  constructor(emulator, { maxFetchBytes = 16 << 20, chunkBytes = 12 << 10, llmClient = null } = {}) {
     super();
     this.emulator = emulator;
     this.maxFetchBytes = maxFetchBytes;
     this.chunkBytes = chunkBytes;
+    this.llmClient = llmClient;
     this.line = "";
     this.sendQueue = Promise.resolve();
     this.onByte = byte => this.consumeByte(byte);
@@ -38,10 +39,14 @@ export class V86HostBridge extends EventTarget {
     if (character === "\n") {
       const line = this.line.replace(/\r$/, "");
       this.line = "";
-      if (line.startsWith(PREFIX)) this.handle(line.slice(PREFIX.length)).catch(error => {
-        const id = line.split("\t")[1] || "0";
-        this.reply(id, "ERROR", encodeText(error.message));
-      });
+      const marker = line.indexOf(PREFIX);
+      if (marker >= 0) {
+        const request = line.slice(marker + PREFIX.length);
+        this.handle(request).catch(error => {
+          const id = request.split("\t")[1] || "0";
+          this.reply(id, "ERROR", encodeText(error.message));
+        });
+      }
     } else if (this.line.length < 131072) {
       this.line += character;
     } else {
@@ -70,7 +75,28 @@ export class V86HostBridge extends EventTarget {
     if (operation === "CLIPBOARD_READ") return this.clipboardRead(id);
     if (operation === "CLIPBOARD_WRITE") return this.clipboardWrite(id, fields[0]);
     if (operation === "EXPORT") return this.exportFile(id, fields);
+    if (operation === "LLM_STATUS") return this.llm(id, "status");
+    if (operation === "LLM_MODELS") return this.llm(id, "models");
+    if (operation === "LLM_CHAT") return this.llm(id, "chat", fields[0]);
     throw new Error(`unsupported host operation: ${operation}`);
+  }
+
+  setLlmClient(client) {
+    this.llmClient = client;
+  }
+
+  async llm(id, operation, body64) {
+    if (!this.llmClient) throw new Error("WebGPU LLM is not paired; use the browser's Configure LLM button");
+    let result;
+    if (operation === "status") result = await this.llmClient.status();
+    else if (operation === "models") result = await this.llmClient.models();
+    else {
+      const completion = await this.llmClient.chat(JSON.parse(decodeText(body64)));
+      result = completion?.choices?.[0]?.message?.content ?? completion;
+    }
+    const output = typeof result === "string" ? result : JSON.stringify(result);
+    await this.reply(id, "DATA", encodeText(output));
+    await this.reply(id, "END", "0");
   }
 
   async fetch(id, [method64, url64, headers64, body64]) {

@@ -21,11 +21,13 @@
   <h1>herdr-vm</h1>
   <div id="status">loading v86…</div>
   <div id="network-status">network: disabled</div>
+  <div id="llm-status">WebGPU LLM: not paired</div>
   <div id="tools">
     <button id="save-state">Save VM</button>
     <button id="restore-state">Restore VM</button>
     <button id="import-file">Import file</button>
     <button id="open-help" title="Guest command reference">Help</button>
+    <button id="configure-llm" title="Pair AutoBro Web Bridge">Configure LLM</button>
     <input id="file-input" type="file" hidden>
   </div>
 </header>
@@ -67,8 +69,9 @@ const emulator = new V86({
 });
 
 let hostBridge;
+let webGpuLlmClient;
 import("./network/browser/v86-host-bridge.js").then(module => {
-  hostBridge = new module.V86HostBridge(emulator);
+  hostBridge = new module.V86HostBridge(emulator, { llmClient: webGpuLlmClient });
   window.v86HostBridge = hostBridge;
   document.getElementById("save-state").onclick = async () => {
     status("saving VM state…");
@@ -81,6 +84,33 @@ import("./network/browser/v86-host-bridge.js").then(module => {
     catch (error) { status("restore failed — " + error.message); }
   };
 }).catch(error => status("host bridge failed — " + error.message));
+
+const llmStatus = message => document.getElementById("llm-status").textContent = "WebGPU LLM: " + message;
+async function configureWebGpuLlm({ interactive = true } = {}) {
+  const storedId = localStorage.getItem("herdr.llmExtensionId") || "";
+  const storedToken = sessionStorage.getItem("herdr.llmPairingToken") || "";
+  const extensionId = interactive ? prompt("AutoBro Web Bridge extension ID", storedId) : storedId;
+  if (!extensionId) return;
+  const token = interactive ? prompt("Web Bridge pairing token (kept for this tab only)", storedToken) : storedToken;
+  if (!token) return;
+  llmStatus("pairing…");
+  try {
+    const { WebGpuLlmClient } = await import("./network/browser/webgpu-llm-client.js");
+    const client = new WebGpuLlmClient({ extensionId: extensionId.trim(), token: token.trim() });
+    const result = await client.pair();
+    localStorage.setItem("herdr.llmExtensionId", extensionId.trim());
+    sessionStorage.setItem("herdr.llmPairingToken", token.trim());
+    webGpuLlmClient = client;
+    hostBridge?.setLlmClient(client);
+    llmStatus(`${result.modelName || "connected"}${result.webgpu ? " — WebGPU" : " — WebGPU unavailable"}`);
+  } catch (error) {
+    llmStatus("error — " + error.message);
+  }
+}
+document.getElementById("configure-llm").onclick = () => configureWebGpuLlm();
+if (localStorage.getItem("herdr.llmExtensionId") && sessionStorage.getItem("herdr.llmPairingToken")) {
+  configureWebGpuLlm({ interactive: false });
+}
 
 const fileInput = document.getElementById("file-input");
 document.getElementById("import-file").onclick = () => fileInput.click();
