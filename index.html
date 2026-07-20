@@ -160,9 +160,14 @@ const hiddenSerialMarkers = ["__V86AGENT_RESPONSE__", "__V86RPC__", "vmagent-rpc
 let serialDisplayLine = "";
 let suppressSerialLine = false;
 async function writeAgentTerminal(output) {
-  const text = String(output).replace(/\r?\n/g, "\n") + "\n";
-  await guestReadonlyClient.write(".herdr-vmagent-output", text);
-  await hostBridge.sendConsole("cat /root/project/.herdr-vmagent-output; rm -f /root/project/.herdr-vmagent-output");
+  let text = String(output).trim();
+  text = text.replace(/^\[herdr-coding-agent\]\s*/, "");
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.final === "string") text = parsed.final;
+    else if (typeof parsed?.final?.answer === "string") text = parsed.final.answer;
+  } catch {}
+  term.write("\r\x1b[2K" + text.replace(/\r?\n/g, "\r\n") + "\r\n");
 }
 function writeSerialByte(byte) {
   const character = String.fromCharCode(byte);
@@ -207,7 +212,8 @@ import("./network/browser/v86-host-bridge.js").then(module => {
         onBusy: async busy => {
           agentBusy = busy;
           status(busy ? "vmagent responding — Ctrl-C to stop" : "vmagent conversation active — /exit returns to shell");
-          if (!busy && vmAgentController?.conversationActive) await hostBridge.sendConsole("printf 'vmagent> '");
+          if (busy) term.write("\r\x1b[2K");
+          else if (vmAgentController?.conversationActive) term.write("vmagent> ");
         },
       });
       hostBridge.setAgentHandler((command, value) => vmAgentController.handle(command, value));
@@ -367,6 +373,9 @@ emulator.add_listener("serial0-output-byte", (byte) => {
   }
 });
 term.onData((data) => {
+  // xterm answers terminal status/cursor queries internally. Those replies are
+  // protocol traffic, not chat input, and must never appear at `vmagent>`.
+  if (vmAgentController?.conversationActive && /^\x1b\[\??\d*(?:;\d+)*[Rcn]$/.test(data)) return;
   if (agentBusy) {
     if (data === "\x03") vmAgentController?.handle("stop");
     return;
