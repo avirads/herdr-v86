@@ -92,28 +92,11 @@
   <div id="tools">
     <button id="import-file">Import file</button>
     <button id="open-help" title="Guest command reference">Help</button>
-    <button id="configure-llm" title="Load a page-local LiteRT-LM WebGPU model">Configure LLM</button>
-    <button id="connect-autobro" title="Pair AutoBro for agent browser automation">Connect AutoBro</button>
     <button id="open-settings" title="Reset LLM or AutoBro configuration">Settings</button>
     <input id="file-input" type="file" hidden>
     <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
   </div>
 </header>
-<dialog id="autobro-dialog">
-  <form id="autobro-form">
-    <h2>Connect AutoBro</h2>
-    <label>Extension ID
-      <input id="autobro-extension-id" name="extensionId" required autocomplete="off" spellcheck="false" placeholder="Chrome extension ID">
-    </label>
-    <label>Pairing token
-      <input id="autobro-pairing-token" name="pairingToken" type="password" required autocomplete="off" spellcheck="false" placeholder="Token from the AutoBro panel">
-    </label>
-    <div class="dialog-actions">
-      <button id="cancel-autobro" type="button">Cancel</button>
-      <button type="submit">Connect</button>
-    </div>
-  </form>
-</dialog>
 <dialog id="settings-dialog">
   <h2>Settings</h2>
   <p>Resetting a provider returns the app to the corresponding setup-wizard step.</p>
@@ -334,15 +317,9 @@ import("./network/browser/v86-host-bridge.js").then(module => {
 
 const llmStatus = message => document.getElementById("llm-status").textContent = "WebGPU LLM: " + message;
 const browserStatus = message => document.getElementById("browser-status").textContent = "AutoBro: " + message;
-async function connectAutoBro({ interactive = true, extensionId = null, token = null } = {}) {
+async function connectAutoBro({ extensionId = null, token = null } = {}) {
   const storedId = localStorage.getItem("herdr.autobroExtensionId") || "";
   const storedToken = sessionStorage.getItem("herdr.autobroPairingToken") || "";
-  if (interactive) {
-    document.getElementById("autobro-extension-id").value = storedId;
-    document.getElementById("autobro-pairing-token").value = storedToken;
-    document.getElementById("autobro-dialog").showModal();
-    return;
-  }
   extensionId ??= storedId;
   token ??= storedToken;
   if (!extensionId || !token) return;
@@ -370,17 +347,6 @@ async function connectAutoBro({ interactive = true, extensionId = null, token = 
     return false;
   }
 }
-document.getElementById("connect-autobro").onclick = () => connectAutoBro();
-const autobroDialog = document.getElementById("autobro-dialog");
-document.getElementById("cancel-autobro").onclick = () => autobroDialog.close();
-document.getElementById("autobro-form").onsubmit = event => {
-  event.preventDefault();
-  const extensionId = document.getElementById("autobro-extension-id").value.trim();
-  const token = document.getElementById("autobro-pairing-token").value.trim();
-  if (!extensionId || !token) return;
-  autobroDialog.close();
-  connectAutoBro({ interactive: false, extensionId, token });
-};
 const settingsDialog = document.getElementById("settings-dialog");
 document.getElementById("open-settings").onclick = () => settingsDialog.showModal();
 document.getElementById("close-settings").onclick = () => settingsDialog.close();
@@ -416,8 +382,6 @@ document.getElementById("reset-autobro").onclick = () => {
   autobroCheckComplete = true;
   localStorage.removeItem("herdr.autobroExtensionId");
   sessionStorage.removeItem("herdr.autobroPairingToken");
-  document.getElementById("autobro-extension-id").value = "";
-  document.getElementById("autobro-pairing-token").value = "";
   document.getElementById("setup-autobro-extension-id").value = "";
   document.getElementById("setup-autobro-token").value = "";
   document.getElementById("setup-autobro-status").textContent = "AutoBro is not connected.";
@@ -432,14 +396,13 @@ document.getElementById("setup-autobro-form").onsubmit = event => {
   const token = document.getElementById("setup-autobro-token").value.trim();
   if (!extensionId || !token) return;
   document.getElementById("setup-autobro-status").textContent = "Pairing…";
-  connectAutoBro({ interactive: false, extensionId, token });
+  connectAutoBro({ extensionId, token });
 };
 document.getElementById("setup-autobro-extension-id").value = localStorage.getItem("herdr.autobroExtensionId") || "";
 document.getElementById("setup-autobro-token").value = sessionStorage.getItem("herdr.autobroPairingToken") || "";
-if (localStorage.getItem("herdr.autobroExtensionId") && sessionStorage.getItem("herdr.autobroPairingToken")) connectAutoBro({ interactive: false });
+if (localStorage.getItem("herdr.autobroExtensionId") && sessionStorage.getItem("herdr.autobroPairingToken")) connectAutoBro();
 else autobroCheckComplete = true;
 const llmFileInput = document.getElementById("llm-file-input");
-document.getElementById("configure-llm").onclick = () => llmFileInput.click();
 document.getElementById("setup-configure-llm").onclick = () => llmFileInput.click();
 try {
   const { LiteRtLmClient } = await import("./network/browser/litert-lm-client.js");
