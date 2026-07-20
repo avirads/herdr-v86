@@ -18,6 +18,7 @@
 <header>
   <h1>herdr-vm</h1>
   <div id="status">loading v86…</div>
+  <div id="network-status">network: disabled</div>
 </header>
 <div id="term"></div>
 <div id="screen_container">
@@ -26,10 +27,11 @@
 </div>
 
 <script src="xterm.js"></script>
-<script src="libv86.js"></script>
+<script src="libv86-network.js"></script>
 <script>
 "use strict";
 const status = (m) => document.getElementById("status").textContent = m;
+const networkStatus = (m) => document.getElementById("network-status").textContent = "network: " + m;
 
 const term = new Terminal({
   cols: 100, rows: 32,
@@ -42,17 +44,38 @@ const term = new Terminal({
 term.open(document.getElementById("term"));
 
 const emulator = new V86({
-  wasm_path: "v86.wasm",
+  wasm_path: "v86-network.wasm",
   memory_size: 256 * 1024 * 1024,
   vga_memory_size: 2 * 1024 * 1024,
   bios: { url: "seabios.bin" },
   vga_bios: { url: "vgabios.bin" },
-  bzimage: { url: "bzImage" },
-  cmdline: "root=/dev/sda rw console=ttyS0 tsc=reliable",
-  hda: { url: "herdr-vm-ext4.img", async: true, size: 100663296 },
+  bzimage: { url: "bzImage-network" },
+  cmdline: "root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic",
+  hda: { url: "herdr-vm-network-ext4.img", async: true, size: 100663296 },
+  net_device: { type: "virtio" },
   screen_container: document.getElementById("screen_container"),
   autostart: true,
 });
+
+// A backend creates a short-lived session through POST /v1/sessions and gives
+// the browser the gateway URL + token in the fragment (fragments are not sent
+// to this static web server). Example:
+// #gateway=ws%3A%2F%2F127.0.0.1%3A8086%2Fv1%2Fethernet&token=...
+const networkConfig = new URLSearchParams(location.hash.slice(1));
+const gatewayURL = networkConfig.get("gateway");
+const sessionToken = networkConfig.get("token");
+if (gatewayURL && sessionToken) {
+  history.replaceState(null, "", location.pathname + location.search);
+  import("./network/browser/v86-websocket-network.js")
+    .then(({ V86WebSocketNetwork }) => {
+      window.v86Network = new V86WebSocketNetwork(emulator, {
+        url: gatewayURL,
+        token: sessionToken,
+        onStatus: networkStatus,
+      }).start();
+    })
+    .catch(error => networkStatus("error — " + error.message));
+}
 
 emulator.add_listener("emulator-ready", () => status("emulator ready — booting… (first boot ~30-90s)"));
 emulator.add_listener("download-progress", (e) => {

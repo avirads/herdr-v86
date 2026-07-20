@@ -1,0 +1,14 @@
+#!/bin/sh
+mount -t proc proc /proc 2>/dev/null
+mount -t sysfs sys /sys 2>/dev/null
+mount -t devtmpfs dev /dev 2>/dev/null
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts 2>/dev/null
+mount -t tmpfs -o mode=1777 tmpfs /tmp 2>/dev/null
+mount -t tmpfs tmpfs /run 2>/dev/null
+hostname herdr-vm
+
+# Networking is deliberately non-blocking: the shell and herdr still start if
+# the browser has no network session or the gateway is temporarily offline.
+ip link set eth0 up 2>/dev/null || true
+udhcpc -i eth0 -q -t 10 -T 1 >/var/log/udhcpc.log 2>&1 &

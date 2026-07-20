@@ -1,0 +1,21 @@
+[Unit]
+Description=herdr v86 network gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/v86net/gateway.env
+ExecStart=/usr/local/bin/v86net-gateway -listen 127.0.0.1:8086 -tap v86tap0
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Opening an existing TAP requires network-administration capability.
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+
+[Install]
+WantedBy=multi-user.target

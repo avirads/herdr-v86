@@ -6,6 +6,10 @@ Artifacts for running [herdr](https://herdr.dev) inside a v86 browser VM.
   static i686-musl). Init mounts proc/sysfs/devpts/tmpfs and spawns shells on ttyS0 + tty1.
 - `herdr-alpine-x86-rootfs.tar.gz` — same tree, for 9p setups.
 - `herdr-i686` — the standalone static binary.
+- `bzImage-network` + `herdr-vm-network-ext4.img` — network-enabled demo kernel
+  and Alpine guest with DHCP, CA certificates, and full HTTPS curl support.
+- `network/` — authenticated WebSocket-to-TAP gateway, v86 adapter, guest build
+  recipes, and automated DHCP/DNS/ping/HTTPS test.
 - `herdr-i686.patch` — patch against herdr v0.7.4: adds i686 targets to the
   libghostty-vt zig target map, and gates 46 bindgen layout-test blocks that
   hardcode 64-bit sizes (the only genuine 32-bit blocker).
@@ -13,6 +17,9 @@ Artifacts for running [herdr](https://herdr.dev) inside a v86 browser VM.
 
 Boot args (disk image route): `root=/dev/sda rw console=ttyS0`
 Needs an i686 kernel with 8250 serial + ext4 (or 9p/virtio for the tarball route).
+
+The default `index.html` uses the network-enabled artifacts and accepts a
+short-lived gateway session in its URL fragment. See [network/README.md](network/README.md).
 
 ## Hosting
 

@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>herdr-v86 network e2e</title>
+<pre id="status">booting</pre>
+<pre id="serial"></pre>
+<div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+import { V86WebSocketNetwork } from '../browser/v86-websocket-network.js';
+
+const config = new URLSearchParams(location.hash.slice(1));
+const gateway = config.get('gateway');
+const token = config.get('token');
+history.replaceState(null, '', location.pathname);
+
+const status = document.querySelector('#status');
+const serialElement = document.querySelector('#serial');
+let serial = '';
+let started = false;
+let submitted = false;
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 256 * 1024 * 1024,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+  hda: { url: '../../herdr-vm-network-ext4.img', async: true, size: 100663296 },
+  net_device: { type: 'virtio' },
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+new V86WebSocketNetwork(emulator, {
+  url: gateway,
+  token,
+  onStatus: state => status.textContent = `network ${state}`,
+}).start();
+
+async function submit() {
+  if (submitted) return;
+  submitted = true;
+  const result = {
+    dhcp: /inet 10\.77\.0\.\d+\/24/.test(serial) && /default via 10\.77\.0\.1/.test(serial),
+    dns: /Name:\s*example\.com/i.test(serial) || /Address:\s*(?:104\.|172\.)/.test(serial),
+    ping: /2 packets transmitted, 2 (?:packets )?received, 0% packet loss/.test(serial),
+    https: /HTTP\/(?:1\.1|2) 200/.test(serial),
+    serial,
+  };
+  result.ok = result.dhcp && result.dns && result.ping && result.https;
+  status.textContent = result.ok ? 'PASS' : 'FAIL';
+  await fetch('/__result', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(result) });
+}
+
+emulator.add_listener('serial0-output-byte', byte => {
+  serial += String.fromCharCode(byte);
+  if (serial.length > 100000) serial = serial.slice(-100000);
+  serialElement.textContent = serial;
+  if (!started && /(?:herdr-vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    started = true;
+    emulator.serial0_send(`
+echo V86NET_E2E_BEGIN
+ip link set eth0 up
+ip -4 address show dev eth0 | grep -q 'inet ' || udhcpc -i eth0 -n -q -t 10
+echo DHCP_RESULT
+ip -4 address show dev eth0
+ip route
+echo DNS_RESULT
+nslookup example.com
+echo PING_RESULT
+ping -c 2 -W 3 1.1.1.1
+echo HTTPS_RESULT
+curl -fsSI --max-time 20 https://example.com
+echo V86NET_E2E_END
+`.trimStart());
+  }
+  if (serial.includes('V86NET_E2E_END')) submit();
+});
+
+setTimeout(() => submit(), 120000);
+</script>

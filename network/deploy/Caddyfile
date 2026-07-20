@@ -1,0 +1,13 @@
+# Public TLS endpoint for the packet tunnel. The session-management API stays
+# private on loopback; a trusted application backend calls it directly.
+gateway.example.com {
+    encode zstd gzip
+
+    @ethernet path /v1/ethernet
+    reverse_proxy @ethernet 127.0.0.1:8086
+
+    @health path /health
+    reverse_proxy @health 127.0.0.1:8086
+
+    respond 404
+}
