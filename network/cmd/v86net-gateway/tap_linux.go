@@ -7,6 +7,8 @@ import (
 	"os"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -26,9 +28,14 @@ func openTAP(name string) (*os.File, error) {
 	if name == "" || len(name) >= ifNameLen {
 		return nil, fmt.Errorf("invalid interface name %q", name)
 	}
-	file, err := os.OpenFile("/dev/net/tun", os.O_RDWR, 0)
+	fd, err := unix.Open("/dev/net/tun", unix.O_RDWR|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), "/dev/net/tun")
+	if file == nil {
+		_ = unix.Close(fd)
+		return nil, fmt.Errorf("wrap /dev/net/tun descriptor")
 	}
 	request := ifRequest{Flags: iffTAP | iffNoPI}
 	copy(request.Name[:], name)
