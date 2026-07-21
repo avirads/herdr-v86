@@ -567,11 +567,14 @@ document.getElementById("close-remote").onclick = () => remoteDialog.close();
 document.getElementById("remote-host").onclick = async () => {
   remoteStatus.textContent = "Starting secure WebRTC host…";
   try {
-    if (!llmReady) throw new Error("configure the WebGPU LLM on this desktop first");
+    if (!bootReady || !setupFinished) throw new Error("wait for the VM shell to be ready first");
+    const modelPending = !llmReady;
     const key = await (await getRemoteLlmPeer()).host();
     remoteKey.value = key;
     document.getElementById("remote-copy").hidden = false;
-    remoteStatus.textContent = "Share this one-time pairing key with your phone. Keep this page open.";
+    remoteStatus.textContent = modelPending
+      ? "Share this one-time pairing key with your phone. Hosting is ready; configure a model before sending a chat message."
+      : "Share this one-time pairing key with your phone. Keep this page open.";
   } catch (error) { remoteStatus.textContent = "Host failed: " + error.message; }
 };
 document.getElementById("remote-copy").onclick = async () => {

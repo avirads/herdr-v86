@@ -78,7 +78,7 @@ model are MIT-licensed; the bundled license is in
 
 A phone can chat directly with the WebGPU LLM loaded by a desktop VM page:
 
-1. On the desktop, open **Settings → Remote access** and select **Host this LLM**.
+1. Once the desktop VM shell is available, open **Settings → Remote access** and select **Host this LLM**. Hosting and pairing can start before a model is loaded; configure a model before sending the first chat message.
 2. Copy the generated session pairing key.
 3. On the phone, open [`remote.html`](remote.html) directly or select **Connect to a desktop LLM instead** during startup, paste the key, and connect.
 4. Use the Remote LLM chat form. Requests go directly to the desktop model and do not invoke `vmagent` or DeepAgentsJS.

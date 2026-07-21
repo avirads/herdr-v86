@@ -18,6 +18,20 @@ class FakeConnection {
   close() { this.open = false; }
 }
 
+class FakePeer {
+  constructor() { this.handlers = new Map(); queueMicrotask(() => this.emit('open', 'desktop-peer')); }
+  on(type, handler) { const handlers = this.handlers.get(type) || []; handlers.push(handler); this.handlers.set(type, handlers); }
+  once(type, handler) { this.on(type, handler); }
+  emit(type, value) { for (const handler of this.handlers.get(type) || []) handler(value); }
+  destroy() {}
+}
+
+test('remote hosting can start before the desktop model is loaded', async () => {
+  const remote = new RemoteLlmPeer({ Peer: FakePeer, getLlmClient: () => null });
+  const key = await remote.host();
+  assert.match(key, /^desktop-peer\.[a-f0-9]{32}$/);
+});
+
 test('remote LLM host authenticates and serves a direct model response', async () => {
   const remote = new RemoteLlmPeer({
     Peer: class {},
