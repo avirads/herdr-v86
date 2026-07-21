@@ -21,7 +21,7 @@ AutoBro independently without repeating the other provider's setup.
 
 - `bzImage-network` + `vm-network-ext4.img` — default network-enabled demo
   kernel and Alpine shell guest with DHCP, CA certificates, full HTTPS curl,
-  and browser-bridge tools.
+  browser-bridge tools, tmux 3.5a, and Zellij 0.44.3.
 - `network/` — authenticated WebSocket-to-TAP gateway, v86 adapter, guest build
   recipes, and automated DHCP/DNS/ping/HTTPS test.
 

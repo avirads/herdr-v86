@@ -168,6 +168,28 @@ DNS:     10.77.0.1
 The admin token is server-side only. A trusted application backend creates an
 origin-bound, short-lived browser session:
 
+Install the included convenience command on the gateway once:
+
+```bash
+sudo install -m 0755 scripts/v86net-token /usr/local/bin/v86net-token
+```
+
+It creates a one-hour session and prints a ready-to-open VM URL without
+displaying the server's admin token:
+
+```bash
+sudo v86net-token
+```
+
+An optional first argument selects the lifetime in seconds (maximum 3600), and
+an optional second argument selects the exact browser origin:
+
+```bash
+sudo v86net-token 900 https://avirads.github.io
+```
+
+The equivalent raw API request is:
+
 ```bash
 curl -X POST http://127.0.0.1:8086/v1/sessions \
   -H "Authorization: Bearer $V86NET_ADMIN_TOKEN" \
@@ -204,8 +226,13 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
   boot parameters and built-in VirtIO/NE2000 networking.
 - `../../vm-network-ext4.img`: Alpine x86 image with automatic DHCP,
   CA certificates, and curl/OpenSSL supporting HTTPS, HTTP/2, WSS, and common
-  network protocols.
-- `guest/build-kernel.sh` and `guest/build-network-image.sh` reproduce them.
+  network protocols. The image also includes tmux 3.5a and the packaged native
+  x86 build of Zellij 0.44.3.
+- `guest/build-zellij-x86.sh` builds the version-pinned Zellij package in an
+  isolated Alpine x86 environment. It requires root for the x86 chroot and can
+  take around 15–20 minutes with release link-time optimization.
+- `guest/build-kernel.sh` and `guest/build-network-image.sh` reproduce the
+  kernel and guest image.
 
 ## Automated verification
 

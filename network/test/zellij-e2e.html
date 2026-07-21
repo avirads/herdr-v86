@@ -1,0 +1,50 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Zellij v86 boot test</title>
+<pre id="serial"></pre>
+<div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script>
+let serial = '';
+let started = false;
+let submitted = false;
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 256 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+
+async function submit(ok, reason = '') {
+  if (submitted) return;
+  submitted = true;
+  await fetch('/__result', {
+    method: 'POST',
+    body: JSON.stringify({ ok, reason, serial }),
+  });
+}
+
+emulator.add_listener('serial0-output-byte', byte => {
+  serial = (serial + String.fromCharCode(byte)).slice(-200000);
+  document.querySelector('#serial').textContent = serial;
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    started = true;
+    emulator.serial0_send("stty rows 32 cols 100; printf 'ZELLIJ_VERSION='; zellij --version; echo ZELLIJ_BOOT_BEGIN; zellij --session v86-e2e options --simplified-ui true; printf 'ZELLIJ_EXIT=%s\\n' $?; echo ZELLIJ_BOOT_END\n");
+    // Allow first-run plugin extraction and a rendered frame before quitting.
+    setTimeout(() => emulator.serial0_send('\x11'), 25000);
+  }
+  if (serial.includes('ZELLIJ_BOOT_END')) {
+    const ok = serial.includes('zellij 0.44.3') && /ZELLIJ_EXIT=0/.test(serial);
+    submit(ok, ok ? '' : 'Zellij did not start and exit cleanly');
+  }
+});
+
+setTimeout(() => submit(false, 'Zellij v86 boot test timed out'), 90000);
+</script>
