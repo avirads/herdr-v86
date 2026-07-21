@@ -96,6 +96,7 @@
         <button id="setup-configure-llm" type="button">Choose model file</button>
         <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download model (~2 GB)</a>
         <button id="setup-connect-remote" type="button">Connect to desktop LLM</button>
+        <button id="skip-setup-llm" type="button">Skip setup and open shell</button>
       </div>
       <div id="setup-llm-status" class="setup-status">Checking for a configured model…</div>
     </section>
@@ -115,7 +116,7 @@
         <div class="setup-actions">
           <a class="tool-link" href="downloads/autobro-web-bridge-0.3.0.zip" download>Download AutoBro</a>
           <button type="submit">Connect and open shell</button>
-          <button id="skip-autobro" type="button" hidden>Skip AutoBro and open shell</button>
+          <button id="skip-autobro" type="button">Skip setup and open shell</button>
         </div>
       </form>
       <div id="setup-autobro-status" class="setup-status">AutoBro is not connected.</div>
@@ -146,6 +147,11 @@
   <div class="settings-action">
     <div><strong>Remote LLM</strong><br><small>Host this model or chat with a paired desktop over WebRTC.</small></div>
     <button id="open-remote" type="button">Remote access</button>
+  </div>
+  <div class="settings-action">
+    <div><strong>Configure providers</strong><br><small>Configure the browser model or connect AutoBro after skipping setup.</small></div>
+    <button id="configure-llm-later" type="button">Configure model</button>
+    <button id="configure-autobro-later" type="button">Connect AutoBro</button>
   </div>
   <div class="settings-action">
     <div><strong>Local voice input</strong><br><small>Moonshine Tiny transcribes the microphone locally in this browser.</small></div>
@@ -211,6 +217,8 @@ let bootReady = false;
 let llmReady = false;
 let autobroReady = false;
 let autobroSkipped = localStorage.getItem("herdr.autobroSkipped") === "true";
+let setupSkipped = localStorage.getItem("herdr.setupSkipped") === "true";
+let requestedSetupStep = null;
 let llmCheckComplete = false;
 let autobroCheckComplete = false;
 let setupFinished = false;
@@ -222,7 +230,7 @@ function updateSetupWizard() {
     return;
   }
   bootOverlay.classList.add("done");
-  if (llmReady && autobroReady) {
+  if ((llmReady && autobroReady) || (setupSkipped && !requestedSetupStep)) {
     setupFinished = true;
     setupOverlay.classList.remove("active");
     document.getElementById("term").style.visibility = "visible";
@@ -231,7 +239,7 @@ function updateSetupWizard() {
     return;
   }
   setupOverlay.classList.add("active");
-  const onAutoBro = llmReady;
+  const onAutoBro = requestedSetupStep ? requestedSetupStep === "autobro" : llmReady;
   document.getElementById("setup-step-llm").hidden = onAutoBro;
   document.getElementById("setup-step-autobro").hidden = !onAutoBro;
   document.getElementById("setup-progress").textContent = onAutoBro ? "Step 2 of 2" : "Step 1 of 2";
@@ -521,6 +529,7 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
     browserStatus(`connected — bridge v${health.bridgeVersion || "?"}`);
     autobroReady = true;
     autobroCheckComplete = true;
+    requestedSetupStep = null;
     document.getElementById("setup-autobro-status").textContent = `Connected — bridge v${health.bridgeVersion || "?"}`;
     updateSetupWizard();
     return true;
@@ -609,10 +618,33 @@ document.getElementById("remote-chat-form").onsubmit = async event => {
   }
 };
 function returnToSetup() {
+  setupSkipped = false;
+  requestedSetupStep = null;
+  localStorage.removeItem("herdr.setupSkipped");
   setupFinished = false;
   document.getElementById("term").style.visibility = "hidden";
   updateSetupWizard();
 }
+function openSetupStep(step) {
+  requestedSetupStep = step;
+  setupFinished = false;
+  settingsDialog.close();
+  document.getElementById("term").style.visibility = "hidden";
+  updateSetupWizard();
+}
+function skipSetupAndOpenShell() {
+  setupSkipped = true;
+  requestedSetupStep = null;
+  setupFinished = true;
+  localStorage.setItem("herdr.setupSkipped", "true");
+  setupOverlay.classList.remove("active");
+  document.getElementById("term").style.visibility = "visible";
+  status("Shell ready — providers can be configured in Settings");
+  term.focus();
+}
+document.getElementById("configure-llm-later").onclick = () => openSetupStep("llm");
+document.getElementById("configure-autobro-later").onclick = () => openSetupStep("autobro");
+document.getElementById("skip-setup-llm").onclick = skipSetupAndOpenShell;
 document.getElementById("reset-llm").onclick = async () => {
   if (!confirm("Reset the WebGPU LLM and delete its cached model files from this browser?")) return;
   const button = document.getElementById("reset-llm");
@@ -672,16 +704,13 @@ const extensionMessagingUnavailable = !globalThis.chrome?.runtime?.sendMessage;
 const mobileBrowser = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 if (mobileBrowser && extensionMessagingUnavailable) {
   document.getElementById("autobro-unavailable").hidden = false;
-  document.getElementById("skip-autobro").hidden = false;
   document.getElementById("setup-autobro-form").querySelectorAll("input, button[type=submit]").forEach(element => { element.disabled = true; });
 }
 document.getElementById("skip-autobro").onclick = () => {
   autobroSkipped = true;
   localStorage.setItem("herdr.autobroSkipped", "true");
-  autobroReady = true;
-  autobroCheckComplete = true;
   browserStatus("skipped — unavailable on mobile");
-  updateSetupWizard();
+  skipSetupAndOpenShell();
 };
 document.getElementById("setup-autobro-extension-id").value = localStorage.getItem("herdr.autobroExtensionId") || "";
 document.getElementById("setup-autobro-token").value = sessionStorage.getItem("herdr.autobroPairingToken") || "";
@@ -725,6 +754,7 @@ try {
       hostBridge?.setLlmClient(client);
       llmStatus(`ready — ${client.modelName}`);
       llmReady = true;
+      requestedSetupStep = null;
       document.getElementById("setup-llm-status").textContent = `Ready — ${client.modelName}`;
       updateSetupWizard();
     } catch (error) {
