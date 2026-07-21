@@ -133,6 +133,7 @@ test('authenticated phone audio is transcribed on desktop and answered by the LL
   assert.equal(receivedAudio.audio.byteLength, 3);
   assert.deepEqual(connection.sent, [
     { type: 'auth.ok' },
+    { type: 'voice.progress', id: 'voice-1', stage: 'Recording received by desktop' },
     { type: 'voice.transcript', id: 'voice-1', text: 'spoken request' },
     { type: 'llm.chunk', id: 'voice-1', delta: 'voice answer' },
     { type: 'llm.done', id: 'voice-1' },
@@ -146,18 +147,22 @@ test('mobile voice request exposes transcript and streamed response callbacks', 
   mobile.bindResults(connection);
   let transcript = '';
   let streamed = '';
+  let progress = '';
   const result = mobile.voice(new Uint8Array([1]).buffer, {
     mimeType: 'audio/webm',
     onTranscript: value => { transcript = value; },
     onChunk: value => { streamed += value; },
+    onProgress: value => { progress = value; },
   });
   const request = connection.sent[0];
+  connection.emit('data', { type: 'voice.progress', id: request.id, stage: 'Transcribing locally on desktop' });
   connection.emit('data', { type: 'voice.transcript', id: request.id, text: 'hello by voice' });
   connection.emit('data', { type: 'llm.chunk', id: request.id, delta: 'hello back' });
   connection.emit('data', { type: 'llm.done', id: request.id });
   assert.equal(await result, 'hello back');
   assert.equal(transcript, 'hello by voice');
   assert.equal(streamed, 'hello back');
+  assert.equal(progress, 'Transcribing locally on desktop');
   assert.equal(request.type, 'voice.transcribe');
 });
 

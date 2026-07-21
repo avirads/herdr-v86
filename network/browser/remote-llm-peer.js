@@ -81,7 +81,9 @@ export class RemoteLlmPeer extends EventTarget {
           if (!audio || !audio.byteLength || audio.byteLength > 12 * 1024 * 1024) throw new Error('voice recording must be between 1 byte and 12 MiB');
           if (!this.transcribeAudio) throw new Error('desktop voice transcription is unavailable');
           this.activity(`received voice recording (${Math.ceil(audio.byteLength / 1024)} KiB)`, { kind: 'traffic', direction: 'in', id: message.id });
-          prompt = String(await this.transcribeAudio(audio, message.mimeType || '') || '').trim();
+          const progress = stage => connection.send({ type: 'voice.progress', id: message.id, stage });
+          progress('Recording received by desktop');
+          prompt = String(await this.transcribeAudio(audio, message.mimeType || '', progress) || '').trim();
           if (!prompt) throw new Error('no speech was recognized');
           this.activity('transcript sent to phone and LLM', { kind: 'traffic', direction: 'out', id: message.id, content: prompt });
           connection.send({ type: 'voice.transcript', id: message.id, text: prompt });
@@ -168,6 +170,12 @@ export class RemoteLlmPeer extends EventTarget {
         pending.onTranscript?.(message.text || '');
         return;
       }
+      if (message.type === 'voice.progress') {
+        clearTimeout(pending.timer);
+        pending.timer = this.responseTimer(message.id, pending.reject);
+        pending.onProgress?.(message.stage || 'Processing voice request');
+        return;
+      }
       clearTimeout(pending.timer);
       this.pending.delete(message.id);
       if (message.type === 'llm.done') pending.resolve(pending.content);
@@ -184,11 +192,11 @@ export class RemoteLlmPeer extends EventTarget {
     }, REQUEST_TIMEOUT_MS);
   }
 
-  request(message, { onChunk, onTranscript } = {}) {
+  request(message, { onChunk, onTranscript, onProgress } = {}) {
     const id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timer = this.responseTimer(id, reject);
-      this.pending.set(id, { resolve, reject, timer, onChunk, onTranscript, content: '' });
+      this.pending.set(id, { resolve, reject, timer, onChunk, onTranscript, onProgress, content: '' });
       try { send(this.connection, { ...message, id }); }
       catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
@@ -198,9 +206,9 @@ export class RemoteLlmPeer extends EventTarget {
     return this.request({ type: 'llm.chat', prompt }, options);
   }
 
-  voice(audio, { mimeType = '', onChunk, onTranscript } = {}) {
+  voice(audio, { mimeType = '', onChunk, onTranscript, onProgress } = {}) {
     if (!(audio instanceof ArrayBuffer)) throw new TypeError('voice audio must be an ArrayBuffer');
-    return this.request({ type: 'voice.transcribe', audio, mimeType }, { onChunk, onTranscript });
+    return this.request({ type: 'voice.transcribe', audio, mimeType }, { onChunk, onTranscript, onProgress });
   }
 
   close() {

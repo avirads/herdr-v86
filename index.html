@@ -538,11 +538,19 @@ async function getRemoteMoonshineModel() {
   })().catch(error => { remoteMoonshineModelPromise = null; throw error; });
   return remoteMoonshineModelPromise;
 }
-async function transcribeRemoteAudio(encodedAudio) {
+function withVoiceTimeout(promise, milliseconds, stage) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${stage} timed out`)), milliseconds); }),
+  ]).finally(() => clearTimeout(timer));
+}
+async function transcribeRemoteAudio(encodedAudio, mimeType, onProgress = () => {}) {
   remoteStatus.textContent = "Decoding phone recording…";
+  onProgress("Decoding recording on desktop");
   const decodeContext = new AudioContext();
   let decoded;
-  try { decoded = await decodeContext.decodeAudioData(encodedAudio.slice(0)); }
+  try { decoded = await withVoiceTimeout(decodeContext.decodeAudioData(encodedAudio.slice(0)), 30000, "audio decoding"); }
   finally { await decodeContext.close(); }
   if (!decoded.duration || decoded.duration > 35) throw new Error("voice recording must be 35 seconds or shorter");
   const sampleRate = 16000;
@@ -553,8 +561,10 @@ async function transcribeRemoteAudio(encodedAudio) {
   source.start();
   const rendered = await offline.startRendering();
   remoteStatus.textContent = "Transcribing phone recording locally…";
-  const model = await getRemoteMoonshineModel();
-  return String(await model.generate(rendered.getChannelData(0)) || "").trim();
+  onProgress("Loading desktop Moonshine model");
+  const model = await withVoiceTimeout(getRemoteMoonshineModel(), 180000, "Moonshine model loading");
+  onProgress("Transcribing locally on desktop");
+  return String(await withVoiceTimeout(Promise.resolve(model.generate(rendered.getChannelData(0))), 120000, "voice transcription") || "").trim();
 }
 voiceButton.onclick = () => voiceListening ? stopVoiceInput() : startVoiceInput();
 if (!isSecureContext || !navigator.mediaDevices?.getUserMedia) voiceStatus("unsupported in this browser");
@@ -608,7 +618,7 @@ function logRemoteActivity(detail) {
 async function getRemoteLlmPeer() {
   if (remoteLlmPeer) return remoteLlmPeer;
   if (!globalThis.Peer) throw new Error("PeerJS signaling library did not load");
-  const { RemoteLlmPeer } = await import("./network/browser/remote-llm-peer.js?v=20260721-voice1");
+  const { RemoteLlmPeer } = await import("./network/browser/remote-llm-peer.js?v=20260721-voice2");
   remoteLlmPeer = new RemoteLlmPeer({
     Peer: globalThis.Peer,
     getLlmClient: () => webGpuLlmClient,
