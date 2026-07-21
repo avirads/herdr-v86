@@ -24,6 +24,9 @@
   #log { min-height: 180px; overflow-y: auto; padding: 12px; border: 1px solid #30363d; border-radius: 8px; background: #161b22; white-space: pre-wrap; line-height: 1.5; }
   #chat-form { display: flex; gap: 8px; }
   #prompt { flex: 1; min-width: 0; }
+  #voice-controls { display: flex; align-items: center; gap: 10px; }
+  #record.recording { background: #8b1a1a; color: white; }
+  #voice-status { color: #8b949e; }
   a { color: #58a6ff; }
   @media (max-width: 520px) { #chat-form { flex-direction: column; } #send { width: 100%; } }
 </style>
@@ -47,6 +50,10 @@
       <input id="prompt" required autocomplete="off" placeholder="Message the desktop LLM">
       <button id="send" type="submit">Send</button>
     </form>
+    <div id="voice-controls">
+      <button id="record" type="button">🎙 Record</button>
+      <small id="voice-status">Voice is transcribed on the desktop</small>
+    </div>
   </section>
 </main>
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" crossorigin="anonymous"></script>
@@ -60,7 +67,13 @@ const key = document.getElementById('key');
 const connectButton = document.getElementById('connect');
 const log = document.getElementById('log');
 const prompt = document.getElementById('prompt');
+const recordButton = document.getElementById('record');
+const voiceStatus = document.getElementById('voice-status');
 let remote;
+let recorder;
+let recordingStream;
+let recordingChunks = [];
+let recordingTimer;
 
 document.getElementById('connect').onclick = async () => {
   if (!key.value.trim()) return;
@@ -102,6 +115,78 @@ document.getElementById('chat-form').onsubmit = async event => {
   catch (error) { log.textContent += `[error: ${error.message}]\n\n`; }
   finally { send.disabled = false; log.scrollTop = log.scrollHeight; prompt.focus(); }
 };
+
+function supportedRecordingType() {
+  return ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(type => MediaRecorder.isTypeSupported(type)) || '';
+}
+
+async function submitVoice(blob) {
+  recordButton.disabled = true;
+  document.getElementById('send').disabled = true;
+  voiceStatus.textContent = 'Sending to desktop…';
+  log.textContent += 'You (voice): ';
+  let streamed = false;
+  try {
+    const answer = await remote.voice(await blob.arrayBuffer(), {
+      mimeType: blob.type,
+      onTranscript: text => {
+        log.textContent += `${text}\n\nDesktop LLM: `;
+        voiceStatus.textContent = `Transcript: ${text}`;
+        log.scrollTop = log.scrollHeight;
+      },
+      onChunk: delta => {
+        streamed = true;
+        log.textContent += delta;
+        log.scrollTop = log.scrollHeight;
+      },
+    });
+    if (!streamed) log.textContent += answer;
+    log.textContent += '\n\n';
+    voiceStatus.textContent = 'Voice is transcribed on the desktop';
+  } catch (error) {
+    log.textContent += `[error: ${error.message}]\n\n`;
+    voiceStatus.textContent = 'Voice failed: ' + error.message;
+  } finally {
+    recordButton.disabled = false;
+    document.getElementById('send').disabled = false;
+    log.scrollTop = log.scrollHeight;
+  }
+}
+
+async function startRecording() {
+  if (!navigator.mediaDevices?.getUserMedia || !globalThis.MediaRecorder) throw new Error('voice recording is unsupported in this browser');
+  recordingStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  const mimeType = supportedRecordingType();
+  recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType, audioBitsPerSecond: 32000 } : { audioBitsPerSecond: 32000 });
+  recordingChunks = [];
+  recorder.ondataavailable = event => { if (event.data.size) recordingChunks.push(event.data); };
+  recorder.onstop = () => {
+    clearTimeout(recordingTimer);
+    recordingStream?.getTracks().forEach(track => track.stop());
+    const blob = new Blob(recordingChunks, { type: recorder.mimeType || mimeType });
+    recorder = null;
+    recordingStream = null;
+    recordButton.classList.remove('recording');
+    recordButton.textContent = '🎙 Record';
+    if (blob.size) submitVoice(blob);
+  };
+  recorder.start(500);
+  recordButton.classList.add('recording');
+  recordButton.textContent = '■ Stop';
+  voiceStatus.textContent = 'Recording… tap Stop when finished';
+  recordingTimer = setTimeout(() => stopRecording(), 30000);
+}
+
+function stopRecording() {
+  if (recorder?.state === 'recording') recorder.stop();
+}
+
+recordButton.onclick = async () => {
+  if (recorder?.state === 'recording') return stopRecording();
+  try { await startRecording(); }
+  catch (error) { voiceStatus.textContent = 'Voice unavailable: ' + error.message; }
+};
+if (!navigator.mediaDevices?.getUserMedia || !globalThis.MediaRecorder) recordButton.disabled = true;
 </script>
 </body>
 </html>

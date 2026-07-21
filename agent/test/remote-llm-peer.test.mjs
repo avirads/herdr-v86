@@ -107,6 +107,60 @@ test('LiteRT and WebRTC stream generated chunks to the mobile client', async () 
   assert.deepEqual(chunks, ['hello ', 'mobile']);
 });
 
+test('authenticated phone audio is transcribed on desktop and answered by the LLM', async () => {
+  let receivedAudio;
+  const host = new RemoteLlmPeer({
+    Peer: class {},
+    transcribeAudio: async (audio, mimeType) => {
+      receivedAudio = { audio, mimeType };
+      return 'spoken request';
+    },
+    getLlmClient: () => ({
+      async chatStream(body, onChunk) {
+        assert.equal(body.messages[0].content, 'spoken request');
+        await onChunk('voice answer');
+        return { choices: [{ message: { content: 'voice answer' } }] };
+      },
+    }),
+  });
+  host.secret = 'c'.repeat(32);
+  const connection = new FakeConnection();
+  host.accept(connection);
+  connection.emit('data', { type: 'auth', secret: host.secret });
+  connection.emit('data', { type: 'voice.transcribe', id: 'voice-1', mimeType: 'audio/webm;codecs=opus', audio: new Uint8Array([1, 2, 3]).buffer });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(receivedAudio.mimeType, 'audio/webm;codecs=opus');
+  assert.equal(receivedAudio.audio.byteLength, 3);
+  assert.deepEqual(connection.sent, [
+    { type: 'auth.ok' },
+    { type: 'voice.transcript', id: 'voice-1', text: 'spoken request' },
+    { type: 'llm.chunk', id: 'voice-1', delta: 'voice answer' },
+    { type: 'llm.done', id: 'voice-1' },
+  ]);
+});
+
+test('mobile voice request exposes transcript and streamed response callbacks', async () => {
+  const mobile = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => null });
+  const connection = new FakeConnection();
+  mobile.connection = connection;
+  mobile.bindResults(connection);
+  let transcript = '';
+  let streamed = '';
+  const result = mobile.voice(new Uint8Array([1]).buffer, {
+    mimeType: 'audio/webm',
+    onTranscript: value => { transcript = value; },
+    onChunk: value => { streamed += value; },
+  });
+  const request = connection.sent[0];
+  connection.emit('data', { type: 'voice.transcript', id: request.id, text: 'hello by voice' });
+  connection.emit('data', { type: 'llm.chunk', id: request.id, delta: 'hello back' });
+  connection.emit('data', { type: 'llm.done', id: request.id });
+  assert.equal(await result, 'hello back');
+  assert.equal(transcript, 'hello by voice');
+  assert.equal(streamed, 'hello back');
+  assert.equal(request.type, 'voice.transcribe');
+});
+
 test('mobile remote page does not load the VM or local model runtime', async () => {
   const html = await readFile(new URL('../../remote.html', import.meta.url), 'utf8');
   for (const forbidden of ['libv86', 'v86-network', 'xterm.js', 'litert-lm-client', 'bzImage', 'ext4.img']) {

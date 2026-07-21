@@ -11,11 +11,12 @@ function send(connection, message) {
 }
 
 export class RemoteLlmPeer extends EventTarget {
-  constructor({ Peer, getLlmClient }) {
+  constructor({ Peer, getLlmClient, transcribeAudio = null }) {
     super();
     if (!Peer) throw new Error('PeerJS is unavailable');
     this.Peer = Peer;
     this.getLlmClient = getLlmClient;
+    this.transcribeAudio = transcribeAudio;
     this.peer = null;
     this.connection = null;
     this.secret = null;
@@ -24,8 +25,8 @@ export class RemoteLlmPeer extends EventTarget {
     this.active = new Set();
   }
 
-  activity(message) {
-    this.dispatchEvent(new CustomEvent('activity', { detail: { message } }));
+  activity(message, detail = {}) {
+    this.dispatchEvent(new CustomEvent('activity', { detail: { message, ...detail } }));
   }
 
   async host() {
@@ -33,12 +34,12 @@ export class RemoteLlmPeer extends EventTarget {
     this.secret = randomSecret();
     this.peer = new this.Peer();
     this.peer.on('connection', connection => this.accept(connection));
-    this.peer.on('error', error => this.activity(`error — ${error.message || error}`));
+    this.peer.on('error', error => this.activity(`error — ${error.message || error}`, { kind: 'error' }));
     const id = await new Promise((resolve, reject) => {
       this.peer.once('open', resolve);
       this.peer.once('error', reject);
     });
-    this.activity('waiting for a phone');
+    this.activity('waiting for a phone', { kind: 'state' });
     return `${id}.${this.secret}`;
   }
 
@@ -48,22 +49,25 @@ export class RemoteLlmPeer extends EventTarget {
       return;
     }
     let authenticated = false;
+    connection.on('close', () => {
+      if (this.connection === connection) this.connection = null;
+      if (authenticated) this.activity('phone disconnected', { kind: 'state' });
+    });
     connection.on('data', async message => {
       if (!authenticated) {
         authenticated = message?.type === 'auth' && message?.secret === this.secret;
         connection.send({ type: authenticated ? 'auth.ok' : 'auth.error' });
-        if (!authenticated) connection.close();
+        if (!authenticated) {
+          this.activity('rejected unauthenticated connection', { kind: 'error' });
+          connection.close();
+        }
         else {
           this.connection = connection;
-          this.activity('phone connected');
+          this.activity('phone connected', { kind: 'state' });
         }
         return;
       }
-      if (message?.type !== 'llm.chat' || !message.id || typeof message.prompt !== 'string') return;
-      if (!message.prompt.trim() || message.prompt.length > 32768) {
-        connection.send({ type: 'llm.error', id: message.id, error: 'prompt must contain 1 to 32768 characters' });
-        return;
-      }
+      if (!message?.id || !['llm.chat', 'voice.transcribe'].includes(message.type)) return;
       if (this.seen.has(message.id)) {
         connection.send(this.seen.get(message.id));
         return;
@@ -71,22 +75,48 @@ export class RemoteLlmPeer extends EventTarget {
       if (this.active.has(message.id)) return;
       this.active.add(message.id);
       try {
-        const client = this.getLlmClient?.();
-        if (!client) throw new Error('desktop WebGPU LLM is not ready');
-        const body = { messages: [{ role: 'user', content: message.prompt }] };
-        const completion = client.chatStream
-          ? await client.chatStream(body, delta => connection.send({ type: 'llm.chunk', id: message.id, delta }))
-          : await client.chat(body);
-        const response = { type: 'llm.result', id: message.id, content: completion?.choices?.[0]?.message?.content || '' };
-        this.seen.set(message.id, response);
-        if (this.seen.size > 256) this.seen.delete(this.seen.keys().next().value);
-        connection.send(client.chatStream ? { type: 'llm.done', id: message.id } : response);
+        let prompt = message.prompt;
+        if (message.type === 'voice.transcribe') {
+          const audio = message.audio instanceof ArrayBuffer ? message.audio : message.audio?.buffer;
+          if (!audio || !audio.byteLength || audio.byteLength > 12 * 1024 * 1024) throw new Error('voice recording must be between 1 byte and 12 MiB');
+          if (!this.transcribeAudio) throw new Error('desktop voice transcription is unavailable');
+          this.activity(`received voice recording (${Math.ceil(audio.byteLength / 1024)} KiB)`, { kind: 'traffic', direction: 'in', id: message.id });
+          prompt = String(await this.transcribeAudio(audio, message.mimeType || '') || '').trim();
+          if (!prompt) throw new Error('no speech was recognized');
+          this.activity('transcript sent to phone and LLM', { kind: 'traffic', direction: 'out', id: message.id, content: prompt });
+          connection.send({ type: 'voice.transcript', id: message.id, text: prompt });
+        } else {
+          this.activity('prompt received from phone', { kind: 'traffic', direction: 'in', id: message.id, content: String(prompt || '') });
+        }
+        await this.servePrompt(connection, message.id, prompt);
       } catch (error) {
+        this.activity(`request failed — ${error.message || error}`, { kind: 'error', direction: 'out', id: message.id });
         connection.send({ type: 'llm.error', id: message.id, error: error.message || String(error) });
       } finally {
         this.active.delete(message.id);
       }
     });
+  }
+
+  async servePrompt(connection, id, prompt) {
+    if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 32768) throw new Error('prompt must contain 1 to 32768 characters');
+    const client = this.getLlmClient?.();
+    if (!client) throw new Error('desktop WebGPU LLM is not ready');
+    this.activity('prompt submitted to desktop LLM', { kind: 'llm', direction: 'in', id, content: prompt });
+    const body = { messages: [{ role: 'user', content: prompt }] };
+    let streamedContent = '';
+    const completion = client.chatStream
+      ? await client.chatStream(body, delta => {
+          streamedContent += delta || '';
+          connection.send({ type: 'llm.chunk', id, delta });
+        })
+      : await client.chat(body);
+    const content = streamedContent || completion?.choices?.[0]?.message?.content || '';
+    const response = { type: 'llm.result', id, content };
+    this.seen.set(id, response);
+    if (this.seen.size > 256) this.seen.delete(this.seen.keys().next().value);
+    connection.send(client.chatStream ? { type: 'llm.done', id } : response);
+    this.activity('LLM response sent to phone', { kind: 'traffic', direction: 'out', id, content });
   }
 
   async connect(pairingKey) {
@@ -110,7 +140,7 @@ export class RemoteLlmPeer extends EventTarget {
         if (message?.type === 'auth.ok') {
           clearTimeout(timer);
           this.bindResults(connection);
-          this.activity('connected to desktop LLM');
+          this.activity('connected to desktop LLM', { kind: 'state' });
           resolve();
         } else if (message?.type === 'auth.error') {
           clearTimeout(timer);
@@ -132,13 +162,19 @@ export class RemoteLlmPeer extends EventTarget {
         pending.onChunk?.(message.delta || '');
         return;
       }
+      if (message.type === 'voice.transcript') {
+        clearTimeout(pending.timer);
+        pending.timer = this.responseTimer(message.id, pending.reject);
+        pending.onTranscript?.(message.text || '');
+        return;
+      }
       clearTimeout(pending.timer);
       this.pending.delete(message.id);
       if (message.type === 'llm.done') pending.resolve(pending.content);
       else if (message.type === 'llm.result') pending.resolve(message.content);
       else if (message.type === 'llm.error') pending.reject(new Error(message.error));
     });
-    connection.on('close', () => this.activity('desktop disconnected'));
+    connection.on('close', () => this.activity('desktop disconnected', { kind: 'state' }));
   }
 
   responseTimer(id, reject) {
@@ -148,14 +184,23 @@ export class RemoteLlmPeer extends EventTarget {
     }, REQUEST_TIMEOUT_MS);
   }
 
-  chat(prompt, { onChunk } = {}) {
+  request(message, { onChunk, onTranscript } = {}) {
     const id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timer = this.responseTimer(id, reject);
-      this.pending.set(id, { resolve, reject, timer, onChunk, content: '' });
-      try { send(this.connection, { type: 'llm.chat', id, prompt }); }
+      this.pending.set(id, { resolve, reject, timer, onChunk, onTranscript, content: '' });
+      try { send(this.connection, { ...message, id }); }
       catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
+  }
+
+  chat(prompt, options = {}) {
+    return this.request({ type: 'llm.chat', prompt }, options);
+  }
+
+  voice(audio, { mimeType = '', onChunk, onTranscript } = {}) {
+    if (!(audio instanceof ArrayBuffer)) throw new TypeError('voice audio must be an ArrayBuffer');
+    return this.request({ type: 'voice.transcribe', audio, mimeType }, { onChunk, onTranscript });
   }
 
   close() {

@@ -81,9 +81,22 @@ A phone can chat directly with the WebGPU LLM loaded by a desktop VM page:
 1. Once the desktop VM shell is available, open **Settings → Remote access** and select **Host this LLM**. Hosting and pairing can start before a model is loaded; configure a model before sending the first chat message.
 2. Copy the generated session pairing key.
 3. On the phone, open [`remote.html`](remote.html) directly or select **Connect to a desktop LLM instead** during startup, paste the key, and connect.
-4. Use the Remote LLM chat form. Requests go directly to the desktop model and do not invoke `vmagent` or DeepAgentsJS.
+4. Type a prompt, or select **Record**, speak, and select **Stop & send**. Requests go directly to the desktop model and do not invoke `vmagent` or DeepAgentsJS.
 
-The mobile-only page does not load v86, a VM disk, xterm, LiteRT-LM, or a model. The static page uses PeerJS Cloud for WebRTC signaling, and generated text is streamed to the phone as LiteRT-LM produces it. Prompts and response chunks travel through the encrypted WebRTC data channel. The desktop page and model must remain open, one phone is accepted per hosted session, and restrictive networks may require a separately configured TURN relay. Treat the pairing key as a session secret.
+The mobile-only page does not load v86, a VM disk, xterm, LiteRT-LM, Moonshine,
+or a model. For voice requests, it records a compressed, single-channel clip and
+sends it through the authenticated WebRTC data channel. The desktop decodes and
+resamples the clip, transcribes it locally with the bundled Moonshine model,
+returns the transcript, and streams Gemma's response. Recordings are limited to
+30 seconds on the phone and 12 MiB/35 seconds at the desktop boundary.
+
+The static page uses PeerJS Cloud for WebRTC signaling. Prompts, recordings,
+transcripts, and response chunks travel through the encrypted WebRTC data
+channel; they are not sent through PeerJS signaling. The desktop page and model
+must remain open, one phone is accepted per hosted session, and restrictive
+networks may require a separately configured TURN relay. Microphone capture
+requires HTTPS (localhost is allowed) and browser MediaRecorder support. Treat
+the pairing key as a session secret.
 
 ## Hosting
 

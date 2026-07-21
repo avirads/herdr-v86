@@ -52,6 +52,8 @@
   #remote-key { font: 12px monospace; }
   #remote-chat-log { box-sizing: border-box; height: min(42vh, 340px); overflow-y: auto; margin: 12px 0; padding: 12px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; white-space: pre-wrap; line-height: 1.45; }
   #remote-chat-log:empty::before { content: "Connect to a desktop, then send a message."; color: #8b949e; }
+  #remote-activity { box-sizing: border-box; max-height: 180px; overflow-y: auto; margin: 12px 0; padding: 9px; border: 1px solid #30363d; border-radius: 6px; background: #090c10; color: #8b949e; font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+  #remote-activity:empty::before { content: "Connection and message activity will appear here."; }
   #remote-chat-form { display: flex; gap: 8px; }
   #remote-prompt { flex: 1; min-width: 0; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 9px; }
   @media (max-width: 640px) {
@@ -185,6 +187,10 @@
     <button id="remote-connect" type="button">Connect to desktop</button>
     <button id="remote-copy" type="button" hidden>Copy pairing key</button>
   </div>
+  <details open>
+    <summary>Connection and LLM activity</summary>
+    <div id="remote-activity" aria-live="polite"></div>
+  </details>
   <div id="remote-chat-log" aria-live="polite"></div>
   <form id="remote-chat-form">
     <input id="remote-prompt" required autocomplete="off" placeholder="Message the desktop LLM">
@@ -208,6 +214,13 @@
 (async () => {
 const status = (m) => document.getElementById("status").textContent = m;
 const networkStatus = () => {};
+// Right-click belongs to terminal/guest applications inside the VM. Prevent the
+// host browser menu from covering their own mouse handling, while retaining the
+// normal context menu in the header, settings, and other page controls.
+document.addEventListener("contextmenu", event => {
+  if (event.target instanceof Element && event.target.closest("#term, #screen_container"))
+    event.preventDefault();
+}, { capture: true });
 const bootOverlay = document.getElementById("boot-overlay");
 const bootRing = document.getElementById("boot-ring");
 const bootPercent = document.getElementById("boot-percent");
@@ -360,6 +373,7 @@ let autobroClient;
 let guestReadonlyClient;
 let vmAgentController;
 let remoteLlmPeer;
+let remoteMoonshineModelPromise;
 let agentBusy = false;
 let agentInput = "";
 let voiceTranscriber;
@@ -509,6 +523,39 @@ function stopVoiceInput() {
   voiceStatus("ready");
   term.focus();
 }
+async function getRemoteMoonshineModel() {
+  if (remoteMoonshineModelPromise) return remoteMoonshineModelPromise;
+  remoteMoonshineModelPromise = (async () => {
+    remoteStatus.textContent = "Loading local Moonshine voice model…";
+    const Moonshine = await import("./vendor/moonshine/moonshine.min.js");
+    const assetRoot = new URL("./vendor/moonshine/", location.href).href;
+    Moonshine.Settings.BASE_ASSET_PATH.MOONSHINE = assetRoot;
+    Moonshine.Settings.BASE_ASSET_PATH.ONNX_RUNTIME = assetRoot + "ort/";
+    Moonshine.Settings.BASE_ASSET_PATH.SILERO_VAD = assetRoot + "vad/";
+    const model = new Moonshine.MoonshineModel("model/tiny", "quantized");
+    await model.loadModel();
+    return model;
+  })().catch(error => { remoteMoonshineModelPromise = null; throw error; });
+  return remoteMoonshineModelPromise;
+}
+async function transcribeRemoteAudio(encodedAudio) {
+  remoteStatus.textContent = "Decoding phone recording…";
+  const decodeContext = new AudioContext();
+  let decoded;
+  try { decoded = await decodeContext.decodeAudioData(encodedAudio.slice(0)); }
+  finally { await decodeContext.close(); }
+  if (!decoded.duration || decoded.duration > 35) throw new Error("voice recording must be 35 seconds or shorter");
+  const sampleRate = 16000;
+  const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * sampleRate), sampleRate);
+  const source = offline.createBufferSource();
+  source.buffer = decoded;
+  source.connect(offline.destination);
+  source.start();
+  const rendered = await offline.startRendering();
+  remoteStatus.textContent = "Transcribing phone recording locally…";
+  const model = await getRemoteMoonshineModel();
+  return String(await model.generate(rendered.getChannelData(0)) || "").trim();
+}
 voiceButton.onclick = () => voiceListening ? stopVoiceInput() : startVoiceInput();
 if (!isSecureContext || !navigator.mediaDevices?.getUserMedia) voiceStatus("unsupported in this browser");
 async function connectAutoBro({ extensionId = null, token = null } = {}) {
@@ -547,12 +594,30 @@ const remoteDialog = document.getElementById("remote-dialog");
 const remoteStatus = document.getElementById("remote-status");
 const remoteKey = document.getElementById("remote-key");
 const remoteChatLog = document.getElementById("remote-chat-log");
+const remoteActivity = document.getElementById("remote-activity");
+function logRemoteActivity(detail) {
+  const direction = detail.direction === "in" ? "←" : detail.direction === "out" ? "→" : "•";
+  const time = new Date().toLocaleTimeString([], { hour12: false });
+  const content = String(detail.content || "").replace(/\s+/g, " ").trim();
+  const preview = content ? ` — ${content.slice(0, 240)}${content.length > 240 ? "…" : ""}` : "";
+  const line = `${time} ${direction} ${detail.message}${preview}`;
+  const lines = (remoteActivity.textContent + line + "\n").split("\n");
+  remoteActivity.textContent = lines.slice(-201).join("\n");
+  remoteActivity.scrollTop = remoteActivity.scrollHeight;
+}
 async function getRemoteLlmPeer() {
   if (remoteLlmPeer) return remoteLlmPeer;
   if (!globalThis.Peer) throw new Error("PeerJS signaling library did not load");
   const { RemoteLlmPeer } = await import("./network/browser/remote-llm-peer.js");
-  remoteLlmPeer = new RemoteLlmPeer({ Peer: globalThis.Peer, getLlmClient: () => webGpuLlmClient });
-  remoteLlmPeer.addEventListener("activity", event => { remoteStatus.textContent = event.detail.message; });
+  remoteLlmPeer = new RemoteLlmPeer({
+    Peer: globalThis.Peer,
+    getLlmClient: () => webGpuLlmClient,
+    transcribeAudio: transcribeRemoteAudio,
+  });
+  remoteLlmPeer.addEventListener("activity", event => {
+    remoteStatus.textContent = event.detail.message;
+    logRemoteActivity(event.detail);
+  });
   return remoteLlmPeer;
 }
 function openRemoteDialog() {
