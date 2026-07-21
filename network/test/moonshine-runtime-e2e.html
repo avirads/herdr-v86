@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Moonshine runtime smoke test</title>
+<pre id="result">loading</pre>
+<script type="module">
+const result = document.getElementById("result");
+try {
+  const Moonshine = await import("../../vendor/moonshine/moonshine.min.js");
+  const root = new URL("../../vendor/moonshine/", location.href).href;
+  Moonshine.Settings.BASE_ASSET_PATH.MOONSHINE = root;
+  Moonshine.Settings.BASE_ASSET_PATH.ONNX_RUNTIME = root + "ort/";
+  Moonshine.Settings.BASE_ASSET_PATH.SILERO_VAD = root + "vad/";
+  const transcriber = new Moonshine.Transcriber("model/tiny", {
+    onError(error) { throw new Error(String(error)); },
+  });
+  await transcriber.load();
+  result.dataset.status = "passed";
+  result.textContent = "passed: Moonshine Tiny, ONNX Runtime, and VAD loaded";
+} catch (error) {
+  result.dataset.status = "failed";
+  result.textContent = "failed: " + (error?.stack || error);
+}
+</script>
