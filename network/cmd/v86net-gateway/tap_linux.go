@@ -3,8 +3,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -47,23 +50,53 @@ func openTAP(name string) (*os.File, error) {
 	return file, nil
 }
 
-type linuxPacketDevice struct{ file *os.File }
+type linuxPacketDevice struct {
+	file   *os.File
+	fd     int
+	closed atomic.Bool
+}
 
 func openPacketDevice(name string) (packetDevice, error) {
 	file, err := openTAP(name)
 	if err != nil {
 		return nil, err
 	}
-	return &linuxPacketDevice{file: file}, nil
+	return &linuxPacketDevice{file: file, fd: int(file.Fd())}, nil
 }
 
 func (device *linuxPacketDevice) ReadFrame(buffer []byte) (int, error) {
-	return device.file.Read(buffer)
+	pollFDs := []unix.PollFd{{Fd: int32(device.fd), Events: unix.POLLIN}}
+	for {
+		if device.closed.Load() {
+			return 0, io.EOF
+		}
+		ready, err := unix.Poll(pollFDs, 250)
+		if err != nil {
+			if errors.Is(err, unix.EINTR) {
+				continue
+			}
+			return 0, err
+		}
+		if ready == 0 {
+			continue
+		}
+		if pollFDs[0].Revents&(unix.POLLERR|unix.POLLHUP|unix.POLLNVAL) != 0 {
+			return 0, io.EOF
+		}
+		n, err := unix.Read(device.fd, buffer)
+		if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EWOULDBLOCK) || errors.Is(err, unix.EINTR) {
+			continue
+		}
+		return n, err
+	}
 }
 
 func (device *linuxPacketDevice) WriteFrame(frame []byte) error {
-	_, err := device.file.Write(frame)
+	_, err := unix.Write(device.fd, frame)
 	return err
 }
 
-func (device *linuxPacketDevice) Close() error { return device.file.Close() }
+func (device *linuxPacketDevice) Close() error {
+	device.closed.Store(true)
+	return device.file.Close()
+}
