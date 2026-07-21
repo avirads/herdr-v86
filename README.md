@@ -61,6 +61,24 @@ from the built-in page-local LiteRT inference provider. The agent automatically
 switches between equivalent AutoBro and `vm*` operations when the primary
 provider fails.
 
+### Local voice input
+
+The header's **Voice** control uses the bundled MoonshineJS Tiny English model
+to transcribe the device microphone locally in the parent browser. Audio and
+transcripts are not sent to the VM, gateway, or a cloud transcription service.
+Choose **Settings → Local voice input → After transcription** to either insert
+recognized text at the active shell/`vmagent>` prompt or execute each completed
+utterance as a command. Execute mode stops listening after one utterance to
+avoid duplicate command submission.
+
+The first use downloads about 42 MiB of version-pinned runtime/model assets from
+this same site and asks for microphone permission. Later loads can use the
+browser cache. Voice input requires HTTPS (localhost is allowed), WebAssembly,
+Web Audio, and microphone access. **Reset voice** stops capture, clears known
+Moonshine/ONNX browser caches, and reloads the page. MoonshineJS and its English
+model are MIT-licensed; the bundled license is in
+[`vendor/moonshine/LICENSE`](vendor/moonshine/LICENSE).
+
 ### Remote LLM chat over WebRTC
 
 A phone can chat directly with the WebGPU LLM loaded by a desktop Herdr page:
