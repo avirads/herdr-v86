@@ -27,12 +27,18 @@ Copy-Item -LiteralPath $sourceExe -Destination $installedExe -Force
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ("herdr-wintun-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
 try {
-    $archive = Join-Path $temporaryDirectory "wintun.zip"
-    Invoke-WebRequest -UseBasicParsing -Uri "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile $archive
-    Expand-Archive -LiteralPath $archive -DestinationPath $temporaryDirectory
-    $dll = Get-ChildItem -LiteralPath $temporaryDirectory -Recurse -Filter wintun.dll |
-        Where-Object { $_.FullName -match '[\\/]bin[\\/]amd64[\\/]wintun\.dll$' } |
-        Select-Object -First 1
+    $bundledDll = Join-Path $PSScriptRoot "wintun.dll"
+    if (Test-Path -LiteralPath $bundledDll) {
+        $dll = Get-Item -LiteralPath $bundledDll
+    }
+    else {
+        $archive = Join-Path $temporaryDirectory "wintun.zip"
+        Invoke-WebRequest -UseBasicParsing -Uri "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile $archive
+        Expand-Archive -LiteralPath $archive -DestinationPath $temporaryDirectory
+        $dll = Get-ChildItem -LiteralPath $temporaryDirectory -Recurse -Filter wintun.dll |
+            Where-Object { $_.FullName -match '[\\/]bin[\\/]amd64[\\/]wintun\.dll$' } |
+            Select-Object -First 1
+    }
     if (-not $dll) { throw "The official Wintun archive did not contain the amd64 DLL." }
     $signature = Get-AuthenticodeSignature -LiteralPath $dll.FullName
     if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
