@@ -45,9 +45,11 @@ go run ./cmd/v86net-gateway \
   -allow-origin https://vm.example.com
 ```
 
-`deploy/Caddyfile` and `deploy/v86net-gateway.service` provide hardened TLS
-and systemd examples. Caddy exposes only the Ethernet WebSocket and health
-endpoint; session creation remains loopback-only for a trusted backend.
+`deploy/Caddyfile`, `deploy/nginx-gateway.conf`,
+`deploy/v86net-network.service`, and `deploy/v86net-gateway.service` provide
+hardened TLS and systemd examples. The reverse proxy exposes only the Ethernet
+WebSocket and health endpoint; session creation remains loopback-only for a
+trusted backend.
 
 The setup creates `10.77.0.0/24`, assigns `10.77.0.1` to the gateway, offers
 DHCP leases at `10.77.0.10-200`, forwards DNS, and installs a dedicated nftables

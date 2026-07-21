@@ -1,0 +1,17 @@
+[Unit]
+Description=Herdr v86 TAP, DHCP, and NAT
+After=network-online.target
+Wants=network-online.target
+Before=v86net-gateway.service
+
+[Service]
+Type=oneshot
+Environment=NETWORK_NAME=default
+Environment=TAP_NAME=v86tap0
+ExecStart=/usr/local/lib/herdr-v86/setup-linux.sh
+ExecStop=/usr/local/lib/herdr-v86/teardown-linux.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+
