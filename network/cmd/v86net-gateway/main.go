@@ -27,6 +27,7 @@ const (
 )
 
 type gateway struct {
+	backend         string
 	tapName         string
 	legacyToken     string
 	allowQuery      bool
@@ -44,6 +45,7 @@ type gateway struct {
 }
 
 func main() {
+	backend := flag.String("backend", "native", "packet backend: native or userspace")
 	listen := flag.String("listen", "127.0.0.1:8086", "HTTP/WebSocket listen address")
 	tapName := flag.String("tap", "v86tap0", "existing TAP interface")
 	legacyToken := flag.String("token", os.Getenv("V86NET_TOKEN"), "optional legacy static token")
@@ -66,7 +68,7 @@ func main() {
 		log.Fatalf("the packet gateway requires Linux or Windows; got %s", runtime.GOOS)
 	}
 	if *prepareAdapter {
-		device, err := openPacketDevice(*tapName)
+		device, err := openGatewayDevice(*backend, *tapName)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -97,7 +99,7 @@ func main() {
 		log.Fatalf("invalid -guest-network: %q", *guestNetwork)
 	}
 	g := &gateway{
-		tapName: *tapName, legacyToken: *legacyToken, allowQuery: *allowQuery,
+		backend: *backend, tapName: *tapName, legacyToken: *legacyToken, allowQuery: *allowQuery,
 		adminToken: *adminToken, defaultTTL: *defaultTTL, maxTTL: *maxTTL,
 		sessions: newSessionStore(), policy: packetPolicy{allowPrivate: *allowPrivate, guestNetwork: guestPrefix.Masked()},
 		maxSessionBytes: *maxSessionBytes,
@@ -281,7 +283,7 @@ func (g *gateway) serveEthernet(w http.ResponseWriter, r *http.Request, current 
 	}
 	defer g.active.Store(false)
 
-	device, err := openPacketDevice(g.tapName)
+	device, err := openGatewayDevice(g.backend, g.tapName)
 	if err != nil {
 		http.Error(w, "open packet device: "+err.Error(), http.StatusServiceUnavailable)
 		return

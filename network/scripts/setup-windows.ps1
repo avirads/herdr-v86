@@ -2,8 +2,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$GatewayExe,
-    [string]$InstallDirectory = "$env:ProgramData\HerdrV86",
-    [string]$AdapterName = "HerdrV86",
+    [string]$InstallDirectory = "$env:ProgramData\VMV86",
+    [string]$AdapterName = "VMV86",
     [string]$ListenAddress = "127.0.0.1:8086",
     [string]$AllowedOrigin = "https://avirads.github.io",
     [string]$TlsCertificate = "",
@@ -24,7 +24,7 @@ New-Item -ItemType Directory -Force -Path $InstallDirectory | Out-Null
 $installedExe = Join-Path $InstallDirectory "v86net-gateway.exe"
 Copy-Item -LiteralPath $sourceExe -Destination $installedExe -Force
 
-$temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ("herdr-wintun-" + [Guid]::NewGuid().ToString("N"))
+$temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ("vm-wintun-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
 try {
     $bundledDll = Join-Path $PSScriptRoot "wintun.dll"
@@ -51,7 +51,7 @@ finally {
     Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-function New-HerdrToken {
+function New-VMToken {
     $bytes = [byte[]]::new(32)
     [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
     return [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
@@ -59,8 +59,8 @@ function New-HerdrToken {
 
 $adminTokenPath = Join-Path $InstallDirectory "admin.token"
 $browserTokenPath = Join-Path $InstallDirectory "browser.token"
-New-HerdrToken | Set-Content -LiteralPath $adminTokenPath -NoNewline -Encoding ascii
-New-HerdrToken | Set-Content -LiteralPath $browserTokenPath -NoNewline -Encoding ascii
+New-VMToken | Set-Content -LiteralPath $adminTokenPath -NoNewline -Encoding ascii
+New-VMToken | Set-Content -LiteralPath $browserTokenPath -NoNewline -Encoding ascii
 & icacls.exe $InstallDirectory /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" | Out-Null
 
 $arguments = @(
@@ -77,7 +77,7 @@ if ($TlsCertificate) {
     $arguments += @('-tls-key', ('"' + (Join-Path $InstallDirectory "gateway.key") + '"'))
 }
 $argumentLine = $arguments -join ' '
-$taskName = "HerdrV86Gateway"
+$taskName = "VMV86Gateway"
 $action = New-ScheduledTaskAction -Execute $installedExe -Argument $argumentLine
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $settings = New-ScheduledTaskSettingsSet -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
@@ -99,8 +99,8 @@ if (-not $existingAddress) {
     New-NetIPAddress -InterfaceAlias $AdapterName -IPAddress "10.77.0.1" -PrefixLength 24 | Out-Null
 }
 Set-NetIPInterface -InterfaceAlias $AdapterName -AddressFamily IPv4 -Forwarding Enabled
-Get-NetNat -Name "HerdrV86" -ErrorAction SilentlyContinue | Remove-NetNat -Confirm:$false
-New-NetNat -Name "HerdrV86" -InternalIPInterfaceAddressPrefix "10.77.0.0/24" | Out-Null
+Get-NetNat -Name "VMV86" -ErrorAction SilentlyContinue | Remove-NetNat -Confirm:$false
+New-NetNat -Name "VMV86" -InternalIPInterfaceAddressPrefix "10.77.0.0/24" | Out-Null
 
 $scheme = if ($TlsCertificate) { "wss" } else { "ws" }
 $browserToken = Get-Content -LiteralPath $browserTokenPath -Raw

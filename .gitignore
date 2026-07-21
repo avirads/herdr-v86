@@ -1,2 +1,4 @@
 agent/node_modules/
-
+portable/dist/
+portable/vm-launcher.exe
+network/v86net-gateway-userspace-test.exe

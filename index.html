@@ -734,7 +734,8 @@ try {
     document.getElementById("setup-llm-status").textContent = event.detail.message;
   });
   hostBridge?.setLlmClient(client);
-  const initialization = client.initialize();
+  const portableMode = new URLSearchParams(location.search).get("portable") === "1";
+  const initialization = client.initialize({ bundledModelUrl: portableMode ? "./models/gemma-4-E2B-it-web.litertlm" : "" });
   initialization.then(result => {
     hostBridge?.setLlmClient(client);
     llmStatus(result.modelName ? `ready — ${result.modelName}` : "ready — choose Configure LLM to load a model");

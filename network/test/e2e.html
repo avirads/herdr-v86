@@ -11,6 +11,7 @@ import { V86WebSocketNetwork } from '../browser/v86-websocket-network.js';
 const config = new URLSearchParams(location.hash.slice(1));
 const gateway = config.get('gateway');
 const token = config.get('token');
+const pingTarget = config.get('pingTarget') || '1.1.1.1';
 history.replaceState(null, '', location.pathname);
 
 const status = document.querySelector('#status');
@@ -45,9 +46,10 @@ async function submit() {
     dns: /Name:\s*example\.com/i.test(serial) || /Address:\s*(?:104\.|172\.)/.test(serial),
     ping: /2 packets transmitted, 2 (?:packets )?received, 0% packet loss/.test(serial),
     https: /HTTP\/(?:1\.1|2) 200/.test(serial),
+    herdr: /terminal workspace manager for AI coding agents/.test(serial),
     serial,
   };
-  result.ok = result.dhcp && result.dns && result.ping && result.https;
+  result.ok = result.dhcp && result.dns && result.ping && result.https && result.herdr;
   status.textContent = result.ok ? 'PASS' : 'FAIL';
   await fetch('/__result', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(result) });
 }
@@ -68,9 +70,11 @@ ip route
 echo DNS_RESULT
 nslookup example.com
 echo PING_RESULT
-ping -c 2 -W 3 1.1.1.1
+ping -c 2 -W 3 ${pingTarget}
 echo HTTPS_RESULT
 curl -fsSI --max-time 20 https://example.com
+echo HERDR_RESULT
+herdr --help
 echo V86NET_E2E_END
 `.trimStart());
   }

@@ -12,9 +12,16 @@ const args = Object.fromEntries(process.argv.slice(2).map(value => {
 const root = resolve(args['--root'] || join(import.meta.dirname, '..', '..'));
 const gateway = args['--gateway'];
 const token = args['--token'];
+const pingTarget = args['--ping-target'] || '1.1.1.1';
 const chrome = args['--chrome'] || process.env.CHROME_BIN || 'google-chrome';
 const port = Number(args['--port'] || 8090);
 if (!gateway || !token) throw new Error('--gateway and --token are required');
+
+const gatewayChild = args['--gateway-bin'] ? spawn(args['--gateway-bin'], [
+  '-backend', args['--gateway-backend'] || 'native', '-listen', new URL(gateway).host,
+  '-token', token, '-allow-origin', `http://127.0.0.1:${port}`,
+], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }) : null;
+if (gatewayChild) await new Promise(resolve => setTimeout(resolve, 500));
 
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.wasm': 'application/wasm', '.img': 'application/octet-stream', '.bin': 'application/octet-stream' };
 let finish;
@@ -52,7 +59,7 @@ const server = createServer((request, response) => {
 });
 await new Promise((resolve, reject) => server.listen(port, '127.0.0.1', error => error ? reject(error) : resolve()));
 
-const fragment = new URLSearchParams({ gateway, token });
+const fragment = new URLSearchParams({ gateway, token, pingTarget });
 const url = `http://127.0.0.1:${port}/network/test/e2e.html#${fragment}`;
 const profile = mkdtempSync(join(tmpdir(), 'vm-e2e-'));
 const child = spawn(chrome, [
@@ -83,6 +90,7 @@ try {
     await Promise.race([once(child, 'exit'), new Promise(resolve => setTimeout(resolve, 3000))]);
   }
   server.close();
+  gatewayChild?.kill();
   try {
     rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   } catch (error) {

@@ -1,0 +1,5 @@
+{
+  "networkMode": "remote",
+  "remoteGatewayUrl": "wss://gateway.fapstaff.com/v1/ethernet",
+  "rememberMode": true
+}

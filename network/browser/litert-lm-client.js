@@ -25,7 +25,7 @@ export class LiteRtLmClient extends EventTarget {
     this.dispatchEvent(new CustomEvent('activity', { detail: { message, progress } }));
   }
 
-  async initialize({ autoLoad = true } = {}) {
+  async initialize({ autoLoad = true, bundledModelUrl = '' } = {}) {
     if (!navigator.gpu) throw new Error('WebGPU is unavailable in this browser');
     try {
       const runtime = await import('../../llm/vendor/litert-lm/dist/index.js');
@@ -40,8 +40,18 @@ export class LiteRtLmClient extends EventTarget {
       const remembered = localStorage.getItem(LAST_MODEL_KEY);
       const name = models.includes(remembered) ? remembered : models[0];
       if (name) await this.loadCachedModel(name);
+      else if (bundledModelUrl) await this.loadBundledModel(bundledModelUrl);
     }
     return await this.status();
+  }
+
+  async loadBundledModel(url) {
+    const name = decodeURIComponent(new URL(url, location.href).pathname.split('/').pop()) || 'bundled-model.litertlm';
+    this.activity(`loading bundled model ${name}`);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`bundled model request failed: HTTP ${response.status}`);
+    const source = await response.blob();
+    await this.createEngine(source, name);
   }
 
   async ensureWasm() {

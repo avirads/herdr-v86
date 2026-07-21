@@ -87,6 +87,15 @@ The mobile-only page does not load v86, a VM disk, xterm, LiteRT-LM, or a model.
 
 ## Hosting
 
+### Portable Windows x64
+
+`portable/build-windows.ps1` produces an offline Windows x64 ZIP containing a
+pinned Chrome for Testing, AutoBro, the VM, Moonshine voice input, the LiteRT-LM
+runtime, Gemma 4 E2B WebGPU model, and gateway binaries. Its launcher defaults
+to the remote full gateway and also offers normal-user local userspace
+networking, optional Wintun networking, and offline mode. See
+[`portable/README.md`](portable/README.md).
+
 The disk image is loaded with `async: true`, so the web server **must support
 HTTP Range requests** (206). GitHub Pages, nginx, caddy, and `npx http-server`
 work; `python -m http.server` does not (returns 200/full-body, v86 aborts the

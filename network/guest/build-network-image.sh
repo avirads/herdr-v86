@@ -6,6 +6,7 @@ SOURCE_IMAGE="${SOURCE_IMAGE:-$PROJECT_DIR/herdr-vm-ext4.img}"
 OUTPUT_IMAGE="${OUTPUT_IMAGE:-$PROJECT_DIR/vm-network-ext4.img}"
 MOUNT_DIR="${MOUNT_DIR:-/mnt/herdr-v86-network}"
 ZELLIJ_PACKAGE="${ZELLIJ_PACKAGE:-$PROJECT_DIR/network/guest/zellij-0.44.3-x86.tar.gz}"
+HERDR_BINARY="${HERDR_BINARY:-$PROJECT_DIR/herdr-i686}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "run as root" >&2
@@ -17,6 +18,10 @@ if [[ ! -f "$SOURCE_IMAGE" ]]; then
 fi
 if [[ ! -f "$ZELLIJ_PACKAGE" ]]; then
   echo "Zellij x86 package not found: $ZELLIJ_PACKAGE" >&2
+  exit 1
+fi
+if [[ ! -f "$HERDR_BINARY" ]]; then
+  echo "32-bit herdr binary not found: $HERDR_BINARY" >&2
   exit 1
 fi
 
@@ -52,12 +57,12 @@ install -m 0755 "$PROJECT_DIR/network/guest/vmllm" "$MOUNT_DIR/usr/local/bin/vml
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent" "$MOUNT_DIR/usr/local/bin/vmagent"
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-poll" "$MOUNT_DIR/usr/local/bin/vmagent-poll"
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/bin/vmagent-rpc"
-
-# The browser VM is an Alpine shell with browser-bridge tools. Do not inherit
-# the legacy interactive herdr application or its init hook from the base image.
-rm -f "$MOUNT_DIR/usr/local/bin/herdr" "$MOUNT_DIR/sbin/herdr-boot"
+install -m 0755 "$HERDR_BINARY" "$MOUNT_DIR/usr/local/bin/herdr"
+# Keep the normal shell as the boot target; herdr is launched explicitly.
+rm -f "$MOUNT_DIR/sbin/herdr-boot"
 
 chroot "$MOUNT_DIR" /usr/bin/curl --version
 chroot "$MOUNT_DIR" /usr/bin/tmux -V
 chroot "$MOUNT_DIR" /usr/local/bin/zellij --version
+chroot "$MOUNT_DIR" /usr/local/bin/herdr --help >/dev/null
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"
