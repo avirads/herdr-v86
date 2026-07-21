@@ -1,8 +1,10 @@
 # v86 network gateway
 
 This component gives the herdr v86 guest a normal IPv4 network by transporting raw
-Ethernet frames over an authenticated binary WebSocket to a Linux TAP
-interface. Linux supplies DHCP, DNS, routing, connection tracking, and NAT.
+Ethernet frames over an authenticated binary WebSocket to a Linux TAP or a
+native Windows Wintun adapter. The host supplies routing, connection tracking,
+and NAT; the Windows backend also supplies the Ethernet, ARP, and DHCP shim
+needed by Wintun's layer-3 interface.
 TLS remains end-to-end between applications in the guest and internet hosts.
 
 It is independent of the AutoBro Chrome extension. The page hosting v86 is
@@ -14,6 +16,8 @@ the WebSocket client; the guest uses v86's emulated NE2000 or VirtIO NIC.
 guest TCP/IP -> v86 NIC -> net0-send -> WSS -> Go gateway -> TAP
              <- net0-receive <- WSS <-              <- Linux NAT
 ```
+
+On Windows, `TAP` in this diagram is the Herdr Wintun adapter and WinNAT.
 
 Each binary WebSocket message contains exactly one Ethernet frame. Text
 messages and frames shorter than an Ethernet header are ignored. The gateway
@@ -80,6 +84,49 @@ sudo PORT_FORWARDS='2222:10.77.0.15:22/tcp,8080:10.77.0.15:80/tcp' \
 
 The scripts intentionally do not run automatically.
 
+## Native Windows gateway (Wintun)
+
+Windows 10/11 x64 is supported without WSL. Setup needs Administrator rights
+once because Windows restricts adapter, route, WinNAT, and scheduled-task
+configuration. The installed gateway then runs as a background SYSTEM task,
+so opening Herdr and using the VM does not show UAC prompts. It listens on
+loopback by default and accepts only the configured browser origin and token.
+
+Download `downloads/v86net-gateway-windows-amd64.exe`, then run an Administrator
+PowerShell from the repository root:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\network\scripts\setup-windows.ps1 `
+  -GatewayExe .\downloads\v86net-gateway-windows-amd64.exe
+```
+
+The installer downloads Wintun 0.14.1 from the official WireGuard site,
+requires a valid WireGuard Authenticode signature, creates a random browser
+and admin token, registers the `HerdrV86Gateway` startup task, assigns
+`10.77.0.1/24`, and creates a narrowly scoped `HerdrV86` WinNAT network.
+Connection details are written to
+`C:\ProgramData\HerdrV86\connection.json`.
+
+For a page served over plain HTTP on the same PC, use the generated
+`ws://127.0.0.1:8086/v1/ethernet` address. A page served over HTTPS (including
+GitHub Pages) cannot open an insecure WebSocket. Supply a trusted certificate
+and key with `-TlsCertificate` and `-TlsPrivateKey`, or put a local/reachable
+TLS reverse proxy in front of the loopback gateway. The hostname in the WSS
+URL must match that certificate.
+
+Remove the task and NAT configuration with:
+
+```powershell
+.\network\scripts\teardown-windows.ps1
+```
+
+Add `-RemoveInstalledFiles` to also delete the installed gateway files. The
+Windows backend currently supports one VM on the fixed `10.77.0.0/24` IPv4
+network. It implements DHCP, ARP, TCP, UDP, ICMP, DNS, HTTPS, and other normal
+outbound IPv4 traffic through Windows NAT. IPv6 and inbound forwarding are not
+implemented on this backend.
+
 ## Browser integration
 
 Create v86 without its built-in network relay, then attach the adapter after
@@ -106,7 +153,7 @@ The adapter uses v86's public `net0-send` listener and `net0-receive` bus
 event. It bounds its disconnected-send queue to 1 MiB and reconnects after a
 transport failure. Reconnection does not preserve existing guest TCP sessions.
 
-The guest should use DHCP. A static fallback is:
+The guest should use DHCP. A static fallback is (Windows uses DNS `1.1.1.1`):
 
 ```text
 address: 10.77.0.15/24
@@ -184,10 +231,11 @@ curl -I https://example.com
 
 ## Current scope
 
-Implemented by the Linux kernel path: DHCP, DNS, IPv4 TCP, UDP, ICMP, NAT,
-HTTPS, SSH, package managers, and outbound connections from unmodified guest
-applications.
+Implemented by the Linux and Windows host paths: DHCP, DNS, IPv4 TCP, UDP,
+ICMP, NAT, HTTPS, SSH, package managers, and outbound connections from
+unmodified guest applications.
 
-Not yet implemented: IPv6, inbound port-forward configuration, multiple VMs
-per gateway process, WebRTC transport, bandwidth quotas, and userspace NAT for
-an unprivileged/cloud gateway. Physical-LAN bridging is deliberately excluded.
+Not yet implemented: IPv6, multiple VMs per gateway process, WebRTC transport,
+bandwidth quotas, and userspace NAT for an unprivileged/cloud gateway. Linux
+has explicit inbound forwarding; Windows does not. Physical-LAN bridging is
+deliberately excluded.

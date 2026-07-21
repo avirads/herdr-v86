@@ -39,3 +39,24 @@ func openTAP(name string) (*os.File, error) {
 	}
 	return file, nil
 }
+
+type linuxPacketDevice struct{ file *os.File }
+
+func openPacketDevice(name string) (packetDevice, error) {
+	file, err := openTAP(name)
+	if err != nil {
+		return nil, err
+	}
+	return &linuxPacketDevice{file: file}, nil
+}
+
+func (device *linuxPacketDevice) ReadFrame(buffer []byte) (int, error) {
+	return device.file.Read(buffer)
+}
+
+func (device *linuxPacketDevice) WriteFrame(frame []byte) error {
+	_, err := device.file.Write(frame)
+	return err
+}
+
+func (device *linuxPacketDevice) Close() error { return device.file.Close() }

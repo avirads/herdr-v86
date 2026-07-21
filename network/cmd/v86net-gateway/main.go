@@ -40,6 +40,7 @@ type gateway struct {
 	framesDropped   atomic.Uint64
 	policy          packetPolicy
 	maxSessionBytes uint64
+	allowOrigins    map[string]bool
 }
 
 func main() {
@@ -47,6 +48,12 @@ func main() {
 	tapName := flag.String("tap", "v86tap0", "existing TAP interface")
 	legacyToken := flag.String("token", os.Getenv("V86NET_TOKEN"), "optional legacy static token")
 	adminToken := flag.String("admin-token", os.Getenv("V86NET_ADMIN_TOKEN"), "admin bearer token used to create sessions")
+	adminTokenFile := flag.String("admin-token-file", "", "read admin bearer token from a file")
+	legacyTokenFile := flag.String("token-file", "", "read legacy browser token from a file")
+	prepareAdapter := flag.Bool("prepare-adapter", false, "create/open the native packet adapter and exit")
+	allowOrigin := flag.String("allow-origin", "", "comma-separated browser origins allowed to use legacy tokens")
+	tlsCert := flag.String("tls-cert", "", "TLS certificate file; requires -tls-key")
+	tlsKey := flag.String("tls-key", "", "TLS private key file; requires -tls-cert")
 	allowQuery := flag.Bool("allow-query-token", false, "allow legacy tokens in WebSocket query parameters")
 	defaultTTL := flag.Duration("session-ttl", 15*time.Minute, "default secure-session lifetime")
 	maxTTL := flag.Duration("max-session-ttl", time.Hour, "maximum secure-session lifetime")
@@ -55,8 +62,31 @@ func main() {
 	maxSessionBytes := flag.Uint64("max-session-bytes", 1<<30, "maximum combined bytes per WebSocket session; 0 disables")
 	flag.Parse()
 
-	if runtime.GOOS != "linux" {
-		log.Fatalf("the TAP gateway currently requires Linux; got %s", runtime.GOOS)
+	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
+		log.Fatalf("the packet gateway requires Linux or Windows; got %s", runtime.GOOS)
+	}
+	if *prepareAdapter {
+		device, err := openPacketDevice(*tapName)
+		if err != nil {
+			log.Fatal(err)
+		}
+		_ = device.Close()
+		log.Printf("adapter %s is ready", *tapName)
+		return
+	}
+	if *adminTokenFile != "" {
+		value, err := os.ReadFile(*adminTokenFile)
+		if err != nil {
+			log.Fatalf("read admin token file: %v", err)
+		}
+		*adminToken = strings.TrimSpace(string(value))
+	}
+	if *legacyTokenFile != "" {
+		value, err := os.ReadFile(*legacyTokenFile)
+		if err != nil {
+			log.Fatalf("read browser token file: %v", err)
+		}
+		*legacyToken = strings.TrimSpace(string(value))
 	}
 	if *adminToken == "" && *legacyToken == "" {
 		log.Fatal("set -admin-token/V86NET_ADMIN_TOKEN (recommended) or a legacy -token")
@@ -71,6 +101,12 @@ func main() {
 		adminToken: *adminToken, defaultTTL: *defaultTTL, maxTTL: *maxTTL,
 		sessions: newSessionStore(), policy: packetPolicy{allowPrivate: *allowPrivate, guestNetwork: guestPrefix.Masked()},
 		maxSessionBytes: *maxSessionBytes,
+		allowOrigins:    make(map[string]bool),
+	}
+	for _, origin := range strings.Split(*allowOrigin, ",") {
+		if origin = strings.TrimSpace(origin); origin != "" {
+			g.allowOrigins[origin] = true
+		}
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -109,8 +145,17 @@ func main() {
 	}()
 
 	log.Printf("v86 network gateway listening on %s (tap %s)", *listen, *tapName)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+	var serveErr error
+	if *tlsCert != "" || *tlsKey != "" {
+		if *tlsCert == "" || *tlsKey == "" {
+			log.Fatal("both -tls-cert and -tls-key are required")
+		}
+		serveErr = server.ListenAndServeTLS(*tlsCert, *tlsKey)
+	} else {
+		serveErr = server.ListenAndServe()
+	}
+	if serveErr != nil && serveErr != http.ErrServerClosed {
+		log.Fatal(serveErr)
 	}
 }
 
@@ -198,6 +243,7 @@ func (g *gateway) authorizeAdmin(r *http.Request) bool {
 }
 
 func (g *gateway) authorizeWebSocket(r *http.Request) (session, string, bool) {
+	legacyOriginAllowed := len(g.allowOrigins) == 0 || g.allowOrigins[r.Header.Get("Origin")]
 	for _, protocol := range websocketSubprotocols(r) {
 		if len(protocol) <= len(tokenProtocolPrefix) || protocol[:len(tokenProtocolPrefix)] != tokenProtocolPrefix {
 			continue
@@ -206,11 +252,11 @@ func (g *gateway) authorizeWebSocket(r *http.Request) (session, string, bool) {
 		if current, ok := g.sessions.authenticate(token, r.Header.Get("Origin")); ok {
 			return current, protocol, true
 		}
-		if g.legacyToken != "" && secureEqual(token, g.legacyToken) {
+		if legacyOriginAllowed && g.legacyToken != "" && secureEqual(token, g.legacyToken) {
 			return session{}, protocol, true
 		}
 	}
-	if g.allowQuery && g.legacyToken != "" && secureEqual(r.URL.Query().Get("token"), g.legacyToken) {
+	if legacyOriginAllowed && g.allowQuery && g.legacyToken != "" && secureEqual(r.URL.Query().Get("token"), g.legacyToken) {
 		return session{}, "", true
 	}
 	return session{}, "", false
@@ -235,12 +281,12 @@ func (g *gateway) serveEthernet(w http.ResponseWriter, r *http.Request, current 
 	}
 	defer g.active.Store(false)
 
-	tap, err := openTAP(g.tapName)
+	device, err := openPacketDevice(g.tapName)
 	if err != nil {
-		http.Error(w, "open TAP: "+err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, "open packet device: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	defer tap.Close()
+	defer device.Close()
 
 	options := &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // Session authorization checks the exact configured Origin.
@@ -295,7 +341,7 @@ func (g *gateway) serveEthernet(w http.ResponseWriter, r *http.Request, current 
 					closeWith(fmt.Errorf("session byte quota exceeded"))
 					return
 				}
-				if _, err = tap.Write(frame); err != nil {
+				if err = device.WriteFrame(frame); err != nil {
 					closeWith(err)
 					return
 				}
@@ -306,7 +352,7 @@ func (g *gateway) serveEthernet(w http.ResponseWriter, r *http.Request, current 
 	go func() {
 		buffer := make([]byte, maxEthernetFrame)
 		for {
-			n, err := tap.Read(buffer)
+			n, err := device.ReadFrame(buffer)
 			if err != nil {
 				closeWith(err)
 				return
