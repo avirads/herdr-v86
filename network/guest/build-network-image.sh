@@ -32,7 +32,7 @@ mount --bind /dev "$MOUNT_DIR/dev"
 
 # The minimal base image intentionally has no resolv.conf.
 cp /etc/resolv.conf "$MOUNT_DIR/etc/resolv.conf"
-chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates
+chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux
 install -m 0755 "$PROJECT_DIR/network/guest/rc.startup" "$MOUNT_DIR/sbin/rc.startup"
 install -m 0755 "$PROJECT_DIR/network/guest/autologin" "$MOUNT_DIR/sbin/autologin"
 install -m 0755 "$PROJECT_DIR/network/guest/autologin-rpc" "$MOUNT_DIR/sbin/autologin-rpc"
@@ -52,4 +52,5 @@ install -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/b
 rm -f "$MOUNT_DIR/usr/local/bin/herdr" "$MOUNT_DIR/sbin/herdr-boot"
 
 chroot "$MOUNT_DIR" /usr/bin/curl --version
+chroot "$MOUNT_DIR" /usr/bin/tmux -V
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"
