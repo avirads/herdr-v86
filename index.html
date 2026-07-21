@@ -608,7 +608,7 @@ function logRemoteActivity(detail) {
 async function getRemoteLlmPeer() {
   if (remoteLlmPeer) return remoteLlmPeer;
   if (!globalThis.Peer) throw new Error("PeerJS signaling library did not load");
-  const { RemoteLlmPeer } = await import("./network/browser/remote-llm-peer.js");
+  const { RemoteLlmPeer } = await import("./network/browser/remote-llm-peer.js?v=20260721-voice1");
   remoteLlmPeer = new RemoteLlmPeer({
     Peer: globalThis.Peer,
     getLlmClient: () => webGpuLlmClient,
