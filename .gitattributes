@@ -1,2 +1,3 @@
 *.onnx binary
 *.wasm binary
+network/guest/zellij-*-x86.tar.gz binary

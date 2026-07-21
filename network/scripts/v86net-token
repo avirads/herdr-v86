@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TTL_SECONDS="${1:-3600}"
+ORIGIN="${2:-https://avirads.github.io}"
+ADMIN_TOKEN_FILE="${V86NET_ADMIN_TOKEN_FILE:-/etc/v86net/admin.token}"
+SESSION_ENDPOINT="${V86NET_SESSION_ENDPOINT:-http://127.0.0.1:8086/v1/sessions}"
+VM_URL="${V86NET_VM_URL:-https://avirads.github.io/herdr-v86/}"
+GATEWAY_URL="${V86NET_GATEWAY_URL:-wss://gateway.fapstaff.com/v1/ethenet}"
+
+if [[ ! "$TTL_SECONDS" =~ ^[1-9][0-9]*$ ]] || (( TTL_SECONDS > 3600 )); then
+  echo "TTL must be an integer between 1 and 3600 seconds" >&2
+  exit 2
+fi
+if [[ ! -r "$ADMIN_TOKEN_FILE" ]]; then
+  echo "cannot read $ADMIN_TOKEN_FILE; run as root or with sudo" >&2
+  exit 1
+fi
+
+response="$({
+  printf 'header = "Authorization: Bearer %s"\n' "$(<"$ADMIN_TOKEN_FILE")"
+  printf 'header = "Content-Type: application/json"\n'
+} | curl --fail-with-body --silent --show-error \
+  --config - \
+  --request POST "$SESSION_ENDPOINT" \
+  --data "{\"origin\":\"$ORIGIN\",\"ttlSeconds\":$TTL_SECONDS}")"
+
+token="$(printf '%s' "$response" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+if [[ -z "$token" ]]; then
+  echo "gateway retuned no session token: $response" >&2
+  exit 1
+fi
+
+encoded_gateway="${GATEWAY_URL//:/%3A}"
+encoded_gateway="${encoded_gateway//\//%2F}"
+printf '%s#gateway=%s&token=%s\n' "$VM_URL" "$encoded_gateway" "$token"
