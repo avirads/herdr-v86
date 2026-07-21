@@ -19,8 +19,10 @@ Either action hides the shell and returns to the corresponding wizard step.
   static i686-musl). Init mounts proc/sysfs/devpts/tmpfs and spawns shells on ttyS0 + tty1.
 - `herdr-alpine-x86-rootfs.tar.gz` — same tree, for 9p setups.
 - `herdr-i686` — the standalone static binary.
-- `bzImage-network` + `herdr-vm-network-ext4.img` — network-enabled demo kernel
-  and Alpine guest with DHCP, CA certificates, and full HTTPS curl support.
+- `bzImage-network` + `herdr-vm-network-ext4.img` — default network-enabled demo
+  kernel and Alpine shell guest with DHCP, CA certificates, full HTTPS curl,
+  and browser-bridge tools. The legacy `herdr` guest application is not
+  installed or launched in this image.
 - `network/` — authenticated WebSocket-to-TAP gateway, v86 adapter, guest build
   recipes, and automated DHCP/DNS/ping/HTTPS test.
 - `herdr-i686.patch` — patch against herdr v0.7.4: adds i686 targets to the

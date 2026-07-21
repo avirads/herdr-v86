@@ -47,5 +47,9 @@ install -m 0755 "$PROJECT_DIR/network/guest/vmagent" "$MOUNT_DIR/usr/local/bin/v
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-poll" "$MOUNT_DIR/usr/local/bin/vmagent-poll"
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/bin/vmagent-rpc"
 
+# The browser VM is an Alpine shell with browser-bridge tools. Do not inherit
+# the legacy interactive herdr application or its init hook from the base image.
+rm -f "$MOUNT_DIR/usr/local/bin/herdr" "$MOUNT_DIR/sbin/herdr-boot"
+
 chroot "$MOUNT_DIR" /usr/bin/curl --version
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"
