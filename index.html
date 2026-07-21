@@ -6,12 +6,13 @@
 <title>herdr in the browser (v86)</title>
 <link rel="stylesheet" href="xterm.css">
 <style>
-  html { width: 100%; min-height: 100%; background: #0d1117; overflow-x: hidden; }
-  body { box-sizing: border-box; margin: 0; min-width: 0; min-height: 100vh; min-height: 100dvh; overflow-x: hidden; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
-  header { box-sizing: border-box; width: 100%; padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
+  html { width: 100%; height: 100%; background: #0d1117; overflow: hidden; }
+  body { box-sizing: border-box; margin: 0; width: 100%; height: 100vh; height: 100dvh; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  header { box-sizing: border-box; flex: 0 0 auto; width: 100%; padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
   header h1 { font-size: 15px; margin: 0; }
   #status { font-size: 12px; color: #8b949e; }
-  #term { box-sizing: border-box; width: 100%; min-width: 0; padding: 0 8px 8px; visibility: hidden; overflow: hidden; }
+  #term { box-sizing: border-box; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 0; padding: 0 8px 8px; visibility: hidden; overflow: hidden; }
+  #term .xterm { height: 100%; }
   #boot-overlay { box-sizing: border-box; position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 1000; display: grid; place-items: center; padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); overflow: hidden; background: #0d1117; transition: opacity .35s ease; }
   #boot-overlay.done { opacity: 0; pointer-events: none; }
   #boot-loader { position: relative; width: min(100%, 320px); height: 112px; display: grid; place-items: center; text-align: center; }
@@ -54,7 +55,8 @@
   @media (max-width: 640px) {
     header { align-items: center; flex-wrap: wrap; gap: 5px 10px; padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left)); }
     header h1 { flex: 1 1 auto; font-size: 14px; }
-    #status, #llm-status, #browser-status { flex: 1 0 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #status { order: 3; flex: 1 0 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #llm-status, #browser-status { display: none; }
     #tools { margin-left: 0; }
     #term { padding: 0 4px max(4px, env(safe-area-inset-bottom)); }
     #boot-ring { width: 96px; height: 96px; }
@@ -287,6 +289,32 @@ const term = new Terminal({
   theme: { background: "#0d1117" },
 });
 term.open(document.getElementById("term"));
+
+let sttySent = false;
+let terminalResizeTimer = 0;
+function fitTerminal() {
+  const host = document.getElementById("term");
+  const renderedRows = term.element?.querySelector(".xterm-rows");
+  if (!host.clientWidth || !host.clientHeight || !renderedRows) return;
+  const rowBounds = renderedRows.getBoundingClientRect();
+  const cellWidth = rowBounds.width / term.cols;
+  const cellHeight = rowBounds.height / term.rows;
+  if (!cellWidth || !cellHeight) return;
+  const cols = Math.max(40, Math.floor((host.clientWidth - 16) / cellWidth));
+  const rows = Math.max(12, Math.floor((host.clientHeight - 8) / cellHeight));
+  if (cols === term.cols && rows === term.rows) return;
+  term.resize(cols, rows);
+  if (sttySent) {
+    for (const ch of `stty rows ${rows} cols ${cols}\n`) emulator.serial0_send(ch);
+  }
+}
+function scheduleTerminalFit() {
+  clearTimeout(terminalResizeTimer);
+  terminalResizeTimer = setTimeout(fitTerminal, 80);
+}
+new ResizeObserver(scheduleTerminalFit).observe(document.getElementById("term"));
+window.addEventListener("resize", scheduleTerminalFit, { passive: true });
+requestAnimationFrame(() => requestAnimationFrame(fitTerminal));
 
 if (compatibilityBoot) status("compatibility boot — downloading full 96 MiB disk…");
 const emulator = new V86({
@@ -677,7 +705,6 @@ let gotSerial = false;
 setTimeout(() => { if (!gotSerial) { const message = "No VM output after 120 seconds. Reload to retry automatic compatibility boot."; status(message); failBoot(message); } }, 120000);
 // The kernel serial console has no window size (TIOCGWINSZ reports 0x0).
 // Set it once at the first shell prompt, matching the xterm.js geometry above.
-let sttySent = false;
 let recentOutput = "";
 let diskErrorOutput = "";
 let compatibilityRestartScheduled = false;
@@ -698,7 +725,8 @@ emulator.add_listener("serial0-output-byte", (byte) => {
     recentOutput = (recentOutput + String.fromCharCode(byte)).slice(-64);
     if (recentOutput.endsWith(":~# ")) {
       sttySent = true;
-      for (const ch of "stty rows 32 cols 100\n") emulator.serial0_send(ch);
+      fitTerminal();
+      for (const ch of `stty rows ${term.rows} cols ${term.cols}\n`) emulator.serial0_send(ch);
       finishBoot();
     }
   }
