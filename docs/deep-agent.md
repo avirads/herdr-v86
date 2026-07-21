@@ -18,7 +18,7 @@ vmagent yolo off
 
 The command starts a persistent conversation in the terminal. DeepAgents keeps
 the same in-memory checkpoint for follow-up prompts. Enter `/exit` or `/quit`
-at `vmagent>` to return to the guest shell. Herdr stays on the primary console;
+at `vmagent>` to return to the guest shell. VM stays on the primary console;
 a hidden second UART carries agent filesystem, shell, and browser RPC without
 mixing protocol records into the TUI. Press Ctrl-C to request a stop.
 

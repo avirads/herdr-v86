@@ -1,6 +1,6 @@
 # v86 network gateway
 
-This component gives the herdr v86 guest a normal IPv4 network by transporting raw
+This component gives the VM guest a normal IPv4 network by transporting raw
 Ethernet frames over an authenticated binary WebSocket to a Linux TAP or a
 native Windows Wintun adapter. The host supplies routing, connection tracking,
 and NAT; the Windows backend also supplies the Ethernet, ARP, and DHCP shim
@@ -202,7 +202,7 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
 
 - `../../bzImage-network`: Linux 6.6 i386 kernel with v86-compatible no-APIC
   boot parameters and built-in VirtIO/NE2000 networking.
-- `../../herdr-vm-network-ext4.img`: Alpine x86 image with automatic DHCP,
+- `../../vm-network-ext4.img`: Alpine x86 image with automatic DHCP,
   CA certificates, and curl/OpenSSL supporting HTTPS, HTTP/2, WSS, and common
   network protocols.
 - `guest/build-kernel.sh` and `guest/build-network-image.sh` reproduce them.

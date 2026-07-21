@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 SOURCE_IMAGE="${SOURCE_IMAGE:-$PROJECT_DIR/herdr-vm-ext4.img}"
-OUTPUT_IMAGE="${OUTPUT_IMAGE:-$PROJECT_DIR/herdr-vm-network-ext4.img}"
+OUTPUT_IMAGE="${OUTPUT_IMAGE:-$PROJECT_DIR/vm-network-ext4.img}"
 MOUNT_DIR="${MOUNT_DIR:-/mnt/herdr-v86-network}"
 
 if [[ "$(id -u)" -ne 0 ]]; then

@@ -1,5 +1,5 @@
 [Unit]
-Description=herdr v86 network gateway
+Description=VM network gateway
 After=network-online.target v86net-network.service
 Wants=network-online.target
 Requires=v86net-network.service

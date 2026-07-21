@@ -88,7 +88,7 @@ export class WebGpuToolChatModel extends BaseChatModel {
   }
 }
 
-export function createHerdrAgent({ llmClient, guest, browserClient = null, onActivity = () => {}, approveAction = async () => false, sessionId = crypto.randomUUID() }) {
+export function createVMAgent({ llmClient, guest, browserClient = null, onActivity = () => {}, approveAction = async () => false, sessionId = crypto.randomUUID() }) {
   const model = new WebGpuToolChatModel(llmClient);
   const backend = new V86DeepAgentsBackend(guest, { approve: approveAction, onActivity });
   const approvedCommand = async (toolName, detail, command) => {
@@ -259,7 +259,7 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
     schema: z.object({ command: z.string(), parameters: z.record(z.string(), z.unknown()).default({}) }),
   }));
   const agent = createDeepAgent({
-    name: 'herdr-coding-agent',
+    name: 'vm-coding-agent',
     model,
     tools: [vmfetch, vmgithub, vmclip, vmexport, vmai, vmllmInfo, ...browserTools],
     backend,
@@ -298,4 +298,4 @@ export function createHerdrAgent({ llmClient, guest, browserClient = null, onAct
 
 // Backward-compatible export for existing integrations. It now creates the
 // full-capability agent and still requires approval for every mutating action.
-export const createHerdrReadonlyAgent = createHerdrAgent;
+export const createVMReadonlyAgent = createVMAgent;

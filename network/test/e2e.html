@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>herdr-v86 network e2e</title>
+<title>VM network e2e</title>
 <pre id="status">booting</pre>
 <pre id="serial"></pre>
 <div id="screen_container" hidden><div></div><canvas></canvas></div>
@@ -24,8 +24,8 @@ const emulator = new V86({
   bios: { url: '../../seabios.bin' },
   vga_bios: { url: '../../vgabios.bin' },
   bzimage: { url: '../../bzImage-network' },
-  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic herdr.shell=1',
-  hda: { url: '../../herdr-vm-network-ext4.img', async: true, size: 100663296 },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
   net_device: { type: 'virtio' },
   uart1: true,
   screen_container: document.querySelector('#screen_container'),
@@ -56,7 +56,7 @@ emulator.add_listener('serial0-output-byte', byte => {
   serial += String.fromCharCode(byte);
   if (serial.length > 100000) serial = serial.slice(-100000);
   serialElement.textContent = serial;
-  if (!started && /(?:herdr-vm:~#|~\s*[#%])\s*$/.test(serial)) {
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
     started = true;
     emulator.serial0_send(`
 echo V86NET_E2E_BEGIN

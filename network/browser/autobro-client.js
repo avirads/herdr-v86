@@ -36,12 +36,12 @@ export class AutoBroClient {
       if (message?.type !== 'llm-request') return;
       try {
         const client = this.getLlmClient();
-        if (!client) throw new Error('Herdr page-local WebGPU LLM is not initialized');
+        if (!client) throw new Error('VM page-local WebGPU LLM is not initialized');
         let result;
         if (message.method === 'status') result = await client.status();
         else if (message.method === 'models') result = await client.models();
         else if (message.method === 'chat') result = await client.chat(message.body || {});
-        else throw new Error(`unsupported Herdr LLM method: ${message.method}`);
+        else throw new Error(`unsupported VM LLM method: ${message.method}`);
         port.postMessage({ type: 'llm-response', id: message.id, ok: true, result });
       } catch (error) {
         port.postMessage({ type: 'llm-response', id: message.id, ok: false, error: error?.message || String(error) });

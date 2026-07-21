@@ -25,7 +25,7 @@ test('AutoBro client pairs without leaking token rules and authenticates command
   }
 });
 
-test('AutoBro client exposes the ready Herdr page-local LLM over the paired port', async () => {
+test('AutoBro client exposes the ready VM page-local LLM over the paired port', async () => {
   const portMessages = [];
   let onPortMessage;
   const port = {

@@ -1,6 +1,6 @@
 // First-party LiteRT-LM WebGPU provider. Models are stored in this page's OPFS;
 // no extension, native process, API key, or guest network is involved.
-const LAST_MODEL_KEY = 'herdr.litert.lastModel';
+const LAST_MODEL_KEY = 'vm.litert.lastModel';
 const MAX_CONTEXT_TOKENS = 16384;
 
 function contentToText(content) {
@@ -54,7 +54,7 @@ export class LiteRtLmClient extends EventTarget {
 
   async modelsDirectory(create = false) {
     const root = await navigator.storage.getDirectory();
-    return await root.getDirectoryHandle('herdr-litert-models', { create });
+    return await root.getDirectoryHandle('vm-litert-models', { create });
   }
 
   async cachedModelNames() {

@@ -1,4 +1,4 @@
-# herdr-v86
+# VM
 
 > A 32-bit Alpine Linux development guest running in the v86 browser emulator,
 > with optional full IPv4 networking and gateway-free browser RPC tools.
@@ -17,7 +17,7 @@ Important constraints:
 - v86 is 32-bit x86; x86-64 binaries cannot execute.
 - vmfetch uses browser fetch and is subject to CORS and mixed-content policy.
 - Full DHCP, DNS, ICMP, TCP, and UDP require the external Linux gateway.
-- vmllm uses herdr's built-in page-local WebGPU LiteRT-LM provider; it does not run inference inside the guest and requires no extension.
+- vmllm uses the VM's built-in page-local WebGPU LiteRT-LM provider; it does not run inference inside the guest and requires no extension.
 - Browser-import and export files are limited to 8 MiB; vmfetch responses to 16 MiB.
 - Run Deep Agents inside the guest with `vmagent 'TASK'`. It maps `/` to `/root/project`; reads are automatic, while mutations and all shell commands require confirmation.
 - Optional AutoBro pairing adds authenticated browser automation. Session-only YOLO mode is active by default, so use `vmagent yolo off` when per-operation approvals are required.

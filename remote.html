@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Herdr Remote LLM</title>
+<title>VM Remote LLM</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -32,13 +32,13 @@
 <main>
   <section id="pairing">
     <h1>Connect to desktop LLM</h1>
-    <p>This lightweight client does not start the VM or load a model. The desktop Herdr page supplies the WebGPU LLM over WebRTC.</p>
+    <p>This lightweight client does not start the VM or load a model. The desktop VM page supplies the WebGPU LLM over WebRTC.</p>
     <label>Pairing key
       <input id="key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the key shown on the desktop">
     </label>
     <button id="connect" type="button">Connect</button>
     <p id="status">On the desktop, use Settings → Remote access → Host this LLM.</p>
-    <a href="./">Open the full Herdr VM</a>
+    <a href="./">Open the full VM</a>
   </section>
   <section id="chat">
     <div><h1>Desktop LLM</h1><p id="chat-status">Connected over WebRTC</p></div>

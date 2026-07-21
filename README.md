@@ -1,6 +1,7 @@
-# herdr-v86 — herdr on 32-bit Linux in the browser
+# VM — 32-bit Linux in the browser
 
-Artifacts for running [herdr](https://herdr.dev) inside a v86 browser VM.
+A self-contained 32-bit Linux VM running in a browser with local AI, browser
+automation, file transfer, and optional full IPv4 networking.
 
 AutoBro browser automation extension: see
 [installation and download instructions](docs/autobro-extension.md).
@@ -18,20 +19,11 @@ Either action hides the shell and returns to the corresponding wizard step.
 After skipping, use **Settings → Configure providers** to configure the model or
 AutoBro independently without repeating the other provider's setup.
 
-- `herdr-vm-ext4.img` — bootable ext4 root filesystem (Alpine 3.22.5 x86 + herdr 0.7.4,
-  static i686-musl). Init mounts proc/sysfs/devpts/tmpfs and spawns shells on ttyS0 + tty1.
-- `herdr-alpine-x86-rootfs.tar.gz` — same tree, for 9p setups.
-- `herdr-i686` — the standalone static binary.
-- `bzImage-network` + `herdr-vm-network-ext4.img` — default network-enabled demo
+- `bzImage-network` + `vm-network-ext4.img` — default network-enabled demo
   kernel and Alpine shell guest with DHCP, CA certificates, full HTTPS curl,
-  and browser-bridge tools. The legacy `herdr` guest application is not
-  installed or launched in this image.
+  and browser-bridge tools.
 - `network/` — authenticated WebSocket-to-TAP gateway, v86 adapter, guest build
   recipes, and automated DHCP/DNS/ping/HTTPS test.
-- `herdr-i686.patch` — patch against herdr v0.7.4: adds i686 targets to the
-  libghostty-vt zig target map, and gates 46 bindgen layout-test blocks that
-  hardcode 64-bit sizes (the only genuine 32-bit blocker).
-- `build-herdr-i686.sh` — cross-compile procedure.
 
 Boot args (disk image route): `root=/dev/sda rw console=ttyS0`
 Needs an i686 kernel with 8250 serial + ext4 (or 9p/virtio for the tarball route).
@@ -84,7 +76,7 @@ model are MIT-licensed; the bundled license is in
 
 ### Remote LLM chat over WebRTC
 
-A phone can chat directly with the WebGPU LLM loaded by a desktop Herdr page:
+A phone can chat directly with the WebGPU LLM loaded by a desktop VM page:
 
 1. On the desktop, open **Settings → Remote access** and select **Host this LLM**.
 2. Copy the generated session pairing key.
@@ -108,25 +100,3 @@ recommended fallback for machines showing `READ DMA`, `lost interrupt`, or
 `I/O error, dev sda` during boot. If those errors are detected in normal mode,
 the page automatically restarts once in compatibility mode. Operators can
 still force this internal mode with `?compat=1` for diagnostics.
-
-## Known issues (herdr 0.7.4 i686)
-
-- **`herdr --session <name>` fails with `lost connection to server: Connection
-  reset by peer (os error 104)`.** The auto-spawned session server aborts on a
-  Zig safety panic (`attempt to use null value`) in the i686 build of
-  libghostty-vt as soon as a pane terminal is created; the daemon's stderr goes
-  to /dev/null so the crash is silent. Full analysis, captured trace, minimal
-  repro, and debugging plan: [CRASH-REPORT.md](CRASH-REPORT.md).
-
-  Interim workaround (attach works; creating a workspace still crashes):
-
-  ```sh
-  herdr server --session work >/tmp/w.log 2>&1 &
-  sleep 10
-  herdr --session work
-  ```
-
-- **1x1 terminal**: the kernel serial console reports a 0x0 window size, so
-  herdr renders into a 1x1 grid (blank screen). `index.html` now sends
-  `stty rows 32 cols 100` at the first shell prompt automatically; if you use a
-  different console or geometry, run `stty` yourself before attaching.

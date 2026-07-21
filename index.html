@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>herdr in the browser (v86)</title>
+<title>VM in the browser (v86)</title>
 <link rel="stylesheet" href="xterm.css">
 <style>
   html { width: 100%; height: 100%; background: #0d1117; overflow: hidden; }
@@ -87,7 +87,7 @@
 </div>
 <div id="setup-overlay" role="dialog" aria-modal="true" aria-labelledby="setup-title">
   <div class="setup-card">
-    <h2 id="setup-title">Set up Herdr VM</h2>
+    <h2 id="setup-title">Set up VM</h2>
     <div id="setup-progress" class="setup-progress">Step 1 of 2</div>
     <section id="setup-step-llm" class="setup-step">
       <h3>Configure WebGPU LLM</h3>
@@ -124,7 +124,7 @@
   </div>
 </div>
 <header>
-  <h1>herdr-vm</h1>
+  <h1>VM</h1>
   <div id="status">loading v86…</div>
   <div id="llm-status">WebGPU LLM: not paired</div>
   <div id="browser-status">AutoBro: not connected</div>
@@ -176,7 +176,7 @@
 </dialog>
 <dialog id="remote-dialog">
   <h2>Remote LLM</h2>
-  <p id="remote-status">Choose whether this device hosts its LLM or connects to another Herdr instance.</p>
+  <p id="remote-status">Choose whether this device hosts its LLM or connects to another VM instance.</p>
   <label>Pairing key
     <input id="remote-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the desktop pairing key">
   </label>
@@ -216,8 +216,8 @@ const setupOverlay = document.getElementById("setup-overlay");
 let bootReady = false;
 let llmReady = false;
 let autobroReady = false;
-let autobroSkipped = localStorage.getItem("herdr.autobroSkipped") === "true";
-let setupSkipped = localStorage.getItem("herdr.setupSkipped") === "true";
+let autobroSkipped = localStorage.getItem("vm.autobroSkipped") === "true";
+let setupSkipped = localStorage.getItem("vm.setupSkipped") === "true";
 let requestedSetupStep = null;
 let llmCheckComplete = false;
 let autobroCheckComplete = false;
@@ -274,10 +274,10 @@ function failBoot(message) {
   bootMessage.textContent = message;
 }
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "alpine-shell-11";
+const DISK_VERSION = "vm-shell-12";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
-const diskURL = `herdr-vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
+const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
 
 async function rangePreflight() {
   try {
@@ -369,7 +369,7 @@ let serialDisplayLine = "";
 let suppressSerialLine = false;
 async function writeAgentTerminal(output) {
   let text = String(output).trim();
-  text = text.replace(/^\[herdr-coding-agent\]\s*/, "");
+  text = text.replace(/^\[vm-coding-agent\]\s*/, "");
   try {
     const parsed = JSON.parse(text);
     if (typeof parsed?.final === "string") text = parsed.final;
@@ -403,8 +403,8 @@ import("./network/browser/v86-host-bridge.js").then(module => {
     import("./network/browser/vmagent-controller.js").then(async ({ VmAgentController }) => {
       vmAgentController = new VmAgentController({
         createAgent: async options => {
-          const { createHerdrAgent } = await import("./agent/dist/agent.js");
-          return createHerdrAgent(options);
+          const { createVMAgent } = await import("./agent/dist/agent.js");
+          return createVMAgent(options);
         },
         getLlmClient: () => webGpuLlmClient,
         getGuest: () => guestReadonlyClient,
@@ -440,8 +440,8 @@ const voiceStatus = message => {
 };
 const voiceButton = document.getElementById("voice-button");
 const voiceMode = document.getElementById("voice-mode");
-voiceMode.value = localStorage.getItem("herdr.voiceMode") === "execute" ? "execute" : "dictate";
-voiceMode.onchange = () => localStorage.setItem("herdr.voiceMode", voiceMode.value);
+voiceMode.value = localStorage.getItem("vm.voiceMode") === "execute" ? "execute" : "dictate";
+voiceMode.onchange = () => localStorage.setItem("vm.voiceMode", voiceMode.value);
 function setVoiceListening(listening) {
   voiceListening = listening;
   voiceButton.classList.toggle("listening", listening);
@@ -512,8 +512,8 @@ function stopVoiceInput() {
 voiceButton.onclick = () => voiceListening ? stopVoiceInput() : startVoiceInput();
 if (!isSecureContext || !navigator.mediaDevices?.getUserMedia) voiceStatus("unsupported in this browser");
 async function connectAutoBro({ extensionId = null, token = null } = {}) {
-  const storedId = localStorage.getItem("herdr.autobroExtensionId") || "";
-  const storedToken = sessionStorage.getItem("herdr.autobroPairingToken") || "";
+  const storedId = localStorage.getItem("vm.autobroExtensionId") || "";
+  const storedToken = sessionStorage.getItem("vm.autobroPairingToken") || "";
   extensionId ??= storedId;
   token ??= storedToken;
   if (!extensionId || !token) return;
@@ -524,8 +524,8 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
     const health = await client.pair();
     autobroClient = client;
     vmAgentController?.resetHarness();
-    localStorage.setItem("herdr.autobroExtensionId", extensionId.trim());
-    sessionStorage.setItem("herdr.autobroPairingToken", token.trim());
+    localStorage.setItem("vm.autobroExtensionId", extensionId.trim());
+    sessionStorage.setItem("vm.autobroPairingToken", token.trim());
     browserStatus(`connected — bridge v${health.bridgeVersion || "?"}`);
     autobroReady = true;
     autobroCheckComplete = true;
@@ -620,7 +620,7 @@ document.getElementById("remote-chat-form").onsubmit = async event => {
 function returnToSetup() {
   setupSkipped = false;
   requestedSetupStep = null;
-  localStorage.removeItem("herdr.setupSkipped");
+  localStorage.removeItem("vm.setupSkipped");
   setupFinished = false;
   document.getElementById("term").style.visibility = "hidden";
   updateSetupWizard();
@@ -636,7 +636,7 @@ function skipSetupAndOpenShell() {
   setupSkipped = true;
   requestedSetupStep = null;
   setupFinished = true;
-  localStorage.setItem("herdr.setupSkipped", "true");
+  localStorage.setItem("vm.setupSkipped", "true");
   setupOverlay.classList.remove("active");
   document.getElementById("term").style.visibility = "visible";
   status("Shell ready — providers can be configured in Settings");
@@ -671,9 +671,9 @@ document.getElementById("reset-autobro").onclick = () => {
   autobroReady = false;
   autobroCheckComplete = true;
   autobroSkipped = false;
-  localStorage.removeItem("herdr.autobroExtensionId");
-  localStorage.removeItem("herdr.autobroSkipped");
-  sessionStorage.removeItem("herdr.autobroPairingToken");
+  localStorage.removeItem("vm.autobroExtensionId");
+  localStorage.removeItem("vm.autobroSkipped");
+  sessionStorage.removeItem("vm.autobroPairingToken");
   document.getElementById("setup-autobro-extension-id").value = "";
   document.getElementById("setup-autobro-token").value = "";
   document.getElementById("setup-autobro-status").textContent = "AutoBro is not connected.";
@@ -683,13 +683,13 @@ document.getElementById("reset-autobro").onclick = () => {
   returnToSetup();
 };
 document.getElementById("reset-voice").onclick = async () => {
-  if (!confirm("Stop voice input, clear Moonshine model caches, and reload Herdr?")) return;
+  if (!confirm("Stop voice input, clear Moonshine model caches, and reload the VM?")) return;
   stopVoiceInput();
   if (globalThis.caches) {
     const keys = await caches.keys();
     await Promise.all(keys.filter(key => /moonshine|transformers|onnx/i.test(key)).map(key => caches.delete(key)));
   }
-  localStorage.removeItem("herdr.voiceMode");
+  localStorage.removeItem("vm.voiceMode");
   location.reload();
 };
 document.getElementById("setup-autobro-form").onsubmit = event => {
@@ -708,13 +708,13 @@ if (mobileBrowser && extensionMessagingUnavailable) {
 }
 document.getElementById("skip-autobro").onclick = () => {
   autobroSkipped = true;
-  localStorage.setItem("herdr.autobroSkipped", "true");
+  localStorage.setItem("vm.autobroSkipped", "true");
   browserStatus("skipped — unavailable on mobile");
   skipSetupAndOpenShell();
 };
-document.getElementById("setup-autobro-extension-id").value = localStorage.getItem("herdr.autobroExtensionId") || "";
-document.getElementById("setup-autobro-token").value = sessionStorage.getItem("herdr.autobroPairingToken") || "";
-if (localStorage.getItem("herdr.autobroExtensionId") && sessionStorage.getItem("herdr.autobroPairingToken")) connectAutoBro();
+document.getElementById("setup-autobro-extension-id").value = localStorage.getItem("vm.autobroExtensionId") || "";
+document.getElementById("setup-autobro-token").value = sessionStorage.getItem("vm.autobroPairingToken") || "";
+if (localStorage.getItem("vm.autobroExtensionId") && sessionStorage.getItem("vm.autobroPairingToken")) connectAutoBro();
 else if (mobileBrowser && extensionMessagingUnavailable && autobroSkipped) {
   autobroReady = true;
   autobroCheckComplete = true;

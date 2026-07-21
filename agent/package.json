@@ -1,5 +1,5 @@
 {
-  "name": "herdr-v86-readonly-agent",
+  "name": "vm-agent",
   "private": true,
   "type": "module",
   "scripts": {

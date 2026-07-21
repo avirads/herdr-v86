@@ -6,9 +6,9 @@ try {
   const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
   const client = new LiteRtLmClient();
   const root = await navigator.storage.getDirectory();
-  const directory = await root.getDirectoryHandle('herdr-litert-test', { create: true });
+  const directory = await root.getDirectoryHandle('vm-litert-test', { create: true });
   await directory.getFileHandle('probe', { create: true });
-  await root.removeEntry('herdr-litert-test', { recursive: true });
+  await root.removeEntry('vm-litert-test', { recursive: true });
   const wasm = await fetch('../../llm/vendor/litert-lm/wasm/litertlm_wasm_asyncify_internal.wasm', { headers: { Range: 'bytes=0-7' } });
   const ok = typeof runtime.Engine?.create === 'function' && typeof runtime.loadLiteRtLm === 'function' &&
     typeof client.chat === 'function' && wasm.status === 206 && (await wasm.arrayBuffer()).byteLength === 8;

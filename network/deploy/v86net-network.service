@@ -1,5 +1,5 @@
 [Unit]
-Description=Herdr v86 TAP, DHCP, and NAT
+Description=VM v86 TAP, DHCP, and NAT
 After=network-online.target
 Wants=network-online.target
 Before=v86net-gateway.service

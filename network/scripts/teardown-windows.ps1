@@ -20,5 +20,5 @@ if ($RemoveInstalledFiles) {
         Remove-Item -LiteralPath $installDirectory -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
-Write-Host "Herdr Windows gateway and NAT configuration removed."
+Write-Host "VM Windows gateway and NAT configuration removed."
 

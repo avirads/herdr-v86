@@ -1,6 +1,6 @@
-# Herdr full IPv4 gateway
+# VM full IPv4 gateway
 
-This is the host-side gateway for Herdr's v86 VM. It carries Ethernet frames
+This is the host-side gateway for VM's v86 VM. It carries Ethernet frames
 between the browser and a native host interface, giving unmodified guest tools
 such as `curl`, package managers, DNS clients, and `ping` normal outbound IPv4
 connectivity.
@@ -15,7 +15,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 ```
 
 Administrator access is required once to create Wintun, configure WinNAT and
-IP forwarding, and register the startup task. Normal Herdr use afterward does
+IP forwarding, and register the startup task. Normal VM use afterward does
 not require elevation. The included `wintun.dll` is the official signed amd64
 runtime; the installer verifies its Authenticode signature before installing.
 
@@ -39,7 +39,7 @@ gateway process can subsequently run as the TAP owner. Use
 
 ## Browser security
 
-Plain `ws://127.0.0.1` works only with a locally HTTP-served Herdr page. An
+Plain `ws://127.0.0.1` works only with a locally HTTP-served VM page. An
 HTTPS page, including GitHub Pages, requires a trusted `wss://` certificate or
 a TLS reverse proxy. Keep the gateway loopback-bound unless you deliberately
 configure TLS, authentication, firewalling, and an allowed browser origin.

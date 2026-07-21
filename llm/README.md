@@ -1,6 +1,6 @@
 # Page-local LiteRT-LM runtime
 
-herdr loads the vendored `@litert-lm/core` WebGPU runtime directly from this
+The VM loads the vendored `@litert-lm/core` WebGPU runtime directly from this
 directory. A model selected with **Configure LLM** is copied into the site's
 Origin Private File System and automatically reloaded on later visits.
 

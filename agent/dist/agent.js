@@ -94991,7 +94991,7 @@ var V86DeepAgentsBackend = class {
     this.guest = guest;
     this.approve = approve;
     this.onActivity = onActivity;
-    this.id = "herdr-v86-guest";
+    this.id = "vm-guest";
   }
   async permitted(operation, detail) {
     this.onActivity({ backend: operation, detail, approval: true });
@@ -95172,7 +95172,7 @@ Available tools: ${JSON.stringify(toolCatalog)}` : "";
     return { generations: [{ text: contentText(message), message }], llmOutput: { model: this.modelName } };
   }
 };
-function createHerdrAgent({ llmClient, guest, browserClient = null, onActivity = () => {
+function createVMAgent({ llmClient, guest, browserClient = null, onActivity = () => {
 }, approveAction = async () => false, sessionId = crypto.randomUUID() }) {
   const model = new WebGpuToolChatModel(llmClient);
   const backend = new V86DeepAgentsBackend(guest, { approve: approveAction, onActivity });
@@ -95390,7 +95390,7 @@ ${currentAutoBroExecution.text}`;
     schema: external_exports2.object({ command: external_exports2.string(), parameters: external_exports2.record(external_exports2.string(), external_exports2.unknown()).default({}) })
   }));
   const agent = createDeepAgent({
-    name: "herdr-coding-agent",
+    name: "vm-coding-agent",
     model,
     tools: [vmfetch, vmgithub, vmclip, vmexport, vmai, vmllmInfo, ...browserTools],
     backend,
@@ -95427,11 +95427,11 @@ Agent follow-up warning: ${error48.message}`;
     }
   };
 }
-var createHerdrReadonlyAgent = createHerdrAgent;
+var createVMReadonlyAgent = createVMAgent;
 export {
   WebGpuToolChatModel,
-  createHerdrAgent,
-  createHerdrReadonlyAgent
+  createVMAgent,
+  createVMReadonlyAgent
 };
 /*! Bundled license information:
 

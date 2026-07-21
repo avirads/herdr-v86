@@ -198,9 +198,9 @@ export class V86HostBridge extends EventTarget {
   }
 }
 
-export async function saveVMState(emulator, key = "herdr-v86-state") {
+export async function saveVMState(emulator, key = "vm-state") {
   const state = await emulator.save_state();
-  const request = indexedDB.open("herdr-v86", 1);
+  const request = indexedDB.open("vm", 1);
   const database = await new Promise((resolve, reject) => {
     request.onupgradeneeded = () => request.result.createObjectStore("states");
     request.onsuccess = () => resolve(request.result);
@@ -215,8 +215,8 @@ export async function saveVMState(emulator, key = "herdr-v86-state") {
   database.close();
 }
 
-export async function restoreVMState(emulator, key = "herdr-v86-state") {
-  const request = indexedDB.open("herdr-v86", 1);
+export async function restoreVMState(emulator, key = "vm-state") {
+  const request = indexedDB.open("vm", 1);
   const database = await new Promise((resolve, reject) => {
     request.onupgradeneeded = () => request.result.createObjectStore("states");
     request.onsuccess = () => resolve(request.result);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHerdrAgent, WebGpuToolChatModel } from '../src/agent.js';
+import { createVMAgent, WebGpuToolChatModel } from '../src/agent.js';
 
 test('WebGPU model advertises the LiteRT context budget for summarization', () => {
   const model = new WebGpuToolChatModel({ chat: async () => ({}) });
@@ -33,7 +33,7 @@ test('Deep Agents invokes the native guest backend and returns evidence', async 
     async execute(command) { guestCalls.push(['execute', command]); return '__V86AGENT_EXIT__0\nok'; },
     async test(recipe) { guestCalls.push(['test', recipe]); return 'ok'; },
   };
-  const harness = createHerdrAgent({ llmClient, guest, browserClient: { command: async () => ({ ok: true }) }, onActivity: event => activities.push(event) });
+  const harness = createVMAgent({ llmClient, guest, browserClient: { command: async () => ({ ok: true }) }, onActivity: event => activities.push(event) });
   const result = await harness.run('List the project.');
   assert.deepEqual(guestCalls, [['list', 'skills/'], ['read', 'AGENTS.md'], ['list', '.']]);
   assert.match(result.output, /src\/main\.js/);
@@ -97,7 +97,7 @@ test('vmfetch automatically switches interactive sites to AutoBro', async () => 
     return { ok: true };
   } };
   const guest = fallbackGuest(async () => { throw new Error('vmfetch must not run for an interactive site'); });
-  const harness = createHerdrAgent({
+  const harness = createVMAgent({
     llmClient: scriptedClient([
       { tool: 'vmfetch', args: { url: 'https://www.google.com/search?q=test', output: '-', method: 'GET', headers: [] } },
       { final: 'Switched to the browser.' },
@@ -118,7 +118,7 @@ test('failed AutoBro navigation automatically switches to vmfetch', async () => 
     guestCommands.push(command);
     return '__V86AGENT_EXIT__0\nraw page';
   });
-  const harness = createHerdrAgent({
+  const harness = createVMAgent({
     llmClient: scriptedClient([
       { tool: 'autobro_command', args: { command: 'gotoUrl', parameters: { url: 'https://example.com/data' } } },
       { final: 'Fetched raw content.' },
@@ -143,7 +143,7 @@ test('AutoBro automation uses the page-local WebGPU LLM to plan exact commands',
     if (command === 'fillInput') return { changed: true };
     return {};
   } };
-  const harness = createHerdrAgent({
+  const harness = createVMAgent({
     llmClient: scriptedClient([
       { tool: 'autobro_automate', args: { instruction: 'Type test in the Search field' } },
       { steps: [
@@ -173,7 +173,7 @@ test('duplicate AutoBro automation calls return the first execution result witho
     return {};
   } };
   const instruction = 'Submit the search form';
-  const harness = createHerdrAgent({
+  const harness = createVMAgent({
     llmClient: scriptedClient([
       { tool: 'autobro_automate', args: { instruction } },
       { steps: [{ command: 'pressKey', args: ['ENTER'] }] },

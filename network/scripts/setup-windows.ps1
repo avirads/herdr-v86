@@ -113,6 +113,6 @@ $connectionPath = Join-Path $InstallDirectory "connection.json"
 $connection | ConvertTo-Json | Set-Content -LiteralPath $connectionPath -Encoding utf8
 & icacls.exe $browserTokenPath /grant:r "Users:R" | Out-Null
 & icacls.exe $connectionPath /grant:r "Users:R" | Out-Null
-Write-Host "Herdr Windows gateway installed and running."
+Write-Host "VM Windows gateway installed and running."
 Write-Host "Connection details: $connectionPath"
 Write-Host "Daily use does not require Administrator rights."

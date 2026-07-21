@@ -1,7 +1,7 @@
 # Browser-backed guest tools
 
 This is the canonical command reference for gateway-free services in the
-herdr-v86 guest. These tools communicate with JavaScript in the hosting browser;
+VM guest. These tools communicate with JavaScript in the hosting browser;
 they do not require a guest network interface or the external TAP gateway.
 
 ## Determine which networking mode is available
@@ -144,13 +144,13 @@ VMLLM_SYSTEM='Return only a unified diff.' VMLLM_MAX_TOKENS=2048 \
 ```
 
 `vmllm` runs inference in the PC's browser WebGPU implementation, not inside the
-32-bit guest. The herdr page directly hosts LiteRT-LM and stores the selected
+32-bit guest. The VM page directly hosts LiteRT-LM and stores the selected
 model in its origin-private filesystem. No extension, network gateway, native
 process, or cloud API key is needed.
 
 Before using it:
 
-1. Open herdr-v86 in a WebGPU-capable desktop browser.
+1. Open the VM in a WebGPU-capable desktop browser.
 2. Click **Configure LLM** and select a compatible `.litertlm` or `.task` file.
 3. Wait while the page copies it to OPFS and compiles the WebGPU kernels.
 4. On later visits, the last cached model loads automatically.
@@ -202,7 +202,7 @@ DeepAgentsJS filesystem and shell tools to `/root/project`. Use `vmagent status`
 `stop`, `reset`, or `yolo on|off` for lifecycle control. After the first reply,
 the browser keeps a persistent `vmagent>` conversation using the same agent
 checkpoint; enter `/exit` to return to the guest shell. A hidden second UART
-carries agent tool RPC while Herdr retains the visible primary console. YOLO is
+carries agent tool RPC while VM retains the visible primary console. YOLO is
 on by default; use `vmagent yolo off` to require per-operation
 browser confirmations. Running bare `vmagent` reads the first prompt; stdin
 pipes can contain longer initial prompts.

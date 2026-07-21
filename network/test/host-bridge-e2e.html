@@ -15,8 +15,8 @@ const emulator = new V86({
   wasm_path: '../../v86-network.wasm', memory_size: 256 << 20, vga_memory_size: 2 << 20,
   bios: { url: '../../seabios.bin' }, vga_bios: { url: '../../vgabios.bin' },
   bzimage: { url: '../../bzImage-network' },
-  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic herdr.shell=1${compatibilityBoot ? ' libata.force=pio4' : ''}`,
-  hda: { url: '../../herdr-vm-network-ext4.img', async: !compatibilityBoot, size: 100663296 },
+  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic${compatibilityBoot ? ' libata.force=pio4' : ''}`,
+  hda: { url: '../../vm-network-ext4.img', async: !compatibilityBoot, size: 100663296 },
   uart1: true,
   screen_container: document.querySelector('#screen_container'), autostart: true,
 });
@@ -34,7 +34,7 @@ const guest = new V86GuestReadonlyClient(emulator, hostBridge);
 emulator.add_listener('serial0-output-byte', byte => {
   serial = (serial + String.fromCharCode(byte)).slice(-100000);
   document.querySelector('#serial').textContent = serial;
-  if (!started && /(?:herdr-vm:~#|~\s*[#%])\s*$/.test(serial)) {
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
     started = true;
     emulator.serial0_send("vmagent\ninteractive task\nmkdir -p /root/project/src; printf 'const needle = 1;\\n' > /root/project/src/main.js; printf 'VMAGENT_PATH='; command -v vmagent; vmagent --help >/tmp/vmagent-help 2>&1; grep -q 'vmagent PROMPT' /tmp/vmagent-help && echo VMAGENT_HELP_OK; vmagent status; vmfetch -o /tmp/payload http://127.0.0.1:8091/network/test/payload.txt && printf 'VMFETCH_CONTENT=' && cat /tmp/payload; echo; printf 'VMLLM_CONTENT='; vmllm 'hello'; echo VMFETCH_E2E_END\n");
   }
@@ -49,9 +49,9 @@ emulator.add_listener('serial0-output-byte', byte => {
       const executed = await guest.execute('printf deepagents-shell-ok');
       const fetchedStdout = await guest.execute(`vmfetch -o - ${location.origin}/network/test/payload.txt`);
       await guest.delete('src/generated.js');
-      const { createHerdrAgent } = await import('../../agent/dist/agent.js');
+      const { createVMAgent } = await import('../../agent/dist/agent.js');
       let modelCalls = 0;
-      const harness = createHerdrAgent({
+      const harness = createVMAgent({
         guest,
         llmClient: { chat: async () => ({ choices: [{ message: { content: ++modelCalls === 1 ? '{"tool":"write_file","args":{"file_path":"/agent-created.txt","content":"created by Deep Agents\\n"}}' : '{"final":"Deep agent created agent-created.txt."}' } }] }) },
         approveAction: async () => true,
@@ -59,7 +59,7 @@ emulator.add_listener('serial0-output-byte', byte => {
       const agentResult = await harness.run('Create agent-created.txt.');
       const agentWritten = await guest.read('agent-created.txt');
       let fetchModelCalls = 0;
-      const fetchHarness = createHerdrAgent({
+      const fetchHarness = createVMAgent({
         guest,
         llmClient: { chat: async () => ({ choices: [{ message: { content: ++fetchModelCalls === 1 ? JSON.stringify({ tool: 'vmfetch', args: { url: `${location.origin}/network/test/payload.txt`, output: 'agent-fetch.txt', method: 'GET', headers: [] } }) : '{"final":"vmfetch completed."}' } }] }) },
         approveAction: async () => true,
@@ -68,7 +68,7 @@ emulator.add_listener('serial0-output-byte', byte => {
       const agentFetched = await guest.read('agent-fetch.txt');
       let browserModelCalls = 0;
       const browserCalls = [];
-      const browserHarness = createHerdrAgent({
+      const browserHarness = createVMAgent({
         guest,
         browserClient: { command: async (command, parameters) => { browserCalls.push({ command, parameters }); return command === 'newTab' ? { tabId: 42, title: 'Google', url: parameters.url } : { title: 'test - Google Search', url: 'https://www.google.com/search?q=test' }; } },
         llmClient: { chat: async () => ({ choices: [{ message: { content: ++browserModelCalls === 1 ? '{"tool":"browser_search","args":{"query":"test","engine":"google"}}' : '{"final":"Browser search completed."}' } }] }) },

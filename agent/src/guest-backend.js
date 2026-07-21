@@ -28,7 +28,7 @@ export class V86DeepAgentsBackend {
     this.guest = guest;
     this.approve = approve;
     this.onActivity = onActivity;
-    this.id = 'herdr-v86-guest';
+    this.id = 'vm-guest';
   }
 
   async permitted(operation, detail) {

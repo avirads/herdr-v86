@@ -1,6 +1,6 @@
 # MoonshineJS browser assets
 
-Pinned local assets for Herdr voice input:
+Pinned local assets for VM voice input:
 
 - `@moonshine-ai/moonshine-js` 0.1.29
 - Moonshine Tiny English quantized ONNX model distributed with that package

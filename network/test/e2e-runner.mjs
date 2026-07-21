@@ -54,7 +54,7 @@ await new Promise((resolve, reject) => server.listen(port, '127.0.0.1', error =>
 
 const fragment = new URLSearchParams({ gateway, token });
 const url = `http://127.0.0.1:${port}/network/test/e2e.html#${fragment}`;
-const profile = mkdtempSync(join(tmpdir(), 'herdr-v86-e2e-'));
+const profile = mkdtempSync(join(tmpdir(), 'vm-e2e-'));
 const child = spawn(chrome, [
   '--headless', '--disable-gpu', '--no-first-run',
   ...(process.getuid?.() === 0 ? ['--no-sandbox'] : []),

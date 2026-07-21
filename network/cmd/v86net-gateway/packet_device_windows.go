@@ -28,7 +28,7 @@ type windowsPacketDevice struct {
 }
 
 func openPacketDevice(name string) (packetDevice, error) {
-	tun.WintunTunnelType = "Herdr"
+	tun.WintunTunnelType = "VM"
 	tun.WintunStaticRequestedGUID = &windows.GUID{
 		Data1: 0x78f19425, Data2: 0x8d1a, Data3: 0x4c58,
 		Data4: [8]byte{0x9a, 0x7e, 0x55, 0x56, 0x38, 0xe2, 0x12, 0x41},

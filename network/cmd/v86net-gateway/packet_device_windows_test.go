@@ -22,7 +22,7 @@ func TestARPResponseForGateway(t *testing.T) {
 		t.Fatal("expected an ARP reply")
 	}
 	if string(response[22:28]) != string(gatewayMAC[:]) || string(response[28:32]) != string(gatewayIP[:]) {
-		t.Fatal("ARP reply did not identify the Herdr gateway")
+		t.Fatal("ARP reply did not identify the VM gateway")
 	}
 }
 
