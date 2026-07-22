@@ -1059,6 +1059,17 @@ setTimeout(() => { if (!gotSerial) { const message = "No VM output after 120 sec
 let recentOutput = "";
 let diskErrorOutput = "";
 let compatibilityRestartScheduled = false;
+function serialHasShellPrompt(output) {
+  // Do not require one exact hostname/cwd. Network startup and terminal control
+  // sequences can be interleaved with the prompt, especially over a live WSS
+  // gateway. Strip ANSI/DEC replies and accept a conventional shell prompt at
+  // the end of the current serial line.
+  const plain = output
+    .replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g, "")
+    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\r/g, "");
+  return /(?:^|\n)[^\n]{0,200}[#$] $/.test(plain);
+}
 emulator.add_listener("serial0-output-byte", (byte) => {
   if (!gotSerial) { gotSerial = true; setBootProgress(68, "Starting VM…"); status("VM booting — output live"); }
   writeSerialByte(byte);
@@ -1073,8 +1084,8 @@ emulator.add_listener("serial0-output-byte", (byte) => {
     }
   }
   if (!sttySent) {
-    recentOutput = (recentOutput + String.fromCharCode(byte)).slice(-64);
-    if (recentOutput.endsWith(":~# ")) {
+    recentOutput = (recentOutput + String.fromCharCode(byte)).slice(-1024);
+    if (serialHasShellPrompt(recentOutput)) {
       sttySent = true;
       fitTerminal();
       for (const ch of `stty rows ${term.rows} cols ${term.cols}\n`) emulator.serial0_send(ch);
