@@ -34,6 +34,7 @@ export class V86HostBridge extends EventTarget {
     this.replyChannels = new Map();
     this.handledAgentRequests = new Set();
     this.sendQueue = Promise.resolve();
+    this.ackWaiters = new Map();
     this.onByte0 = byte => this.consumeByte(byte, 0);
     this.onByte1 = byte => this.consumeByte(byte, 1);
     emulator.add_listener("serial0-output-byte", this.onByte0);
@@ -45,6 +46,11 @@ export class V86HostBridge extends EventTarget {
     if (character === "\n") {
       const line = this.lines[serial].replace(/\r$/, "");
       this.lines[serial] = "";
+      if (line.startsWith("__V86RPC_ACK__\t")) {
+        const [, id, sequence] = line.split("\t");
+        this.ackWaiters.get(`${id}:${sequence}`)?.();
+        return;
+      }
       const marker = line.indexOf(PREFIX);
       if (marker >= 0) {
         const request = line.slice(marker + PREFIX.length);
@@ -64,14 +70,17 @@ export class V86HostBridge extends EventTarget {
   send(line, serial = this.rpcSerial) {
     this.sendQueue = this.sendQueue.then(async () => {
       const text = line + "\n";
-      for (let offset = 0; offset < text.length; offset += 128) {
-        const chunk = text.slice(offset, offset + 128);
+      // Stay below a 115200-baud UART's practical ~11.5 KiB/s ceiling. Larger
+      // bursts can overrun the guest and drop DATA while a following END frame
+      // survives, producing a misleading empty HTTP response.
+      for (let offset = 0; offset < text.length; offset += 1) {
+        const chunk = text.slice(offset, offset + 1);
         if (serial === 0) {
           for (const character of chunk) this.emulator.serial0_send(character);
         } else {
           this.emulator.serial_send_bytes(serial, new TextEncoder().encode(chunk));
         }
-        await new Promise(resolve => setTimeout(resolve, 2));
+        await new Promise(resolve => setTimeout(resolve, 1));
       }
     });
     return this.sendQueue;
@@ -94,6 +103,8 @@ export class V86HostBridge extends EventTarget {
     if (operation === "LLM_STATUS") return this.llm(id, "status");
     if (operation === "LLM_MODELS") return this.llm(id, "models");
     if (operation === "LLM_CHAT") return this.llm(id, "chat", fields[0]);
+    if (operation === "LLM_COMPLETION") return this.llm(id, "completion", fields[0]);
+    if (operation === "LLM_OPENAI") return this.llm(id, "openai", fields[0]);
     if (operation.startsWith("AGENT_")) {
       if (!this.agentHandler) throw new Error("vmagent is still initializing");
       if (this.handledAgentRequests.has(id)) return;
@@ -122,14 +133,65 @@ export class V86HostBridge extends EventTarget {
     let result;
     if (operation === "status") result = await this.llmClient.status();
     else if (operation === "models") result = await this.llmClient.models();
-    else {
+    else if (operation === "chat") {
       const completion = await this.llmClient.chat(JSON.parse(decodeText(body64)));
       result = completion?.choices?.[0]?.message?.content ?? completion;
+    } else if (operation === "completion") {
+      result = await this.llmClient.chat(JSON.parse(decodeText(body64)));
+    } else {
+      const completion = await this.llmClient.chat(JSON.parse(decodeText(body64)));
+      result = this.openAiSse(completion);
     }
     const output = typeof result === "string" ? result : JSON.stringify(result);
-    await this.reply(id, "DATA", encodeText(output));
+    if (operation === "completion" || operation === "openai") {
+      const encoded = encodeText(output);
+      let sequence = 0;
+      for (let offset = 0; offset < encoded.length; offset += 32) {
+        await this.reliableReply(id, sequence, "PART", encoded.slice(offset, offset + 32));
+        sequence += 1;
+      }
+      await this.reliableReply(id, sequence, "DONE", "");
+      this.replyChannels.delete(id);
+      return;
+    }
+    // Keep each line short: long writes can overrun the emulated UART/guest
+    // line discipline even though a following short END frame survives.
+    const encoded = encodeText(output);
+    for (let offset = 0; offset < encoded.length; offset += 64) {
+      await this.reply(id, "DATA", encoded.slice(offset, offset + 64));
+    }
     await this.reply(id, "END", "0");
   }
+
+  async reliableReply(id, sequence, kind, value = "") {
+    const key = `${id}:${sequence}`;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      let resolveAck;
+      const ack = new Promise(resolve => { resolveAck = resolve; });
+      this.ackWaiters.set(key, resolveAck);
+      await this.send(`__V86RPC_RESPONSE__\t${id}\t${kind}\t${sequence}:${value}`, this.replyChannels.get(id) ?? this.rpcSerial);
+      const received = await Promise.race([ack.then(() => true), new Promise(resolve => setTimeout(() => resolve(false), 2000))]);
+      this.ackWaiters.delete(key);
+      if (received) return;
+    }
+    throw new Error(`guest did not acknowledge LLM response chunk ${sequence}`);
+  }
+
+  openAiSse(completion) {
+    const choice = completion?.choices?.[0] || {};
+    const message = choice.message || {};
+    const base = {
+      id: completion?.id || `vm-${Date.now()}`,
+      object: 'chat.completion.chunk',
+      model: completion?.model || 'webgpu',
+      usage: null,
+    };
+    const role = { ...base, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+    const payload = { ...base, choices: [{ index: 0, delta: { ...(message.content ? { content: message.content } : {}), ...(message.tool_calls ? { tool_calls: message.tool_calls.map((call, index) => ({ index, ...call })) } : {}) }, finish_reason: null }] };
+    const last = { ...base, choices: [{ index: 0, delta: {}, finish_reason: choice.finish_reason || 'stop' }] };
+    return `data: ${JSON.stringify(role)}\n\ndata: ${JSON.stringify(payload)}\n\ndata: ${JSON.stringify(last)}\n\ndata: [DONE]\n\n`;
+  }
+
 
   async fetch(id, [method64, url64, headers64, body64]) {
     const method = decodeText(method64 || encodeText("GET"));

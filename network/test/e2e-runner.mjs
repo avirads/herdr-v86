@@ -12,10 +12,11 @@ const args = Object.fromEntries(process.argv.slice(2).map(value => {
 const root = resolve(args['--root'] || join(import.meta.dirname, '..', '..'));
 const gateway = args['--gateway'];
 const token = args['--token'];
+const page = args['--page'] || 'e2e.html';
 const pingTarget = args['--ping-target'] || '1.1.1.1';
 const chrome = args['--chrome'] || process.env.CHROME_BIN || 'google-chrome';
 const port = Number(args['--port'] || 8090);
-if (!gateway || !token) throw new Error('--gateway and --token are required');
+if (page === 'e2e.html' && (!gateway || !token)) throw new Error('--gateway and --token are required for the connectivity test');
 
 const gatewayChild = args['--gateway-bin'] ? spawn(args['--gateway-bin'], [
   '-backend', args['--gateway-backend'] || 'native', '-listen', new URL(gateway).host,
@@ -59,8 +60,8 @@ const server = createServer((request, response) => {
 });
 await new Promise((resolve, reject) => server.listen(port, '127.0.0.1', error => error ? reject(error) : resolve()));
 
-const fragment = new URLSearchParams({ gateway, token, pingTarget });
-const url = `http://127.0.0.1:${port}/network/test/e2e.html#${fragment}`;
+const fragment = new URLSearchParams({ ...(gateway ? { gateway } : {}), ...(token ? { token } : {}), pingTarget });
+const url = `http://127.0.0.1:${port}/network/test/${encodeURIComponent(page)}#${fragment}`;
 const profile = mkdtempSync(join(tmpdir(), 'vm-e2e-'));
 const child = spawn(chrome, [
   '--headless', '--disable-gpu', '--no-first-run',

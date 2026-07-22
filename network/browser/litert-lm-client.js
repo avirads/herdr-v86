@@ -9,6 +9,42 @@ function contentToText(content) {
   return String(content ?? '');
 }
 
+function messageToText(message) {
+  if (message?.role === 'tool') {
+    return `[tool result${message.name ? ` from ${message.name}` : ''}]: ${contentToText(message.content)}`;
+  }
+  if (message?.tool_calls?.length) {
+    return `[assistant tool calls]: ${JSON.stringify(message.tool_calls)}`;
+  }
+  return contentToText(message?.content);
+}
+
+export function completionWithToolCall(completion) {
+  const choice = completion?.choices?.[0];
+  const content = choice?.message?.content?.trim?.() || '';
+  if (!content) return completion;
+  let value;
+  try {
+    const fenced = content.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] || content;
+    value = JSON.parse(fenced);
+  } catch {
+    return completion;
+  }
+  const call = value?.tool_call || value?.toolCall;
+  if (!call?.name || typeof call.arguments !== 'object' || Array.isArray(call.arguments)) return completion;
+  choice.message = {
+    role: 'assistant',
+    content: null,
+    tool_calls: [{
+      id: `call_${Date.now().toString(36)}`,
+      type: 'function',
+      function: { name: call.name, arguments: JSON.stringify(call.arguments) },
+    }],
+  };
+  choice.finish_reason = 'tool_calls';
+  return completion;
+}
+
 export class LiteRtLmClient extends EventTarget {
   constructor() {
     super();
@@ -168,20 +204,27 @@ export class LiteRtLmClient extends EventTarget {
 
   async chat(body) {
     if (!this.engine) throw new Error('no page-local LiteRT-LM model loaded; use Configure LLM');
-    const messages = body?.messages || [];
+    const messages = [...(body?.messages || [])];
     if (!messages.length) throw new Error('messages required');
+    if (body?.tools?.length) {
+      const tools = body.tools.map(tool => tool?.function || tool).filter(Boolean);
+      messages.unshift({
+        role: 'system',
+        content: `You can call tools. When a tool is needed, output only one JSON object with this exact shape: {"tool_call":{"name":"tool_name","arguments":{}}}. Never wrap it in prose. Available tools: ${JSON.stringify(tools)}`,
+      });
+    }
     const last = messages[messages.length - 1];
-    const preface = messages.slice(0, -1).map(message => ({ role: message.role, content: contentToText(message.content) }));
+    const preface = messages.slice(0, -1).map(message => ({ role: message.role === 'tool' ? 'user' : message.role, content: messageToText(message) }));
     const conversation = await this.engine.createConversation(preface.length ? { preface: { messages: preface } } : {});
     try {
       const response = await conversation.sendMessage(contentToText(last.content));
       const content = (response?.content || []).filter(item => item?.text !== undefined).map(item => item.text).join('');
-      return {
+      return completionWithToolCall({
         id: `litertlm-${Date.now()}`,
         object: 'chat.completion',
         model: this.modelName,
         choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
-      };
+      });
     } finally {
       conversation.delete?.();
     }

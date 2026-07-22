@@ -1,0 +1,80 @@
+#!/bin/sh
+set -eu
+rpc_tty=${VM_OPENAI_TTY:-/dev/ttyS1}
+
+cr=$(printf '\r')
+IFS= read -r request || exit 0
+request=${request%"$cr"}
+length=0
+while IFS= read -r header; do
+  header=${header%"$cr"}
+  [ -n "$header" ] || break
+  case "$header" in
+    [Cc]ontent-[Ll]ength:*) length=${header#*:}; length=${length# };;
+  esac
+done
+
+case "$request" in
+  'GET /v1/models '*)
+    body='{"object":"list","data":[{"id":"webgpu","object":"model","owned_by":"page-local-litert-lm"}]}'
+    ;;
+  'POST /v1/chat/completions '*|'POST /v1/opendev/chat/completions '*|'POST /v1/rig/chat/completions '*)
+    if [ "$length" -le 0 ]; then
+      body='{"error":{"message":"request body required"}}'
+      status='400 Bad Request'
+    else
+    input=$(dd bs=1 count="$length" 2>/dev/null)
+    id="zs-$$-$(date +%s)"
+    encoded=$(printf %s "$input" | base64 | tr -d '\n')
+    output="/tmp/vm-openai-$id"
+    : > "$output"
+    expected_sequence=0
+    rpc=LLM_OPENAI
+    case "$request" in 'POST /v1/opendev/'*|'POST /v1/rig/'*) rpc=LLM_COMPLETION;; esac
+    exec 3<>"$rpc_tty"
+    printf '__V86RPC__\t%s\t%s\t%s\n' "$rpc" "$id" "$encoded" >&3
+    while IFS="$(printf '\t')" read -r prefix response_id kind value; do
+      [ "$prefix:$response_id" = "__V86RPC_RESPONSE__:$id" ] || continue
+      case "$kind" in
+        PART)
+          sequence=${value%%:*}; chunk=${value#*:}
+          if [ "$sequence" = "$expected_sequence" ]; then
+            printf %s "$chunk" | base64 -d >> "$output"
+            expected_sequence=$((expected_sequence + 1))
+          fi
+          printf '__V86RPC_ACK__\t%s\t%s\n' "$id" "$sequence" >&3
+          ;;
+        DONE)
+          sequence=${value%%:*}
+          printf '__V86RPC_ACK__\t%s\t%s\n' "$id" "$sequence" >&3
+          [ "$sequence" = "$expected_sequence" ] && break
+          ;;
+        DATA) printf %s "$value" | base64 -d >> "$output";;
+        ERROR)
+          printf %s "$value" | base64 -d > "$output"
+          status='502 Bad Gateway'
+          break
+          ;;
+        END)
+          [ -z "$value" ] || printf %s "$value" | base64 -d >> "$output"
+          break
+          ;;
+      esac
+    done <&3
+    exec 3>&-
+    body=$(cat "$output")
+    rm -f "$output"
+    case "$request" in
+      'POST /v1/opendev/'*|'POST /v1/rig/'*) content_type='application/json';;
+      *) content_type='text/event-stream';;
+    esac
+    fi
+    ;;
+  *) body='{"error":{"message":"not found"}}'; status='404 Not Found';;
+esac
+
+status=${status:-'200 OK'}
+content_type=${content_type:-'application/json'}
+bytes=$(printf %s "$body" | wc -c | tr -d ' ')
+printf 'HTTP/1.1 %s\r\nContent-Type: %s\r\nContent-Length: %s\r\nConnection: close\r\n\r\n' "$status" "$content_type" "$bytes"
+printf %s "$body"

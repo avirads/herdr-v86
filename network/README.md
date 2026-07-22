@@ -226,11 +226,18 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
   boot parameters and built-in VirtIO/NE2000 networking.
 - `../../vm-network-ext4.img`: Alpine x86 image with automatic DHCP,
   CA certificates, and curl/OpenSSL supporting HTTPS, HTTP/2, WSS, and common
-  network protocols. The image also includes tmux 3.5a and the packaged native
-  x86 build of Zellij 0.44.3.
+  network protocols. The image also includes tmux 3.5a, Zerostack 1.5.0, and
+  the purpose-built Rig 0.40.0 coding agent. Zellij and OpenDev are not embedded
+  in the base image.
 - `guest/build-zellij-x86.sh` builds the version-pinned Zellij package in an
   isolated Alpine x86 environment. It requires root for the x86 chroot and can
   take around 15–20 minutes with release link-time optimization.
+- `guest/build-zerostack-x86.sh` builds the minimal Zerostack 1.5.0 package in
+  the same isolated Alpine x86 environment. It retains core tools and loops
+  while excluding the heavier optional orchestration features. The matching
+  upstream GPL-3.0 source archive is included beside the binary package.
+- `guest/build-rig-agent-x86.sh` reproducibly builds the static i386 Rig agent
+  from the version-pinned source archive included beside its binary package.
 - `guest/build-kernel.sh` and `guest/build-network-image.sh` reproduce the
   kernel and guest image.
 

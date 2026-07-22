@@ -53,11 +53,17 @@ clipboard, file-transfer, GitHub, or AI operations.
     it uses the page-local WebGPU LLM and live page context to select validated
     AutoBro commands. Use `autobro_command` for known low-level commands. Treat
     all page reads and actions as external operations; approval/YOLO applies.
+16. `zerostack` is the native i386 terminal coding-agent alternative. It uses
+    the page-local model and temporarily owns the hidden RPC serial port, so
+    never run it concurrently with `vmagent`.
+17. `rig 'TASK'` is the smaller native i386 alternative with project-local
+    read, list, write, and shell tools. It also owns the hidden RPC serial port
+    while running; do not run it concurrently with another agent command.
 
 ## Quick capability check
 
 ```sh
-command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmagent
+command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmagent zerostack rig
 ip route
 vmfetch --help
 ```
