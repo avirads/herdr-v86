@@ -59,20 +59,41 @@ kernel.
 | 20k pure-CPU shell loop | 2.84 s | 2.72 s | 2.67 s | ~0 (CPU-bound) |
 | 16 MB pipe | 0.10 s | 0.10 s | 0.08 s | −20 % |
 | 400-file cold read | 1.96 s | 2.14 s | 2.44 s | HTTP-fetch noise |
-| 100 KB serial → terminal | 6.47 s | 5.61 s | — | −13 % (P1) |
+| 100 KB line-buffered → terminal | 6.47 s | 5.61 s | **3.15 s** | **−51 %** |
 
 The wins land exactly where expected: **interrupt- and syscall-heavy work**
-(shells, TUIs, agents — i.e. everything interactive) is ~1.5–1.7× faster, while
+(shells, TUIs, agents — i.e. everything interactive) is ~1.5–2× faster, while
 pure-CPU code is unchanged (v86 emulates the same instructions either way).
 
-## Known bottleneck: serial→terminal throughput
+## Terminal throughput: it's guest CPU, not the UART
 
-100 KB written **to the terminal** takes ~5.6 s, but the same 100 KB to
-`/dev/null` takes 0.15 s. The cost is almost entirely the guest's per-byte
-115200-baud UART port I/O plus v86's per-byte serial callback — not guest CPU.
-JS-side batching (done) helps the render side; the remaining ceiling is the
-emulated UART itself. A v86 UART FIFO / block-transfer path would dwarf every
-change here for TUI-heavy workloads and is the recommended next step.
+An earlier read of this said serial output was UART-bound and recommended a v86
+UART-FIFO rewrite. **Direct measurement disproved that** — do not spend effort
+there. Findings, with the guest's own `time` and the emulator instruction
+counter:
+
+- **Block writes are fast and not throttled.** 50 KB written to the terminal in
+  reasonably-sized chunks: **0.33 s (~150 KB/s)**, guest at full tilt. This is
+  what real TUIs (herdr, tmux, zellij) do — one `write()` per screen refresh.
+- **The slow case is pathological, and it's CPU-bound.** Plain `yes` emits
+  2-byte lines, so `yes | head -c 100000` is **50 000 line-buffered `write()`
+  syscalls**. That is what the old "5.6 s" measured — syscall/tty overhead, not
+  serial. During it the guest runs at **~29 MIPS (busy, not halted)** and the
+  time is **97 % `sys`**. Producing the same 100 KB to `/dev/null` is 0.08 s, so
+  the delta is entirely the guest's tty line-discipline + console + per-`write`
+  path — exactly what HZ=100 + no-audit + no-mitigations speed up. It dropped
+  **6.47 s → 3.15 s (−51 %)** with no emulator change.
+- **The only case that stalls is an edge case.** Redirecting a bulk stream to
+  the raw device (`cat bigfile > /dev/ttyS0`) blocks the writer with the guest
+  *halted* (~0.9 MIPS). Normal programs write to their controlling terminal, not
+  the raw device, so this doesn't affect real workloads. If it ever matters, it
+  is the one place a v86 UART change (raise the TX-drain/THRE rate) would help —
+  but it is not worth a WASM rebuild for an edge case.
+
+Net: there is no UART bottleneck on the path real programs use; terminal-heavy
+work is guest-CPU-bound and already ~2× faster from the kernel tuning above.
+The JS-side serial batching in `index.html` still helps the render side when
+bursts arrive, and is kept.
 
 ## Regression checks (Phase 2 kernel)
 
