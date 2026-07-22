@@ -45,6 +45,16 @@ controls, client certificates, or every `curl` option.
 
 ## `vmclip` — system clipboard
 
+The terminal also supports direct clipboard controls:
+
+- Select text and press **Copy** or `Ctrl+Shift+C` (`Cmd+C` on macOS).
+- Press **Paste**, `Ctrl+Shift+V` (`Cmd+V` on macOS), or `Shift+Insert` to
+  insert clipboard text into the active shell or `vmagent` conversation.
+- Plain `Ctrl+C` remains the shell interrupt key when terminal text is not
+  selected.
+- If direct clipboard permission is unavailable, the **Paste** button opens a
+  text box where content can be pasted and inserted without granting access.
+
 ```text
 vmclip read
 vmclip write
@@ -187,50 +197,6 @@ interactive serial console; avoid typing while a large file is being imported.
 | `no page-local LiteRT-LM model loaded` | No model is ready in this site origin | Click **Configure LLM** and select a compatible model |
 | `WebGPU is unavailable` | Browser/GPU cannot expose WebGPU | Use current desktop Chrome/Edge with compatible GPU drivers |
 | `curl: could not resolve host` without a route | No full gateway connection | Use `vmfetch` or configure the network gateway |
-
-## `zerostack` — native terminal coding agent
-
-`zerostack` is the compact native i386 coding-agent alternative. It uses the
-same page-local WebGPU model as `vmllm`, while exposing Zerostack's terminal
-UI, sessions, file and shell tools, permissions, compaction, and loop workflow.
-
-```sh
-cd /root/project
-zerostack
-zerostack -p 'Summarize this repository'
-zerostack --yolo -p 'Add a test for the parser'
-zerostack -c
-```
-
-The launcher temporarily dedicates the hidden RPC serial port to its local
-OpenAI-compatible adapter. Do not run `vmagent` and `zerostack` concurrently;
-the normal hidden guest shell is restored when Zerostack exits. A configured
-page-local model is required, but guest IP networking and an API key are not.
-
-The VM build enables core tools and the loop workflow. MCP, worktrees,
-subagents, ACP and status sockets are excluded to reduce 32-bit resource use.
-YOLO is the default, while destructive shell commands still require approval.
-The corresponding GPL-3.0 source archive is published beside the packaged
-binary as `network/guest/zerostack-1.5.0-source.tar.gz`.
-
-## `rig` — compact native coding agent
-
-`rig 'TASK'` runs the purpose-built static i386 agent based on Rig 0.40.0. It
-uses the page-local WebGPU model and provides `read_file`, `list_directory`,
-`write_file`, and `shell` tools rooted at the current project directory.
-
-```sh
-cd /root/project
-rig 'Summarize this project'
-rig 'Create hello.txt containing hello from the VM'
-```
-
-The launcher temporarily owns the hidden RPC serial port and restores its
-normal getty after the command exits. Do not run it concurrently with
-`vmagent` or `zerostack`. Guest networking and an API key are not required.
-The reproducible source and binary packages are
-`network/guest/rig-agent-0.1.0-source.tar.gz` and
-`network/guest/rig-agent-0.1.0-x86.tar.gz`.
 
 ## Security boundary
 

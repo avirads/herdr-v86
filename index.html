@@ -44,7 +44,8 @@
   dialog::backdrop { background: rgb(0 0 0 / .65); }
   dialog h2 { margin: 0 0 14px; font-size: 17px; }
   dialog label { display: grid; gap: 5px; margin: 12px 0; font-size: 12px; color: #8b949e; }
-  dialog input, dialog select { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 8px; }
+  dialog input, dialog select, dialog textarea { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 8px; }
+  dialog textarea { min-height: 130px; resize: vertical; font: 13px/1.4 monospace; }
   .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   .settings-action { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 12px 0; border-top: 1px solid #30363d; }
   .settings-action small, #settings-dialog p { color: #8b949e; }
@@ -132,6 +133,8 @@
   <div id="browser-status">AutoBro: not connected</div>
   <div id="voice-status">Voice: ready to load</div>
   <div id="tools">
+    <button id="copy-terminal" type="button" title="Copy selected terminal text (Ctrl+Shift+C)">Copy</button>
+    <button id="paste-terminal" type="button" title="Paste clipboard text into the shell (Ctrl+Shift+V)">Paste</button>
     <button id="voice-button" type="button" title="Dictate locally with Moonshine">🎙 Voice</button>
     <button id="open-settings" title="Reset LLM or AutoBro configuration">Settings</button>
   </div>
@@ -197,6 +200,15 @@
     <button type="submit">Send</button>
   </form>
   <div class="dialog-actions"><button id="close-remote" type="button">Close</button></div>
+</dialog>
+<dialog id="clipboard-dialog">
+  <h2>Paste into VM shell</h2>
+  <p>Your browser did not allow direct clipboard access. Paste the text below, then select <strong>Insert</strong>.</p>
+  <textarea id="clipboard-paste-text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste text here"></textarea>
+  <div class="dialog-actions">
+    <button id="cancel-clipboard-paste" type="button">Cancel</button>
+    <button id="insert-clipboard-text" type="button">Insert</button>
+  </div>
 </dialog>
 <input id="file-input" type="file" hidden>
 <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
@@ -287,7 +299,7 @@ function failBoot(message) {
   bootMessage.textContent = message;
 }
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "vm-shell-17-zerostack-rig";
+const DISK_VERSION = "vm-shell-24-browser-agent-only";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -325,6 +337,104 @@ const term = new Terminal({
 });
 term.open(document.getElementById("term"));
 
+async function copyTerminalSelection() {
+  const selection = term.getSelection();
+  if (!selection) {
+    status("Select terminal text before copying");
+    term.focus();
+    return false;
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(selection);
+    } else {
+      throw new Error("Clipboard API unavailable");
+    }
+    status("Terminal selection copied");
+    term.focus();
+    return true;
+  } catch {
+    // Firefox permission policies and some embedded/mobile browsers block the
+    // asynchronous API but still permit copying during a user click.
+    const textarea = document.createElement("textarea");
+    textarea.value = selection;
+    textarea.style.cssText = "position:fixed;left:-9999px;top:0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    status(copied ? "Terminal selection copied" : "Clipboard copy was blocked by the browser");
+    term.focus();
+    return copied;
+  }
+}
+
+const clipboardDialog = document.getElementById("clipboard-dialog");
+const clipboardPasteText = document.getElementById("clipboard-paste-text");
+function insertTerminalText(text) {
+  if (!text) return false;
+  handleTerminalData(String(text).replace(/\r\n|\n/g, "\r"));
+  status("Clipboard pasted into shell");
+  term.focus();
+  return true;
+}
+function openManualPaste() {
+  clipboardPasteText.value = "";
+  clipboardDialog.showModal();
+  setTimeout(() => clipboardPasteText.focus(), 0);
+}
+async function pasteTerminalClipboard() {
+  try {
+    if (!navigator.clipboard?.readText) throw new Error("Clipboard API unavailable");
+    const text = await navigator.clipboard.readText();
+    if (!text) { status("Clipboard is empty"); term.focus(); return false; }
+    return insertTerminalText(text);
+  } catch {
+    status("Direct clipboard access blocked — use the paste box");
+    openManualPaste();
+    return false;
+  }
+}
+
+document.getElementById("copy-terminal").onclick = copyTerminalSelection;
+document.getElementById("paste-terminal").onclick = pasteTerminalClipboard;
+document.getElementById("cancel-clipboard-paste").onclick = () => { clipboardDialog.close(); term.focus(); };
+document.getElementById("insert-clipboard-text").onclick = () => {
+  const text = clipboardPasteText.value;
+  clipboardDialog.close();
+  insertTerminalText(text);
+};
+
+// Native clipboard events carry the text in the user-gesture event itself and
+// work even when navigator.clipboard permission is unavailable.
+term.element.addEventListener("copy", event => {
+  const selection = term.getSelection();
+  if (!selection || !event.clipboardData) return;
+  event.clipboardData.setData("text/plain", selection);
+  event.preventDefault();
+  status("Terminal selection copied");
+});
+term.element.addEventListener("paste", event => {
+  const text = event.clipboardData?.getData("text/plain");
+  if (!text) return;
+  event.preventDefault();
+  event.stopPropagation();
+  insertTerminalText(text);
+}, { capture: true });
+term.attachCustomKeyEventHandler(event => {
+  if (event.type !== "keydown") return true;
+  const modifier = event.ctrlKey || event.metaKey;
+  const copy = modifier && (event.shiftKey || event.metaKey) && event.key.toLowerCase() === "c";
+  const paste = (modifier && (event.shiftKey || event.metaKey) && event.key.toLowerCase() === "v")
+    || (event.shiftKey && event.key === "Insert");
+  // Keep Ctrl+C without a selection available as the guest interrupt key.
+  if (copy && term.hasSelection()) { copyTerminalSelection(); return false; }
+  // Let the browser dispatch its native paste event. The capture listener
+  // above extracts clipboardData without requiring Clipboard API permission.
+  if (paste) return true;
+  return true;
+});
+
 let sttySent = false;
 let terminalResizeTimer = 0;
 function fitTerminal() {
@@ -354,12 +464,17 @@ requestAnimationFrame(() => requestAnimationFrame(fitTerminal));
 if (compatibilityBoot) status("compatibility boot — downloading full 96 MiB disk…");
 const emulator = new V86({
   wasm_path: "v86-network.wasm",
-  memory_size: 256 * 1024 * 1024,
+  memory_size: 512 * 1024 * 1024,
   vga_memory_size: 2 * 1024 * 1024,
   bios: { url: "seabios.bin" },
   vga_bios: { url: "vgabios.bin" },
   bzimage: { url: "bzImage-network" },
-  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic${compatibilityBoot ? " libata.force=pio4" : ""}`,
+  // Perf: the emulated CPU has no speculative-execution bugs, so CPU
+  // vulnerability mitigations (retpolines, PTI) are pure overhead; KASLR and
+  // heap/mmap randomization only defeat v86's JIT page reuse. quiet/loglevel
+  // cut per-byte serial printk traffic during boot; noatime skips inode
+  // writeback on every file read (disk writes are never persisted anyway).
+  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic mitigations=off nopti nospectre_v1 nospectre_v2 nokaslr norandmaps quiet loglevel=3 rootflags=noatime${compatibilityBoot ? " libata.force=pio4" : ""}`,
   hda: { url: diskURL, async: !compatibilityBoot, size: DISK_SIZE },
   net_device: { type: "virtio" },
   uart1: true,
@@ -389,12 +504,34 @@ async function writeAgentTerminal(output) {
     if (typeof parsed?.final === "string") text = parsed.final;
     else if (typeof parsed?.final?.answer === "string") text = parsed.final.answer;
   } catch {}
+  flushSerialOutput();
   term.write("\r\x1b[2K" + text.replace(/\r?\n/g, "\r\n") + "\r\n");
+}
+// Perf: v86 delivers serial output one byte per listener call. Writing each
+// byte to xterm individually makes every TUI redraw cross the JS boundary per
+// character. Bytes emitted within one emulator timeslice are coalesced here
+// and flushed to xterm as a single write per microtask. flushSerialOutput()
+// keeps direct term.write() callers ordered with respect to queued bytes.
+const serialOutQueue = [];
+let serialFlushScheduled = false;
+function flushSerialOutput() {
+  if (!serialOutQueue.length) return;
+  const chunk = Uint8Array.from(serialOutQueue);
+  serialOutQueue.length = 0;
+  term.write(chunk);
+}
+function queueSerialOutput(data) {
+  if (typeof data === "number") serialOutQueue.push(data);
+  else for (let i = 0; i < data.length; i++) serialOutQueue.push(data.charCodeAt(i));
+  if (!serialFlushScheduled) {
+    serialFlushScheduled = true;
+    queueMicrotask(() => { serialFlushScheduled = false; flushSerialOutput(); });
+  }
 }
 function writeSerialByte(byte) {
   const character = String.fromCharCode(byte);
   if (character === "\n") {
-    if (!suppressSerialLine) term.write(Uint8Array.of(byte));
+    if (!suppressSerialLine) queueSerialOutput(byte);
     serialDisplayLine = "";
     suppressSerialLine = false;
     return;
@@ -403,10 +540,10 @@ function writeSerialByte(byte) {
   serialDisplayLine = (serialDisplayLine + character).slice(-512);
   if (hiddenSerialMarkers.some(marker => serialDisplayLine.includes(marker))) {
     suppressSerialLine = true;
-    term.write("\r\x1b[2K");
+    queueSerialOutput("\r\x1b[2K");
     return;
   }
-  term.write(Uint8Array.of(byte));
+  queueSerialOutput(byte);
 }
 import("./network/browser/v86-host-bridge.js").then(module => {
   hostBridge = new module.V86HostBridge(emulator, { llmClient: webGpuLlmClient });
@@ -434,6 +571,7 @@ import("./network/browser/v86-host-bridge.js").then(module => {
         onBusy: async busy => {
           agentBusy = busy;
           status(busy ? "vmagent responding — Ctrl-C to stop" : "vmagent conversation active — /exit returns to shell");
+          flushSerialOutput();
           if (busy) term.write("\r\x1b[2K");
           else if (vmAgentController?.conversationActive) term.write("vmagent> ");
         },

@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Browser-agent-only VM test</title>
+<pre id="serial"></pre><div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+let serial = '', started = false, submitted = false, hostCalls = 0;
+const emulator = new V86({ wasm_path:'../../v86-network.wasm', memory_size:256<<20, vga_memory_size:2<<20,
+  bios:{url:'../../seabios.bin'}, vga_bios:{url:'../../vgabios.bin'}, bzimage:{url:'../../bzImage-network'},
+  cmdline:'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+  hda:{url:'../../vm-network-ext4.img',async:true,size:100663296}, uart1:true,
+  screen_container:document.querySelector('#screen_container'), autostart:true });
+const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
+new V86HostBridge(emulator,{llmClient:{async chat(){hostCalls++;return {id:'vmllm-ok',model:'webgpu',choices:[{index:0,message:{role:'assistant',content:'browser-agent-model-ok'},finish_reason:'stop'}]};}}});
+async function submit(ok,reason=''){if(submitted)return;submitted=true;await fetch('/__result',{method:'POST',body:JSON.stringify({ok,reason,hostCalls,serial})});}
+emulator.add_listener('serial0-output-byte',byte=>{
+  serial=(serial+String.fromCharCode(byte)).slice(-160000); document.querySelector('#serial').textContent=serial;
+  if(!started&&/(?:vm:~#|~\s*[#%])\s*$/.test(serial)){
+    started=true;
+    emulator.serial0_send("echo BROWSER_AGENT_TEST_BEGIN; command -v zerostack >/dev/null || echo ZEROSTACK_REMOVED; command -v rig >/dev/null || echo RIG_REMOVED; tmux -V; vmagent --help | grep -q 'vmagent PROMPT' && echo VMAGENT_OK; printf 'VMLLM='; vmllm 'reply'; echo; echo BROWSER_AGENT_TEST_END\n");
+  }
+  if(/\nBROWSER_AGENT_TEST_END\r?\n/.test(serial)){
+    const ok=serial.includes('ZEROSTACK_REMOVED')&&serial.includes('RIG_REMOVED')&&/tmux 3\.5a/.test(serial)&&serial.includes('VMAGENT_OK')&&serial.includes('VMLLM=')&&serial.includes('browser-agent-model-ok')&&hostCalls===1;
+    submit(ok,ok?'':'native agents remain or browser-side agent tools failed');
+  }
+});
+setTimeout(()=>submit(false,'browser-agent-only VM test timed out'),120000);
+</script>

@@ -9,6 +9,15 @@ mount -t tmpfs tmpfs /run 2>/dev/null
 hostname vm
 dmesg -n 1 2>/dev/null || true
 
+# Perf tuning for the emulated CPU: disk writes are never persisted across
+# reloads, so let dirty pages sit in RAM instead of paying emulated ATA I/O,
+# never swap, and skip atime updates on the root filesystem.
+echo 80 > /proc/sys/vm/dirty_ratio 2>/dev/null || true
+echo 50 > /proc/sys/vm/dirty_background_ratio 2>/dev/null || true
+echo 6000 > /proc/sys/vm/dirty_expire_centisecs 2>/dev/null || true
+echo 0 > /proc/sys/vm/swappiness 2>/dev/null || true
+mount -o remount,noatime / 2>/dev/null || true
+
 # Networking is deliberately non-blocking: the shell still starts if
 # the browser has no network session or the gateway is temporarily offline.
 ip link set lo up 2>/dev/null || true

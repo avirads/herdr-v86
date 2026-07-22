@@ -1,6 +1,7 @@
 ::sysinit:/sbin/rc.startup
 ttyS0::respawn:/sbin/getty -n -l /sbin/autologin 115200 ttyS0 vt100
 ttyS1::respawn:/sbin/getty -n -l /sbin/autologin-rpc 115200 ttyS1 vt100
-tty1::respawn:/sbin/getty -n -l /sbin/autologin 38400 tty1
+# tty1 getty removed: the VGA console is hidden in the browser page, so a
+# third resident getty+shell only costs memory and scheduler wakeups.
 ::ctrlaltdel:/sbin/reboot
 ::shutdown:/bin/umount -a -r
