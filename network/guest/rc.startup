@@ -7,7 +7,10 @@ mount -t devpts devpts /dev/pts 2>/dev/null
 mount -t tmpfs -o mode=1777 tmpfs /tmp 2>/dev/null
 mount -t tmpfs tmpfs /run 2>/dev/null
 hostname vm
-dmesg -n 1 2>/dev/null || true
+# Level 4 keeps KERN_ERR visible on the console: the browser page watches
+# serial output for "lost interrupt" / "I/O error" to auto-restart into
+# compatibility boot, so ATA errors must not be silenced (n 1 hid them).
+dmesg -n 4 2>/dev/null || true
 
 # Perf tuning for the emulated CPU: disk writes are never persisted across
 # reloads, so let dirty pages sit in RAM instead of paying emulated ATA I/O,

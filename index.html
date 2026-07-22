@@ -299,7 +299,7 @@ function failBoot(message) {
   bootMessage.textContent = message;
 }
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "vm-shell-24-browser-agent-only";
+const DISK_VERSION = "vm-shell-25-perf-dmesg-errors";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -472,9 +472,10 @@ const emulator = new V86({
   // Perf: the emulated CPU has no speculative-execution bugs, so CPU
   // vulnerability mitigations (retpolines, PTI) are pure overhead; KASLR and
   // heap/mmap randomization only defeat v86's JIT page reuse. quiet/loglevel
-  // cut per-byte serial printk traffic during boot; noatime skips inode
-  // writeback on every file read (disk writes are never persisted anyway).
-  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic mitigations=off nopti nospectre_v1 nospectre_v2 nokaslr norandmaps quiet loglevel=3 rootflags=noatime${compatibilityBoot ? " libata.force=pio4" : ""}`,
+  // cut per-byte serial printk traffic during boot. Do NOT add
+  // rootflags=noatime here: noatime is a VFS flag, not an ext4 option, and
+  // the root mount rejects it (VFS panic). rc.startup remounts / noatime.
+  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic mitigations=off nopti nospectre_v1 nospectre_v2 nokaslr norandmaps quiet loglevel=4${compatibilityBoot ? " libata.force=pio4" : ""}`,
   hda: { url: diskURL, async: !compatibilityBoot, size: DISK_SIZE },
   net_device: { type: "virtio" },
   uart1: true,
