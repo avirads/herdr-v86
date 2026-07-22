@@ -83,17 +83,26 @@ counter:
   the delta is entirely the guest's tty line-discipline + console + per-`write`
   path — exactly what HZ=100 + no-audit + no-mitigations speed up. It dropped
   **6.47 s → 3.15 s (−51 %)** with no emulator change.
-- **The only case that stalls is an edge case.** Redirecting a bulk stream to
-  the raw device (`cat bigfile > /dev/ttyS0`) blocks the writer with the guest
-  *halted* (~0.9 MIPS). Normal programs write to their controlling terminal, not
-  the raw device, so this doesn't affect real workloads. If it ever matters, it
-  is the one place a v86 UART change (raise the TX-drain/THRE rate) would help —
-  but it is not worth a WASM rebuild for an edge case.
+- **One case stalled — and it was carrier detect, not throughput.** A fresh
+  blocking open of the raw device (`cat bigfile > /dev/ttyS0`, `stty -a <
+  /dev/ttyS1`) hung with the guest *halted* (~0.7 MIPS) and **0 data bytes
+  emitted** — it never got past `open()`. The emulated 16550 UARTs have no real
+  modem, so they never assert carrier detect (DCD); without `CLOCAL` the kernel
+  blocks the open waiting for carrier forever. Proven by `stty clocal` making
+  the same write complete instantly. A UART throughput/FIFO change would *not*
+  fix this — the guest blocks before the first byte. So it is **not** a reason
+  for a v86/WASM change.
+  - **Fix (guest-side, shipped):** `/etc/profile.d/uart-clocal.sh` runs
+    `stty clocal` on each login shell's controlling terminal. It must be here,
+    not `rc.startup` — getty resets the line discipline when it spawns *after*
+    sysinit, clearing an earlier setting. Perf-neutral; the stall is gone.
 
 Net: there is no UART bottleneck on the path real programs use; terminal-heavy
 work is guest-CPU-bound and already ~2× faster from the kernel tuning above.
-The JS-side serial batching in `index.html` still helps the render side when
-bursts arrive, and is kept.
+The wasm carries the CPU only — v86's serial device is JavaScript, and
+`v86.wasm` and `v86-network.wasm` are byte-identical (networking is JS-side),
+so no WASM rebuild was warranted. The JS-side serial batching in `index.html`
+still helps the render side when bursts arrive, and is kept.
 
 ## Regression checks (Phase 2 kernel)
 
