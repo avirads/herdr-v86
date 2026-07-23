@@ -16,6 +16,7 @@ const page = args['--page'] || 'e2e.html';
 const pingTarget = args['--ping-target'] || '1.1.1.1';
 const chrome = args['--chrome'] || process.env.CHROME_BIN || 'google-chrome';
 const port = Number(args['--port'] || 8090);
+const timeoutMs = Number(args['--timeout-ms'] || 150000);
 if (page === 'e2e.html' && (!gateway || !token)) throw new Error('--gateway and --token are required for the connectivity test');
 
 const gatewayChild = args['--gateway-bin'] ? spawn(args['--gateway-bin'], [
@@ -64,7 +65,7 @@ const fragment = new URLSearchParams({ ...(gateway ? { gateway } : {}), ...(toke
 const url = `http://127.0.0.1:${port}/network/test/${encodeURIComponent(page)}#${fragment}`;
 const profile = mkdtempSync(join(tmpdir(), 'vm-e2e-'));
 const child = spawn(chrome, [
-  '--headless', '--disable-gpu', '--no-first-run',
+  '--headless', ...(args['--webgpu'] ? ['--enable-unsafe-webgpu'] : ['--disable-gpu']), '--no-first-run',
   ...(process.getuid?.() === 0 ? ['--no-sandbox'] : []),
   `--user-data-dir=${profile}`, url,
 ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -72,7 +73,7 @@ let browserError = '';
 child.stderr.on('data', chunk => browserError += chunk);
 let timeoutID;
 const timeout = new Promise((_, reject) => {
-  timeoutID = setTimeout(() => reject(new Error('v86 test timed out')), 150000);
+  timeoutID = setTimeout(() => reject(new Error('v86 test timed out')), timeoutMs);
 });
 try {
   const result = await Promise.race([completed, timeout]);

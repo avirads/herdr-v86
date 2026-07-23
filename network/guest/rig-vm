@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+
+core=/usr/local/libexec/rig-agent
+[ -x "$core" ] || { echo 'rig: core binary is not installed' >&2; exit 127; }
+[ -c /dev/ttyS1 ] || { echo 'rig: VM RPC serial device is unavailable' >&2; exit 1; }
+ip link set lo up 2>/dev/null || true
+
+saved=/tmp/rig-inittab.$$
+proxy_pid=''
+cp /etc/inittab "$saved"
+cleanup() {
+  [ -n "$proxy_pid" ] && kill "$proxy_pid" 2>/dev/null || true
+  if [ -f "$saved" ]; then
+    cp "$saved" /etc/inittab
+    rm -f "$saved"
+    /sbin/init q 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM HUP
+
+sed -i '/^ttyS1::respawn:/s/^/# rig: /' /etc/inittab
+/sbin/init q 2>/dev/null || true
+for pid in $(ps | awk '/[g]etty .*ttyS1/{print $1}'); do kill "$pid" 2>/dev/null || true; done
+sleep 1
+stty -F /dev/ttyS1 -echo -icanon min 1 time 0
+VM_OPENAI_TTY=/dev/ttyS1 /usr/local/libexec/vm-openai-proxy >/tmp/rig-proxy.log 2>&1 &
+proxy_pid=$!
+for delay in 1 1 1 1 1 1 1 1 1 1; do
+  nc -z 127.0.0.1 11435 >/dev/null 2>&1 && break
+  kill -0 "$proxy_pid" 2>/dev/null || break
+  sleep "$delay"
+done
+nc -z 127.0.0.1 11435 >/dev/null 2>&1 || { echo 'rig: local model adapter failed to start' >&2; exit 1; }
+
+mkdir -p /root/project
+cd "${RIG_WORKDIR:-/root/project}"
+export OPENAI_API_KEY=local-browser-bridge
+export OPENAI_BASE_URL=http://127.0.0.1:11435/v1/rig
+export OPENAI_MODEL=webgpu
+"$core" "$@"

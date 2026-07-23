@@ -1,0 +1,94 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WebGPU agent comparison</title>
+<pre id="serial"></pre><div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+const startedAt = performance.now();
+let serial = '', submitted = false, vmStarted = false, agentStarted = false;
+let phase = 'initializing', vmllmStartedAt = 0;
+const calls = [];
+
+async function submit(ok, reason = '', extra = {}) {
+  if (submitted) return;
+  submitted = true;
+  await fetch('/__result', { method: 'POST', body: JSON.stringify({
+    ok, reason, calls, totalMs: performance.now() - startedAt, serial, ...extra,
+  }) });
+}
+
+try {
+  const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+  const client = new LiteRtLmClient();
+  const modelStartedAt = performance.now();
+  await client.initialize({ autoLoad: true, bundledModelUrl: '../../models/gemma-4-E2B-it-web.litertlm' });
+  const modelLoadMs = performance.now() - modelStartedAt;
+
+  const warmStartedAt = performance.now();
+  await client.chat({ model: 'webgpu', messages: [{ role: 'user', content: 'Reply with exactly: warm' }] });
+  const warmupMs = performance.now() - warmStartedAt;
+
+  const originalChat = client.chat.bind(client);
+  client.chat = async body => {
+    const call = { phase, startedAtMs: performance.now() - startedAt };
+    calls.push(call);
+    try {
+      const result = await originalChat(body);
+      call.durationMs = performance.now() - startedAt - call.startedAtMs;
+      call.outputChars = result?.choices?.[0]?.message?.content?.length || 0;
+      return result;
+    } catch (error) {
+      call.durationMs = performance.now() - startedAt - call.startedAtMs;
+      call.error = error.message;
+      throw error;
+    }
+  };
+
+  const emulator = new V86({
+    wasm_path: '../../v86-network.wasm', memory_size: 256 << 20, vga_memory_size: 2 << 20,
+    bios: { url: '../../seabios.bin' }, vga_bios: { url: '../../vgabios.bin' },
+    bzimage: { url: '../../bzImage-network' },
+    cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+    hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 }, uart1: true,
+    screen_container: document.querySelector('#screen_container'), autostart: true,
+  });
+  const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
+  const { V86GuestReadonlyClient } = await import('../browser/v86-guest-readonly.js');
+  const hostBridge = new V86HostBridge(emulator, { llmClient: client });
+  const guest = new V86GuestReadonlyClient(emulator, hostBridge);
+
+  async function runVmAgent() {
+    if (agentStarted) return;
+    agentStarted = true;
+    phase = 'vmagent';
+    const agentStartedAt = performance.now();
+    const { createVMAgent } = await import('../../agent/dist/agent.js');
+    const harness = createVMAgent({ llmClient: client, guest, approveAction: async () => true });
+    const result = await harness.run('Reply with exactly: comparison works');
+    const vmagentTotalMs = performance.now() - agentStartedAt;
+    const vmllmCalls = calls.filter(call => call.phase === 'vmllm');
+    const vmagentCalls = calls.filter(call => call.phase === 'vmagent');
+    await submit(vmllmCalls.length > 0 && vmagentCalls.length > 0, 'missing model call', {
+      modelLoadMs, warmupMs,
+      vmllmTotalMs: agentStartedAt - vmllmStartedAt,
+      vmagentTotalMs,
+      vmagentOutput: result.output,
+    });
+  }
+
+  emulator.add_listener('serial0-output-byte', byte => {
+    serial = (serial + String.fromCharCode(byte)).slice(-240000);
+    document.querySelector('#serial').textContent = serial;
+    if (!vmStarted && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+      vmStarted = true;
+      phase = 'vmllm';
+      vmllmStartedAt = performance.now();
+      emulator.serial0_send("echo VMLLM_COMPARE_BEGIN; vmllm 'Reply with exactly: comparison works'; printf '\\nVMLLM_EXIT=%s\\n' $?; echo VMLLM_COMPARE_END\n");
+    }
+    if (/\nVMLLM_COMPARE_END\r?\n/.test(serial)) runVmAgent().catch(error => submit(false, error?.stack || error?.message || String(error), { modelLoadMs, warmupMs }));
+  });
+  setTimeout(() => submit(false, 'comparison timed out', { modelLoadMs, warmupMs }), 600000);
+} catch (error) {
+  submit(false, error?.stack || error?.message || String(error));
+}
+</script>

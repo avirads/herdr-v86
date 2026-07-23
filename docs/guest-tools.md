@@ -198,6 +198,24 @@ interactive serial console; avoid typing while a large file is being imported.
 | `WebGPU is unavailable` | Browser/GPU cannot expose WebGPU | Use current desktop Chrome/Edge with compatible GPU drivers |
 | `curl: could not resolve host` without a route | No full gateway connection | Use `vmfetch` or configure the network gateway |
 
+## `rig` — compact native coding agent
+
+`rig 'TASK'` runs the static i386 agent based on Rig 0.40.0. It uses the
+page-local WebGPU model and provides `read_file`, `list_directory`,
+`write_file`, and `shell` tools rooted at the current project directory.
+
+```sh
+cd /root/project
+rig 'Summarize this project'
+rig 'Create hello.txt containing hello from the VM'
+```
+
+The launcher temporarily owns the hidden RPC serial port and restores its
+normal getty after the command exits. Do not run it concurrently with
+`vmagent`. Guest networking and an API key are not required. The reproducible
+source and binary packages are `network/guest/rig-agent-0.1.0-source.tar.gz`
+and `network/guest/rig-agent-0.1.0-x86.tar.gz`.
+
 ## Security boundary
 
 Trust the page that hosts the VM: it processes bridge requests and can observe

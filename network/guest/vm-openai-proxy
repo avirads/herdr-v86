@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+exec nc -lk -p 11435 -e /usr/local/libexec/vm-openai-request

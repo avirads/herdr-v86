@@ -6,6 +6,7 @@ SOURCE_IMAGE="${SOURCE_IMAGE:-$PROJECT_DIR/herdr-vm-ext4.img}"
 OUTPUT_IMAGE="${OUTPUT_IMAGE:-$PROJECT_DIR/vm-network-ext4.img}"
 DISK_BYTES="${DISK_BYTES:-100663296}"
 MOUNT_DIR="${MOUNT_DIR:-/mnt/herdr-v86-network}"
+RIG_PACKAGE="${RIG_PACKAGE:-$PROJECT_DIR/network/guest/rig-agent-0.1.0-x86.tar.gz}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "run as root" >&2
@@ -13,6 +14,10 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 if [[ ! -f "$SOURCE_IMAGE" ]]; then
   echo "source image not found: $SOURCE_IMAGE" >&2
+  exit 1
+fi
+if [[ ! -f "$RIG_PACKAGE" ]]; then
+  echo "Rig agent x86 package not found: $RIG_PACKAGE" >&2
   exit 1
 fi
 
@@ -39,6 +44,8 @@ mount --bind /dev "$MOUNT_DIR/dev"
 # The minimal base image intentionally has no resolv.conf.
 cp /etc/resolv.conf "$MOUNT_DIR/etc/resolv.conf"
 chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc
+tar -xzf "$RIG_PACKAGE" -C "$MOUNT_DIR"
+chmod 0755 "$MOUNT_DIR/usr/local/libexec/rig-agent"
 install -m 0755 "$PROJECT_DIR/network/guest/rc.startup" "$MOUNT_DIR/sbin/rc.startup"
 install -m 0755 "$PROJECT_DIR/network/guest/autologin" "$MOUNT_DIR/sbin/autologin"
 install -m 0755 "$PROJECT_DIR/network/guest/autologin-rpc" "$MOUNT_DIR/sbin/autologin-rpc"
@@ -52,6 +59,9 @@ install -m 0755 "$PROJECT_DIR/network/guest/vmllm" "$MOUNT_DIR/usr/local/bin/vml
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent" "$MOUNT_DIR/usr/local/bin/vmagent"
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-poll" "$MOUNT_DIR/usr/local/bin/vmagent-poll"
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/bin/vmagent-rpc"
+install -D -m 0755 "$PROJECT_DIR/network/guest/rig-vm" "$MOUNT_DIR/usr/local/bin/rig"
+install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-proxy" "$MOUNT_DIR/usr/local/libexec/vm-openai-proxy"
+install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-request" "$MOUNT_DIR/usr/local/libexec/vm-openai-request"
 # The source image predates the shell-only guest. Do not carry its legacy app
 # into the network image.
 rm -f \
@@ -64,13 +74,9 @@ rm -f \
   "$MOUNT_DIR/usr/local/libexec/pi" \
   "$MOUNT_DIR/usr/local/bin/zerostack" \
   "$MOUNT_DIR/usr/local/libexec/zerostack" \
-  "$MOUNT_DIR/usr/local/bin/rig" \
-  "$MOUNT_DIR/usr/local/libexec/rig-agent" \
-  "$MOUNT_DIR/usr/local/libexec/vm-openai-proxy" \
-  "$MOUNT_DIR/usr/local/libexec/vm-openai-request" \
   "$MOUNT_DIR/sbin/herdr-boot"
 
 chroot "$MOUNT_DIR" /usr/bin/curl --version
 chroot "$MOUNT_DIR" /usr/bin/tmux -V
-chroot "$MOUNT_DIR" /bin/sh -c '! command -v zerostack && ! command -v rig'
+chroot "$MOUNT_DIR" /bin/sh -c '! command -v zerostack && command -v rig && test -x /usr/local/libexec/rig-agent'
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"
