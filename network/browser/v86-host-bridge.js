@@ -146,8 +146,8 @@ export class V86HostBridge extends EventTarget {
     if (operation === "completion" || operation === "openai") {
       const encoded = encodeText(output);
       let sequence = 0;
-      for (let offset = 0; offset < encoded.length; offset += 32) {
-        await this.reliableReply(id, sequence, "PART", encoded.slice(offset, offset + 32));
+      for (let offset = 0; offset < encoded.length; offset += 256) {
+        await this.reliableReply(id, sequence, "PART", encoded.slice(offset, offset + 256));
         sequence += 1;
       }
       await this.reliableReply(id, sequence, "DONE", "");

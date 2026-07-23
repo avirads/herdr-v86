@@ -13,17 +13,18 @@ function decode(value) {
 }
 
 export class V86GuestReadonlyClient extends EventTarget {
-  constructor(emulator, hostBridge, { timeoutMs = 30_000 } = {}) {
+  constructor(emulator, hostBridge, { timeoutMs = 30_000, rpcSerial = 0 } = {}) {
     super();
     this.emulator = emulator;
     this.hostBridge = hostBridge;
     this.timeoutMs = timeoutMs;
+    this.rpcSerial = rpcSerial;
     this.line = '';
     this.nextId = 0;
     this.pending = new Map();
     this.queue = Promise.resolve();
     this.onByte = byte => this.consume(byte);
-    emulator.add_listener('serial1-output-byte', this.onByte);
+    emulator.add_listener(`serial${rpcSerial}-output-byte`, this.onByte);
   }
 
   consume(byte) {
@@ -52,7 +53,7 @@ export class V86GuestReadonlyClient extends EventTarget {
       });
       const command = ['vmagent-rpc', id, operation, ...args.map(value => encode(value))].join(' ');
       this.dispatchEvent(new CustomEvent('activity', { detail: { operation, args } }));
-      await this.hostBridge.send(command);
+      await this.hostBridge.send(command, this.rpcSerial);
       return await response;
     };
     const result = this.queue.then(run, run);
@@ -69,7 +70,7 @@ export class V86GuestReadonlyClient extends EventTarget {
   execute(command) { return this.request('execute', command); }
   test(recipe) { return this.request('test', recipe); }
 
-  destroy() { this.emulator.remove_listener?.('serial1-output-byte', this.onByte); }
+  destroy() { this.emulator.remove_listener?.(`serial${this.rpcSerial}-output-byte`, this.onByte); }
 }
 
 // Preferred name now that the RPC supports the complete coding-agent backend.

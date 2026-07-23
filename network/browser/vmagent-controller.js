@@ -11,6 +11,42 @@ export class VmAgentController {
   resetHarness() { this.harness = null; this.completedRuns.clear(); }
   closeConversation() { this.conversationActive = false; }
 
+  async runRig(prompt) {
+    const llm = this.getLlmClient();
+    const guest = this.getGuest();
+    if (!llm || !guest) throw new Error('model or VM bridge is not ready');
+    const tools = [
+      { type: 'function', function: { name: 'read_file', description: 'Read a UTF-8 project file', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } },
+      { type: 'function', function: { name: 'list_directory', description: 'List a project directory', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } },
+      { type: 'function', function: { name: 'write_file', description: 'Write a UTF-8 project file', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } } },
+      { type: 'function', function: { name: 'shell', description: 'Run a shell command in the project', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } } },
+    ];
+    const messages = [
+      { role: 'system', content: 'You are a concise coding agent in /root/project. Use tools only when needed, then answer directly.' },
+      { role: 'user', content: String(prompt) },
+    ];
+    for (let turn = 0; turn < 6; turn += 1) {
+      const completion = await llm.chat({ model: llm.modelName || 'webgpu', temperature: 0, max_tokens: 1000, chat_template_kwargs: { enable_thinking: false }, messages, tools });
+      const message = completion?.choices?.[0]?.message || {};
+      const call = message.tool_calls?.[0];
+      if (!call) return String(message.content || '');
+      const name = call.function?.name;
+      const args = JSON.parse(call.function?.arguments || '{}');
+      let result;
+      if (name === 'read_file') result = await guest.read(args.path);
+      else if (name === 'list_directory') result = await guest.list(args.path || '.');
+      else if (name === 'write_file') {
+        if (!this.yolo && !await this.approveAction('write_file', args)) result = 'Operation rejected.';
+        else result = await guest.write(args.path, args.content);
+      } else if (name === 'shell') {
+        if (!this.yolo && !await this.approveAction('execute', args)) result = 'Operation rejected.';
+        else result = await guest.execute(args.command);
+      } else result = `Unknown tool: ${name}`;
+      messages.push(message, { role: 'tool', tool_call_id: call.id, name, content: String(result) });
+    }
+    throw new Error('Rig exceeded six tool turns');
+  }
+
   async handle(command, value = '') {
     if (command === 'status') {
       const llm = this.getLlmClient();
@@ -38,6 +74,15 @@ export class VmAgentController {
       });
       if (value === 'off') this.yolo = false;
       return await this.onOutput(`[vmagent] YOLO ${this.yolo ? 'on' : 'off'}.`);
+    }
+    if (command === 'rig') {
+      if (this.abortController) return await this.onOutput('[rig] another agent task is running.');
+      this.abortController = new AbortController();
+      await this.onBusy(true);
+      try { await this.onOutput(await this.runRig(value)); }
+      catch (error) { await this.onOutput(`Rig error: ${error.message}`); }
+      finally { this.abortController = null; await this.onBusy(false); }
+      return;
     }
     if (command !== 'run') throw new Error(`unsupported vmagent command: ${command}`);
     const runKey = String(value).trim();

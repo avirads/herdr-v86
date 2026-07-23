@@ -11,21 +11,29 @@ const emulator = new V86({ wasm_path:'../../v86-network.wasm', memory_size:256<<
   hda:{url:'../../vm-network-ext4.img',async:true,size:100663296}, uart1:true,
   screen_container:document.querySelector('#screen_container'), autostart:true });
 const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
-new V86HostBridge(emulator,{llmClient:{async chat(){
+const { V86GuestReadonlyClient } = await import('../browser/v86-guest-readonly.js');
+const { VmAgentController } = await import('../browser/vmagent-controller.js');
+const hostBridge = new V86HostBridge(emulator,{llmClient:{async chat(){
   hostCalls++;
   if(hostCalls===1)return {id:'rig-tool',model:'webgpu',choices:[{index:0,message:{role:'assistant',content:null,tool_calls:[{id:'rig-write-1',type:'function',function:{name:'write_file',arguments:JSON.stringify({path:'rig-marker.txt',content:'rig-tool-ok\n'})}}]},finish_reason:'tool_calls'}]};
   return {id:'rig-final',model:'webgpu',choices:[{index:0,message:{role:'assistant',content:'rig-tool-complete'},finish_reason:'stop'}]};
 }}});
+const guest = new V86GuestReadonlyClient(emulator,hostBridge);
+const controller = new VmAgentController({
+  createAgent:async()=>{throw new Error('unused')},getLlmClient:()=>hostBridge.llmClient,getGuest:()=>guest,
+  approveAction:async()=>true,onOutput:async output=>{
+    const written=await guest.read('rig-marker.txt').catch(()=> '');
+    const ok=String(output).includes('rig-tool-complete')&&written.trim()==='rig-tool-ok'&&hostCalls===2;
+    submit(ok,ok?'':'Rig fast tool loop failed');
+  }
+});
+hostBridge.setAgentHandler((command,value)=>controller.handle(command,value));
 async function submit(ok,reason=''){if(submitted)return;submitted=true;await fetch('/__result',{method:'POST',body:JSON.stringify({ok,reason,hostCalls,serial})});}
 emulator.add_listener('serial0-output-byte',byte=>{
   serial=(serial+String.fromCharCode(byte)).slice(-240000); document.querySelector('#serial').textContent=serial;
   if(!started&&/(?:vm:~#|~\s*[#%])\s*$/.test(serial)){
     started=true;
-    emulator.serial0_send("echo RIG_TEST_BEGIN; rm -f /root/project/rig-marker.txt; rig 'Create rig-marker.txt containing rig-tool-ok'; printf '\\nRIG_AGENT_EXIT=%s\\n' $?; test \"$(cat /root/project/rig-marker.txt 2>/dev/null)\" = rig-tool-ok && echo RIG_TOOL_OK; sleep 2; ps | grep '[g]etty .*ttyS1' >/dev/null && echo RIG_RPC_RESTORED; echo RIG_TEST_END\n");
-  }
-  if(/\nRIG_TEST_END\r?\n/.test(serial)){
-    const ok=serial.includes('rig-tool-complete')&&serial.includes('RIG_AGENT_EXIT=0')&&serial.includes('RIG_TOOL_OK')&&serial.includes('RIG_RPC_RESTORED')&&hostCalls===2;
-    submit(ok,ok?'':'Rig tool loop, output, singleton calls, or RPC restoration failed');
+    emulator.serial0_send("rm -f /root/project/rig-marker.txt; rig 'Create rig-marker.txt containing rig-tool-ok'\n");
   }
 });
 setTimeout(()=>submit(false,'Rig v86 test timed out'),150000);

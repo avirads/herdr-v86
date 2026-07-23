@@ -56,24 +56,35 @@ try {
     screen_container: document.querySelector('#screen_container'), autostart: true,
   });
   const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
-  new V86HostBridge(emulator, { llmClient: client });
+  const { V86GuestReadonlyClient } = await import('../browser/v86-guest-readonly.js');
+  const { VmAgentController } = await import('../browser/vmagent-controller.js');
+  const hostBridge = new V86HostBridge(emulator, { llmClient: client });
+  const guest = new V86GuestReadonlyClient(emulator, hostBridge);
+  const controller = new VmAgentController({
+    createAgent: async () => { throw new Error('full agent is not used by Rig'); },
+    getLlmClient: () => client,
+    getGuest: () => guest,
+    approveAction: async () => true,
+    onOutput: async output => {
+      if (!commandStartedAt) return;
+      const text = String(output);
+      await submit(text.includes('comparison works'), text.includes('comparison works') ? '' : `unexpected Rig output: ${text}`, {
+        modelLoadMs, warmupMs, rigTotalMs: performance.now() - commandStartedAt, output: text,
+      });
+    },
+  });
+  hostBridge.setAgentHandler((command, value) => controller.handle(command, value));
+  setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 100);
   emulator.add_listener('serial0-output-byte', byte => {
     serial = (serial + String.fromCharCode(byte)).slice(-240000);
     document.querySelector('#serial').textContent = serial;
     if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
       started = true;
       commandStartedAt = performance.now();
-      emulator.serial0_send("echo RIG_WEBGPU_BEGIN; rig 'Reply with exactly: comparison works'; printf '\\nRIG_AGENT_EXIT=%s\\n' $?; echo RIG_WEBGPU_END\n");
-    }
-    if (/\nRIG_WEBGPU_END\r?\n/.test(serial)) {
-      const exitOk = serial.includes('RIG_AGENT_EXIT=0');
-      submit(exitOk && calls.length > 0, exitOk ? '' : 'Rig failed or made no WebGPU request', {
-        modelLoadMs, warmupMs,
-        rigTotalMs: performance.now() - commandStartedAt,
-      });
+      emulator.serial0_send("rig 'Reply with exactly: comparison works'\n");
     }
   });
-  setTimeout(() => submit(false, 'Rig WebGPU test timed out', { modelLoadMs }), 600000);
+  setTimeout(() => submit(false, 'Rig WebGPU test timed out', { modelLoadMs }), 120000);
 } catch (error) {
   submit(false, error?.stack || error?.message || String(error));
 }

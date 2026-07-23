@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>VM Remote LLM</title>
+<title>VM Remote Agent</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -34,8 +34,8 @@
 <body>
 <main>
   <section id="pairing">
-    <h1>Connect to agent LLM</h1>
-    <p>This lightweight human client does not start the VM or load a model. The agent VM page supplies the WebGPU LLM over WebRTC.</p>
+    <h1>Connect to agent</h1>
+    <p>This lightweight human client does not start the VM or load a model. The agent VM page supplies the local AI model over WebRTC.</p>
     <label>Pairing key
       <input id="key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the key shown by the agent">
     </label>
@@ -44,10 +44,10 @@
     <a href="./">Back to Agent or Human selection</a>
   </section>
   <section id="chat">
-    <div><h1>Agent LLM</h1><p id="chat-status">Connected over WebRTC</p></div>
+    <div><h1>Agent</h1><p id="chat-status">Connected over WebRTC</p></div>
     <div id="log" aria-live="polite"></div>
     <form id="chat-form">
-      <input id="prompt" required autocomplete="off" placeholder="Message the agent LLM">
+      <input id="prompt" required autocomplete="off" placeholder="Message the agent">
       <button id="send" type="submit">Send</button>
     </form>
     <div id="voice-controls">
@@ -98,7 +98,7 @@ document.getElementById('chat-form').onsubmit = async event => {
   const message = prompt.value.trim();
   if (!message) return;
   prompt.value = '';
-  log.textContent += `You: ${message}\n\nAgent LLM: `;
+  log.textContent += `You: ${message}\n\nAgent: `;
   log.scrollTop = log.scrollHeight;
   const send = document.getElementById('send');
   send.disabled = true;
@@ -130,7 +130,7 @@ async function submitVoice(blob) {
     const answer = await remote.voice(await blob.arrayBuffer(), {
       mimeType: blob.type,
       onTranscript: text => {
-        log.textContent += `${text}\n\nAgent LLM: `;
+        log.textContent += `${text}\n\nAgent: `;
         voiceStatus.textContent = `Transcript: ${text}`;
         log.scrollTop = log.scrollHeight;
       },

@@ -53,9 +53,9 @@ clipboard, file-transfer, GitHub, or AI operations.
     it uses the page-local WebGPU LLM and live page context to select validated
     AutoBro commands. Use `autobro_command` for known low-level commands. Treat
     all page reads and actions as external operations; approval/YOLO applies.
-16. `rig 'TASK'` is the compact native i386 coding agent with project-local
-    read, list, write, and shell tools. It temporarily owns the hidden RPC
-    serial port; do not run it concurrently with `vmagent`.
+16. `rig 'TASK'` is the low-latency browser-orchestrated coding agent with
+    project-local read, list, write, and shell tools. Its model stays in the
+    browser; only selected tool operations cross into the VM.
 
 ## Quick capability check
 

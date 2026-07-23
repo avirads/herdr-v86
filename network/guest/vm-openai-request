@@ -23,7 +23,9 @@ case "$request" in
       body='{"error":{"message":"request body required"}}'
       status='400 Bad Request'
     else
-    input=$(dd bs=1 count="$length" 2>/dev/null)
+    # `dd bs=1` performs one emulated read per byte and dominated Rig latency.
+    # BusyBox head keeps reading until the exact HTTP Content-Length is met.
+    input=$(head -c "$length")
     id="zs-$$-$(date +%s)"
     encoded=$(printf %s "$input" | base64 | tr -d '\n')
     output="/tmp/vm-openai-$id"

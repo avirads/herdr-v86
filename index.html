@@ -97,7 +97,7 @@
 <div id="role-overlay" role="dialog" aria-modal="true" aria-labelledby="role-title">
   <div class="role-panel">
     <h1 id="role-title">How do you want to use VM?</h1>
-    <p>Choose Agent to start the local VM and model tools, or Human to connect to an agent that is already running its LLM.</p>
+    <p>Choose Agent to start the local VM and model tools, or Human to connect to an agent that is already running its AI model.</p>
     <div class="role-options">
       <button id="choose-host" class="role-card" type="button">
         <strong>Agent</strong>
@@ -116,7 +116,7 @@
   <div id="boot-loader">
     <div id="boot-ring"><span id="boot-percent">1%</span></div>
     <div id="boot-message">Preparing VM…</div>
-    <a id="mobile-remote-entry" href="remote.html">Connect to an agent LLM instead</a>
+    <a id="mobile-remote-entry" href="remote.html">Connect to an agent instead</a>
   </div>
 </div>
 <div id="setup-overlay" role="dialog" aria-modal="true" aria-labelledby="setup-title">
@@ -124,12 +124,12 @@
     <h2 id="setup-title">Set up VM</h2>
     <div id="setup-progress" class="setup-progress">Step 1 of 2</div>
     <section id="setup-step-llm" class="setup-step">
-      <h3>Configure WebGPU LLM</h3>
+      <h3>Configure local AI model</h3>
       <p>Load the page-local LiteRT-LM model used by <code>vmagent</code> and AutoBro. The model remains in this browser.</p>
       <div class="setup-actions">
         <button id="setup-configure-llm" type="button">Choose model file</button>
         <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download model (~2 GB)</a>
-        <button id="setup-connect-remote" type="button">Connect to agent LLM</button>
+        <button id="setup-connect-remote" type="button">Connect to agent</button>
         <button id="skip-setup-llm" type="button">Skip setup and open shell</button>
       </div>
       <div id="setup-llm-status" class="setup-status">Checking for a configured model…</div>
@@ -160,14 +160,14 @@
 <header>
   <h1>VM</h1>
   <div id="status">loading v86…</div>
-  <div id="llm-status">WebGPU LLM: not paired</div>
+  <div id="llm-status">Local AI model: not configured</div>
   <div id="browser-status">AutoBro: not connected</div>
   <div id="voice-status">Voice: ready to load</div>
   <div id="tools">
     <button id="copy-terminal" type="button" title="Copy selected terminal text (Ctrl+Shift+C)">Copy</button>
     <button id="paste-terminal" type="button" title="Paste clipboard text into the shell (Ctrl+Shift+V)">Paste</button>
     <button id="voice-button" type="button" title="Dictate locally with Moonshine">🎙 Voice</button>
-    <button id="open-settings" title="Reset LLM or AutoBro configuration">Settings</button>
+    <button id="open-settings" title="Reset model or AutoBro configuration">Settings</button>
   </div>
 </header>
 <dialog id="settings-dialog">
@@ -181,7 +181,7 @@
     <button id="open-help" type="button">Open help</button>
   </div>
   <div class="settings-action">
-    <div><strong>Remote LLM</strong><br><small>Run this model as an agent or chat with a paired agent over WebRTC.</small></div>
+    <div><strong>Remote agent</strong><br><small>Run this model as an agent or chat with a paired agent over WebRTC.</small></div>
     <button id="open-remote" type="button">Remote access</button>
   </div>
   <div class="settings-action">
@@ -201,8 +201,8 @@
   </div>
   <p>Resetting a provider returns the app to the corresponding setup-wizard step.</p>
   <div class="settings-action">
-    <div><strong>WebGPU LLM</strong><br><small>Unload and delete cached model files from this browser.</small></div>
-    <button id="reset-llm" type="button">Reset LLM</button>
+    <div><strong>Local AI model</strong><br><small>Unload and delete cached model files from this browser.</small></div>
+    <button id="reset-llm" type="button">Reset model</button>
   </div>
   <div class="settings-action">
     <div><strong>AutoBro</strong><br><small>Disconnect and forget the extension ID and pairing token.</small></div>
@@ -211,8 +211,8 @@
   <div class="dialog-actions"><button id="close-settings" type="button">Close</button></div>
 </dialog>
 <dialog id="remote-dialog">
-  <h2>Remote LLM</h2>
-  <p id="remote-status">Choose whether this device runs the agent LLM or connects to another VM instance.</p>
+  <h2>Remote agent</h2>
+  <p id="remote-status">Choose whether this device runs the agent model or connects to another VM instance.</p>
   <label>Pairing key
     <input id="remote-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the agent pairing key">
   </label>
@@ -222,12 +222,12 @@
     <button id="remote-copy" type="button" hidden>Copy pairing key</button>
   </div>
   <details open>
-    <summary>Connection and LLM activity</summary>
+    <summary>Connection and model activity</summary>
     <div id="remote-activity" aria-live="polite"></div>
   </details>
   <div id="remote-chat-log" aria-live="polite"></div>
   <form id="remote-chat-form">
-    <input id="remote-prompt" required autocomplete="off" placeholder="Message the agent LLM">
+    <input id="remote-prompt" required autocomplete="off" placeholder="Message the agent">
     <button type="submit">Send</button>
   </form>
   <div class="dialog-actions"><button id="close-remote" type="button">Close</button></div>
@@ -322,7 +322,7 @@ function updateSetupWizard() {
   document.getElementById("setup-step-llm").hidden = onAutoBro;
   document.getElementById("setup-step-autobro").hidden = !onAutoBro;
   document.getElementById("setup-progress").textContent = onAutoBro ? "Step 2 of 2" : "Step 1 of 2";
-  status(onAutoBro ? "Setup: connect AutoBro" : "Setup: configure WebGPU LLM");
+  status(onAutoBro ? "Setup: connect AutoBro" : "Setup: configure local AI model");
 }
 let bootProgress = 1;
 function setBootProgress(value, message) {
@@ -353,7 +353,7 @@ function failBoot(message) {
   bootMessage.textContent = message;
 }
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "vm-shell-28-rig-optimized";
+const DISK_VERSION = "vm-shell-30-rig-fast-path";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -648,7 +648,7 @@ import("./network/browser/v86-host-bridge.js").then(module => {
   });
 }).catch(error => status("agent bridge failed — " + error.message));
 
-const llmStatus = message => document.getElementById("llm-status").textContent = "WebGPU LLM: " + message;
+const llmStatus = message => document.getElementById("llm-status").textContent = "Local AI model: " + message;
 const browserStatus = message => document.getElementById("browser-status").textContent = "AutoBro: " + message;
 const voiceStatus = message => {
   document.getElementById("voice-status").textContent = "Voice: " + message;
@@ -866,7 +866,7 @@ document.getElementById("remote-connect").onclick = async () => {
   remoteStatus.textContent = "Connecting to agent…";
   try {
     await (await getRemoteLlmPeer()).connect(key);
-    remoteStatus.textContent = "Connected. Messages use the agent WebGPU LLM directly.";
+    remoteStatus.textContent = "Connected. Messages use the agent's local AI model directly.";
     document.getElementById("remote-prompt").focus();
   } catch (error) { remoteStatus.textContent = "Connection failed: " + error.message; }
 };
@@ -876,7 +876,7 @@ document.getElementById("remote-chat-form").onsubmit = async event => {
   const prompt = input.value.trim();
   if (!prompt) return;
   input.value = "";
-  remoteChatLog.textContent += `You: ${prompt}\n\nAgent LLM: `;
+  remoteChatLog.textContent += `You: ${prompt}\n\nAgent: `;
   remoteChatLog.scrollTop = remoteChatLog.scrollHeight;
   const submit = event.submitter;
   if (submit) submit.disabled = true;
@@ -926,7 +926,7 @@ document.getElementById("configure-llm-later").onclick = () => openSetupStep("ll
 document.getElementById("configure-autobro-later").onclick = () => openSetupStep("autobro");
 document.getElementById("skip-setup-llm").onclick = skipSetupAndOpenShell;
 document.getElementById("reset-llm").onclick = async () => {
-  if (!confirm("Reset the WebGPU LLM and delete its cached model files from this browser?")) return;
+  if (!confirm("Reset the local AI model and delete its cached model files from this browser?")) return;
   const button = document.getElementById("reset-llm");
   button.disabled = true;
   try {
@@ -1015,7 +1015,7 @@ try {
   const initialization = client.initialize({ bundledModelUrl: portableMode ? "./models/gemma-4-E2B-it-web.litertlm" : "" });
   initialization.then(result => {
     hostBridge?.setLlmClient(client);
-    llmStatus(result.modelName ? `ready — ${result.modelName}` : "ready — choose Configure LLM to load a model");
+    llmStatus(result.modelName ? `ready — ${result.modelName}` : "ready — choose Configure model to load a model");
     llmReady = Boolean(result.modelName);
     llmCheckComplete = true;
     document.getElementById("setup-llm-status").textContent = result.modelName ? `Ready — ${result.modelName}` : "Choose a .litertlm or .task model file.";
@@ -1023,7 +1023,7 @@ try {
   }).catch(error => {
     llmStatus("unavailable — " + error.message);
     llmCheckComplete = true;
-    document.getElementById("setup-llm-status").textContent = "WebGPU LLM unavailable: " + error.message;
+    document.getElementById("setup-llm-status").textContent = "Local AI model unavailable: " + error.message;
     updateSetupWizard();
   });
   llmFileInput.onchange = async () => {
@@ -1049,7 +1049,7 @@ try {
 } catch (error) {
   llmStatus("unavailable — " + error.message);
   llmCheckComplete = true;
-  document.getElementById("setup-llm-status").textContent = "WebGPU LLM unavailable: " + error.message;
+  document.getElementById("setup-llm-status").textContent = "Local AI model unavailable: " + error.message;
   updateSetupWizard();
 }
 
