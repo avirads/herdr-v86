@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tool substrate + rig loop latency</title>
+<pre id="serial"></pre><div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+let serial = '', started = false, submitted = false;
+async function submit(ok, reason = '', extra = {}) {
+  if (submitted) return; submitted = true;
+  await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, reason, serial: serial.slice(-4000), ...extra }) });
+}
+const median = xs => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+async function timeIt(fn, n) {
+  const runs = [];
+  for (let i = 0; i < n; i++) { const t = performance.now(); await fn(i); runs.push(+(performance.now() - t).toFixed(1)); }
+  return { medianMs: median(runs), minMs: Math.min(...runs), maxMs: Math.max(...runs), runs };
+}
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm', memory_size: 256 << 20, vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' }, vga_bios: { url: '../../vgabios.bin' }, bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 }, uart1: true,
+  screen_container: document.querySelector('#screen_container'), autostart: true,
+});
+
+// Deterministic stub model: for rig it emits one scripted tool call, then a final answer.
+let scriptedCall = null;
+const stubLlm = {
+  modelName: 'stub',
+  async chat({ messages }) {
+    const hasToolResult = messages.some(m => m.role === 'tool');
+    if (hasToolResult || !scriptedCall) return { choices: [{ message: { role: 'assistant', content: 'done' } }] };
+    return { choices: [{ message: { role: 'assistant', content: null, tool_calls: [scriptedCall] } }] };
+  },
+};
+
+const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
+const { V86GuestReadonlyClient } = await import('../browser/v86-guest-readonly.js');
+const { VmAgentController } = await import('../browser/vmagent-controller.js');
+const hostBridge = new V86HostBridge(emulator, { llmClient: stubLlm });
+const guest = new V86GuestReadonlyClient(emulator, hostBridge);
+const controller = new VmAgentController({
+  createAgent: async () => { throw new Error('unused'); },
+  getLlmClient: () => stubLlm, getGuest: () => guest, approveAction: async () => true, onOutput: async () => {},
+});
+
+async function runRigTool(call) { scriptedCall = call; return controller.runRig('bench'); }
+
+emulator.add_listener('serial0-output-byte', byte => {
+  serial = (serial + String.fromCharCode(byte)).slice(-200000);
+  document.querySelector('#serial').textContent = serial;
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) { started = true; run().catch(e => submit(false, e?.stack || e?.message || String(e))); }
+});
+setTimeout(() => submit(false, 'tool-substrate test timed out'), 180000);
+
+async function run() {
+  const N = 6;
+  // Warm the RPC path once (first call includes serial getty settle).
+  await guest.execute('true').catch(() => {});
+
+  // --- Shared guest tool substrate (both rig and vmagent call these) ---
+  const substrate = {};
+  substrate.write        = await timeIt(i => guest.write(`bench${i}.txt`, 'hello from benchmark'), N);
+  substrate.read         = await timeIt(i => guest.read(`bench${i % N}.txt`), N);
+  substrate.list         = await timeIt(() => guest.list('.'), N);
+  substrate.shell_execute= await timeIt(() => guest.execute('echo shelltest'), N);
+  substrate.grep         = await timeIt(() => guest.grep('hello', '.'), N);
+  substrate.glob         = await timeIt(() => guest.glob('*.txt', '.'), N);
+
+  // --- rig end-to-end per tool (agent loop + tool round-trip, stub model) ---
+  const rig = {};
+  rig.chat_no_tool = await timeIt(() => { scriptedCall = null; return controller.runRig('bench'); }, N);
+  rig.write_file = await timeIt(i => runRigTool({ id: 'w', function: { name: 'write_file', arguments: JSON.stringify({ path: `rig${i}.txt`, content: 'x' }) } }), N);
+  rig.read_file  = await timeIt(() => runRigTool({ id: 'r', function: { name: 'read_file', arguments: JSON.stringify({ path: 'rig0.txt' }) } }), N);
+  rig.list_directory = await timeIt(() => runRigTool({ id: 'l', function: { name: 'list_directory', arguments: JSON.stringify({ path: '.' }) } }), N);
+  rig.shell = await timeIt(() => runRigTool({ id: 's', function: { name: 'shell', arguments: JSON.stringify({ command: 'echo shelltest' }) } }), N);
+
+  await submit(true, '', { iterations: N, substrate, rig });
+}
+</script>

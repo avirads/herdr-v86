@@ -2,3 +2,6 @@ agent/node_modules/
 portable/dist/
 portable/vm-launcher.exe
 network/v86net-gateway-userspace-test.exe
+
+# Large WebGPU model, hardlinked/copied in locally for e2e benchmarks
+models/
