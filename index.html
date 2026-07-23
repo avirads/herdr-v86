@@ -398,6 +398,22 @@ async function copyTerminalSelection() {
     term.focus();
     return false;
   }
+  // execCommand is deprecated but remains the most reliable synchronous copy
+  // path for keyboard gestures and embedded browsers. Trying it before an
+  // asynchronous permission request preserves the transient user activation.
+  const textarea = document.createElement("textarea");
+  textarea.value = selection;
+  textarea.setAttribute("readonly", "");
+  textarea.style.cssText = "position:fixed;left:-9999px;top:0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copiedSynchronously = document.execCommand("copy");
+  textarea.remove();
+  if (copiedSynchronously) {
+    status("Terminal selection copied");
+    term.focus();
+    return true;
+  }
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(selection);
@@ -408,18 +424,9 @@ async function copyTerminalSelection() {
     term.focus();
     return true;
   } catch {
-    // Firefox permission policies and some embedded/mobile browsers block the
-    // asynchronous API but still permit copying during a user click.
-    const textarea = document.createElement("textarea");
-    textarea.value = selection;
-    textarea.style.cssText = "position:fixed;left:-9999px;top:0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    const copied = document.execCommand("copy");
-    textarea.remove();
-    status(copied ? "Terminal selection copied" : "Clipboard copy was blocked by the browser");
+    status("Clipboard copy was blocked by the browser");
     term.focus();
-    return copied;
+    return false;
   }
 }
 
@@ -478,10 +485,12 @@ term.element.addEventListener("paste", event => {
 term.attachCustomKeyEventHandler(event => {
   if (event.type !== "keydown") return true;
   const modifier = event.ctrlKey || event.metaKey;
-  const copy = modifier && (event.shiftKey || event.metaKey) && event.key.toLowerCase() === "c";
+  const copy = modifier && event.key.toLowerCase() === "c"
+    && (event.shiftKey || event.metaKey || term.hasSelection());
   const paste = (modifier && (event.shiftKey || event.metaKey) && event.key.toLowerCase() === "v")
     || (event.shiftKey && event.key === "Insert");
-  // Keep Ctrl+C without a selection available as the guest interrupt key.
+  // Ctrl+C copies an active selection, but remains the guest interrupt key
+  // when no terminal text is selected.
   if (copy && term.hasSelection()) { copyTerminalSelection(); return false; }
   // Let the browser dispatch its native paste event. The capture listener
   // above extracts clipboardData without requiring Clipboard API permission.

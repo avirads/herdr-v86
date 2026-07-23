@@ -47,7 +47,8 @@ controls, client certificates, or every `curl` option.
 
 The terminal also supports direct clipboard controls:
 
-- Select text and press **Copy** or `Ctrl+Shift+C` (`Cmd+C` on macOS).
+- Select text and press **Copy**, `Ctrl+C`, or `Ctrl+Shift+C` (`Cmd+C` on
+  macOS). Without a selection, `Ctrl+C` remains the shell interrupt key.
 - Press **Paste**, `Ctrl+Shift+V` (`Cmd+V` on macOS), or `Shift+Insert` to
   insert clipboard text into the active shell or `vmagent` conversation.
 - Plain `Ctrl+C` remains the shell interrupt key when terminal text is not
