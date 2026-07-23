@@ -1,0 +1,86 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>rig: ReAct vs CodeAct</title>
+<pre id="serial"></pre><div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+let serial = '', started = false, submitted = false;
+async function submit(ok, reason = '', extra = {}) {
+  if (submitted) return; submitted = true;
+  await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, reason, serial: serial.slice(-1500), ...extra }) });
+}
+
+const STEPS = 5; // a task that touches 5 files
+let modelCalls = 0;
+// Deterministic stub (near-zero latency) so the numbers isolate the transport
+// structure, not model generation. ReAct emits one write per turn; CodeAct
+// emits a single script that writes all files in the VM in one shot.
+const stubLlm = {
+  modelName: 'stub',
+  async chat({ messages }) {
+    modelCalls++;
+    const sys = messages.find(m => m.role === 'system')?.content || '';
+    if (sys.includes('POSIX sh script')) {
+      return { choices: [{ message: { role: 'assistant', content:
+        `for i in $(seq 1 ${STEPS}); do printf 'file %s\\n' "$i" > ca$i.txt; done; echo "wrote ${STEPS} files"` } }] };
+    }
+    const done = messages.filter(m => m.role === 'tool').length;
+    if (done < STEPS) {
+      const n = done + 1;
+      return { choices: [{ message: { role: 'assistant', content: null, tool_calls: [
+        { id: 't' + n, function: { name: 'write_file', arguments: JSON.stringify({ path: `ra${n}.txt`, content: `file ${n}` }) } }] } }] };
+    }
+    return { choices: [{ message: { role: 'assistant', content: `wrote ${STEPS} files` } }] };
+  },
+};
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm', memory_size: 256 << 20, vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' }, vga_bios: { url: '../../vgabios.bin' }, bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 }, uart1: true,
+  screen_container: document.querySelector('#screen_container'), autostart: true,
+});
+const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
+const { V86GuestReadonlyClient } = await import('../browser/v86-guest-readonly.js');
+const { VmAgentController } = await import('../browser/vmagent-controller.js');
+const hostBridge = new V86HostBridge(emulator, { llmClient: stubLlm });
+const guest = new V86GuestReadonlyClient(emulator, hostBridge, { timeoutMs: 60000 });
+
+// Count real guest RPC round-trips.
+let guestOps = 0;
+for (const m of ['read', 'list', 'write', 'execute']) {
+  const orig = guest[m].bind(guest);
+  guest[m] = (...a) => { guestOps++; return orig(...a); };
+}
+const controller = new VmAgentController({
+  createAgent: async () => { throw new Error('unused'); },
+  getLlmClient: () => stubLlm, getGuest: () => guest, approveAction: async () => true, onOutput: async () => {},
+});
+
+emulator.add_listener('serial0-output-byte', byte => {
+  serial = (serial + String.fromCharCode(byte)).slice(-120000);
+  document.querySelector('#serial').textContent = serial;
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) { started = true; run().catch(e => submit(false, e?.stack || e?.message || String(e))); }
+});
+setTimeout(() => submit(false, 'codeact benchmark timed out'), 180000);
+
+async function measure(fn) {
+  modelCalls = 0; guestOps = 0;
+  const t = performance.now();
+  const out = await fn();
+  return { ms: +(performance.now() - t).toFixed(0), modelCalls, guestOps, output: String(out).slice(0, 60) };
+}
+
+async function run() {
+  await guest.execute('cd /root/project 2>/dev/null; true'); // warm
+  const react = await measure(() => controller.runRig(`Create ${STEPS} files ra1..ra${STEPS}.txt each containing its name.`));
+  const codeact = await measure(() => controller.runRigCodeAct(`Create ${STEPS} files ca1..ca${STEPS}.txt each containing its name.`));
+  await submit(true, '', {
+    steps: STEPS, react, codeact,
+    speedup: +(react.ms / codeact.ms).toFixed(2),
+    roundtripsSaved: react.guestOps - codeact.guestOps,
+    modelCallsSaved: react.modelCalls - codeact.modelCalls,
+  });
+}
+</script>

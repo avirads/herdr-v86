@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
-[ "$#" -gt 0 ] || { echo 'usage: rig TASK...' >&2; exit 2; }
+op=RIG
+if [ "${1:-}" = "--codeact" ]; then op=CODEACT; shift; fi
+[ "$#" -gt 0 ] || { echo 'usage: rig [--codeact] TASK...' >&2; exit 2; }
 b64() { printf %s "$1" | base64 | tr -d '\n'; }
-printf '__V86RPC__\tAGENT_RIG\t%s\t%s\n' "$$-$(date +%s)" "$(b64 "$*")" > /dev/ttyS0
+printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$op" "$$-$(date +%s)" "$(b64 "$*")" > /dev/ttyS0
 echo '[rig] submitted to the ready browser agent.'

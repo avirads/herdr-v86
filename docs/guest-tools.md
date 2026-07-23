@@ -209,11 +209,19 @@ page-local WebGPU model and provides `read_file`, `list_directory`,
 cd /root/project
 rig 'Summarize this project'
 rig 'Create hello.txt containing hello from the VM'
+rig --codeact 'Create 5 files f1..f5.txt each containing its name'
 ```
 
 The command sends one framed request directly to the browser and starts no
 native runtime, HTTP proxy, or guest model process. Guest networking and an API
 key are not required.
+
+With `--codeact`, the model instead writes one POSIX shell script for the whole
+task, which runs locally in the VM in a single `execute` round-trip — collapsing
+the per-tool model calls and RPC round-trips of the default loop into roughly
+one each. It is faster for multi-step tasks but relies on the model producing a
+correct script, so prefer the default loop when a step needs to react to
+intermediate results.
 
 ## Security boundary
 

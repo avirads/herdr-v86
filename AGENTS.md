@@ -55,7 +55,9 @@ clipboard, file-transfer, GitHub, or AI operations.
     all page reads and actions as external operations; approval/YOLO applies.
 16. `rig 'TASK'` is the low-latency browser-orchestrated coding agent with
     project-local read, list, write, and shell tools. Its model stays in the
-    browser; only selected tool operations cross into the VM.
+    browser; only selected tool operations cross into the VM. `rig --codeact
+    'TASK'` instead has the model write one shell script run in a single VM
+    round-trip — faster for multi-step tasks, but needs a correct script.
 
 ## Quick capability check
 

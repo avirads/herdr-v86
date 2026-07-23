@@ -47,6 +47,28 @@ export class VmAgentController {
     throw new Error('Rig exceeded six tool turns');
   }
 
+  // CodeAct variant: instead of one model round-trip per tool op (each of which
+  // is a slow guest RPC), the model writes ONE shell script that performs the
+  // whole task locally in the VM, run in a single guest.execute. Collapses N
+  // model calls + N RPC round-trips into ~1 + 1.
+  async runRigCodeAct(prompt) {
+    const llm = this.getLlmClient();
+    const guest = this.getGuest();
+    if (!llm || !guest) throw new Error('model or VM bridge is not ready');
+    const messages = [
+      { role: 'system', content: 'You are a coding agent working in /root/project on a 32-bit Linux VM. Accomplish the task by writing ONE POSIX sh script that uses standard tools (cat, ls, grep, sed, awk, printf, test, mkdir, etc.). Output ONLY the script body — no explanation and no markdown fences.' },
+      { role: 'user', content: String(prompt) },
+    ];
+    const completion = await llm.chat({ model: llm.modelName || 'webgpu', temperature: 0, max_tokens: 1000, chat_template_kwargs: { enable_thinking: false }, messages });
+    let script = String(completion?.choices?.[0]?.message?.content || '').trim();
+    const fenced = script.match(/^```(?:sh|bash)?\s*([\s\S]*?)\s*```$/i);
+    if (fenced) script = fenced[1].trim();
+    if (!script) throw new Error('CodeAct produced no script');
+    if (!this.yolo && !await this.approveAction('execute', { script })) return 'Operation rejected.';
+    const output = await guest.execute(`cd /root/project 2>/dev/null; ${script}`);
+    return String(output);
+  }
+
   async handle(command, value = '') {
     if (command === 'status') {
       const llm = this.getLlmClient();
@@ -75,11 +97,14 @@ export class VmAgentController {
       if (value === 'off') this.yolo = false;
       return await this.onOutput(`[vmagent] YOLO ${this.yolo ? 'on' : 'off'}.`);
     }
-    if (command === 'rig') {
+    if (command === 'rig' || command === 'codeact') {
       if (this.abortController) return await this.onOutput('[rig] another agent task is running.');
       this.abortController = new AbortController();
       await this.onBusy(true);
-      try { await this.onOutput(await this.runRig(value)); }
+      try {
+        const output = command === 'codeact' ? await this.runRigCodeAct(value) : await this.runRig(value);
+        await this.onOutput(output);
+      }
       catch (error) { await this.onOutput(`Rig error: ${error.message}`); }
       finally { this.abortController = null; await this.onBusy(false); }
       return;
