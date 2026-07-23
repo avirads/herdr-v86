@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent call flows — vmllm · rig · vmagent</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0f14;
+    --panel: #11161d;
+    --panel-2: #161b22;
+    --border: #232b36;
+    --border-2: #30363d;
+    --text: #d7dee6;
+    --muted: #8b949e;
+    --faint: #5c6672;
+    --vm: #e3b341;
+    --browser: #58a6ff;
+    --wire: #bc8cff;
+    --llm: #3fb950;
+    --mono: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 480px at 82% -8%, rgba(188,140,255,.10), transparent 60%),
+      radial-gradient(900px 420px at 8% 108%, rgba(88,166,255,.07), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: clamp(28px, 5vw, 60px) clamp(18px, 4vw, 40px) 72px; }
+
+  header { border-bottom: 1px solid var(--border); padding-bottom: 22px; margin-bottom: 24px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--wire); display: inline-block; }
+  h1 {
+    font-family: var(--mono); font-weight: 600;
+    font-size: clamp(25px, 4.4vw, 38px); letter-spacing: -.01em;
+    margin: 14px 0 8px; text-wrap: balance; color: #f0f6fc;
+  }
+  h1 .a { color: var(--llm); } h1 .b { color: var(--vm); } h1 .c { color: var(--wire); }
+  .dek { color: var(--muted); font-size: clamp(15px, 2vw, 17px); max-width: 68ch; margin: 0; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px 20px;
+    padding: 13px 16px; margin: 0 0 30px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .legend .item { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted); }
+  .legend .item b { color: var(--text); font-weight: 600; }
+  .swatch { width: 13px; height: 13px; border-radius: 3px; flex: none; }
+  .swatch.vm { background: rgba(227,179,65,.22); border: 1px solid var(--vm); }
+  .swatch.browser { background: rgba(88,166,255,.20); border: 1px solid var(--browser); }
+  .arrow { width: 30px; height: 0; flex: none; }
+  .arrow.solid { border-top: 2px solid var(--muted); }
+  .arrow.dashed { border-top: 2px dashed var(--wire); }
+
+  .path { margin: 0 0 40px; }
+  .path-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
+  .tier { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+  .cmd {
+    font-family: var(--mono); font-size: 20px; font-weight: 600; color: #f0f6fc;
+    padding: 1px 8px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border-2);
+  }
+  .role { color: var(--muted); font-size: 14.5px; }
+  .path-note { margin: 6px 0 14px; font-size: 14px; color: var(--muted); max-width: 74ch; }
+  .path-note strong { color: var(--text); font-weight: 600; }
+  .path-note code, .compare code, footer code { font-family: var(--mono); font-size: .9em; color: var(--vm); background: rgba(227,179,65,.10); padding: 1px 5px; border-radius: 4px; }
+
+  .diagram {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border-2); border-radius: 14px; padding: 12px; overflow-x: auto;
+    box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 18px 40px -28px rgba(0,0,0,.8);
+  }
+  .mermaid { min-width: 560px; text-align: center; }
+  .mermaid svg { max-width: 100%; height: auto; }
+  .mermaid:not([data-processed]) { color: var(--faint); font-family: var(--mono); font-size: 12px; white-space: pre; }
+
+  h2 {
+    font-family: var(--mono); font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; margin: 40px 0 14px; padding-top: 22px; border-top: 1px solid var(--border);
+  }
+  .scroll { overflow-x: auto; }
+  .compare { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 620px; }
+  .compare th, .compare td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .compare thead th { font-family: var(--mono); font-size: 15px; font-weight: 600; border-bottom: 1px solid var(--border-2); }
+  .compare thead th.axis { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .compare th.vmllm { color: var(--llm); } .compare th.rig { color: var(--vm); } .compare th.vmagent { color: var(--wire); }
+  .compare td.axis { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .compare tbody tr:last-child td { border-bottom: none; }
+  .compare .n { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+  .yes { color: var(--llm); } .no { color: var(--faint); }
+
+  footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--faint); font-size: 12.5px; }
+  footer ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 5px; }
+  footer code { color: var(--muted); background: none; padding: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">herdr-v86 · architecture</div>
+    <h1>Three agent paths: <span class="a">vmllm</span> · <span class="b">rig</span> · <span class="c">vmagent</span></h1>
+    <p class="dek">All three run the model in the browser. They differ in how the task gets in, how much orchestration wraps the model, and how much of it crosses the serial line back into the VM.</p>
+  </header>
+
+  <div class="legend">
+    <div class="item"><span class="arrow solid"></span><span><b>Solid</b> — stays on one side</span></div>
+    <div class="item"><span class="arrow dashed"></span><span><b>Dashed</b> — crosses the serial UART</span></div>
+    <div class="item"><span class="swatch vm"></span><span><b>Amber</b> — 32-bit VM</span></div>
+    <div class="item"><span class="swatch browser"></span><span><b>Blue</b> — browser</span></div>
+  </div>
+
+  <section class="path">
+    <div class="path-head">
+      <span class="tier">Path 01 · raw model</span>
+      <span class="cmd">vmllm</span>
+      <span class="role">one chat call — no tools, no loop</span>
+    </div>
+    <p class="path-note">The guest fires the request itself and <strong>blocks reading the reply inline</strong>; the answer streams all the way back over the serial line to the console. One round-trip carries the whole exchange.</p>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  box rgba(227,179,65,0.10) 32-bit VM · v86
+    participant GC as Guest console<br/>ttyS0
+  end
+  box rgba(88,166,255,0.10) Browser
+    participant HB as Host bridge
+    participant LLM as WebGPU LLM
+  end
+  GC->>GC: user runs vmllm 'PROMPT'
+  GC-->>HB: __V86RPC__ LLM_CHAT · b64(messages)
+  Note over GC,HB: serial — request crosses VM ➜ browser
+  HB->>LLM: llmClient.chat(body)
+  LLM-->>HB: completion
+  Note over HB,LLM: in-browser · WebGPU — no serial hop
+  HB-->>GC: DATA chunks (64B) … END
+  Note over GC,HB: serial — answer streams browser ➜ VM
+  GC->>GC: decode + print to console
+</pre>
+    </div>
+  </section>
+
+  <section class="path">
+    <div class="path-head">
+      <span class="tier">Path 02 · lean agent</span>
+      <span class="cmd">rig</span>
+      <span class="role">browser loop · 4 tools · ≤6 turns</span>
+    </div>
+    <p class="path-note">The guest command writes <code>AGENT_RIG</code> straight to the serial and <strong>returns immediately</strong> (fire-and-forget). The browser drives a minimal tool loop; the answer is painted into the terminal, not sent back over serial.</p>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  box rgba(227,179,65,0.10) 32-bit VM · v86
+    participant GC as Guest console<br/>ttyS0
+    participant RPC as RPC shell<br/>vmagent-rpc
+  end
+  box rgba(88,166,255,0.10) Browser
+    participant HB as Host bridge
+    participant RG as rig loop<br/>runRig()
+    participant LLM as WebGPU LLM
+  end
+  GC->>GC: user runs rig 'TASK'
+  GC-->>HB: __V86RPC__ AGENT_RIG · b64(task)
+  GC->>GC: prints '[rig] submitted' · returns
+  Note over GC,HB: serial — task crosses VM ➜ browser (fire-and-forget)
+  HB->>RG: agentHandler('rig', task)
+  loop up to 6 turns
+    RG->>LLM: chat(messages + 4 tools)
+    LLM-->>RG: tool call — or — final answer
+    Note over RG,LLM: in-browser · WebGPU — no serial hop
+    alt model requested a tool
+      RG-->>RPC: read / list / write / shell · b64(args)
+      RPC-->>RG: __V86RPC_RESPONSE__ · result
+      Note over RPC,RG: serial — tool crosses browser ➜ VM ➜ browser
+    end
+  end
+  RG->>HB: final text
+  Note over GC,HB: painted into xterm (no serial hop)
+</pre>
+    </div>
+  </section>
+
+  <section class="path">
+    <div class="path-head">
+      <span class="tier">Path 03 · full agent</span>
+      <span class="cmd">vmagent</span>
+      <span class="role">Deep Agents loop · planning · full tool suite</span>
+    </div>
+    <p class="path-note">The guest <strong>stages the request as a file</strong>; the browser drains it with a periodic <code>vmagent-poll</code>. From there it mirrors rig but with the heavier Deep Agents orchestrator and its browser-reaching tools.</p>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  box rgba(227,179,65,0.10) 32-bit VM · v86
+    participant GC as Guest console<br/>ttyS0
+    participant RPC as RPC shell<br/>ttyS1 · vmagent-rpc
+  end
+  box rgba(88,166,255,0.10) Browser
+    participant HB as Host bridge
+    participant DA as Deep Agents<br/>orchestrator
+    participant LLM as WebGPU LLM
+  end
+  GC->>GC: user runs vmagent 'TASK'
+  GC->>GC: stage /run/vmagent-request<br/>__V86RPC__ AGENT_RUN
+  HB-->>RPC: vmagent-poll  (every 500ms)
+  RPC-->>HB: __V86RPC__ AGENT_RUN · b64(task)
+  Note over RPC,HB: serial — task crosses VM ➜ browser
+  HB->>DA: agentHandler('run', task)
+  loop until model returns a final answer
+    DA->>LLM: chat(messages + tool protocol)
+    LLM-->>DA: tool call — or — final answer
+    Note over DA,LLM: in-browser · WebGPU — no serial hop
+    alt model requested a tool
+      DA-->>RPC: vmagent-rpc op · b64(args)
+      RPC->>RPC: run op in /root/project
+      RPC-->>DA: __V86RPC_RESPONSE__ · result
+      Note over RPC,DA: serial — tool crosses browser ➜ VM ➜ browser
+    end
+  end
+  DA->>HB: { output }
+  Note over GC,HB: onOutput ➜ writeAgentTerminal<br/>answer painted into xterm (no serial hop)
+</pre>
+    </div>
+  </section>
+
+  <h2>Side by side</h2>
+  <div class="scroll">
+    <table class="compare">
+      <thead>
+        <tr>
+          <th class="axis">Dimension</th>
+          <th class="vmllm">vmllm</th>
+          <th class="rig">rig</th>
+          <th class="vmagent">vmagent</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="axis">Task intake</td>
+          <td>direct <code>LLM_CHAT</code> over serial</td>
+          <td>direct <code>AGENT_RIG</code>, fire-and-forget</td>
+          <td>staged file, browser polls</td>
+        </tr>
+        <tr>
+          <td class="axis">Orchestration</td>
+          <td><span class="no">none</span> — single call</td>
+          <td>lean browser loop</td>
+          <td>Deep Agents loop + planning</td>
+        </tr>
+        <tr>
+          <td class="axis">Tools</td>
+          <td><span class="no">none</span></td>
+          <td>read / list / write / shell</td>
+          <td>full fs + shell + web / browser</td>
+        </tr>
+        <tr>
+          <td class="axis">Model hop</td>
+          <td class="yes">in-browser</td>
+          <td class="yes">in-browser</td>
+          <td class="yes">in-browser</td>
+        </tr>
+        <tr>
+          <td class="axis">Answer returns via</td>
+          <td>serial ➜ guest console</td>
+          <td>painted to xterm</td>
+          <td>painted to xterm</td>
+        </tr>
+        <tr>
+          <td class="axis">Serial round-trips</td>
+          <td class="n">1 <span class="no">(carries answer)</span></td>
+          <td class="n">1 + 1&#8202;/&#8202;tool</td>
+          <td class="n">1 + 1&#8202;/&#8202;tool</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    Transport notes
+    <ul>
+      <li>Frames ride a hidden serial line — inittab runs <code>autologin</code> on <code>ttyS0</code> and <code>autologin-rpc</code> on <code>ttyS1</code>; the browser filters <code>__V86RPC__</code> markers out of the visible terminal.</li>
+      <li>Bytes are paced ~1/ms to stay under the emulated 115200-baud UART's ~11.5 KB/s ceiling; long replies use ACK'd <code>reliableReply</code> chunks to avoid overrun drops.</li>
+      <li>For <code>rig</code> and <code>vmagent</code>, non-YOLO runs gate <code>write</code>/<code>shell</code> behind a browser <code>confirm()</code> before the tool crosses into the VM.</li>
+    </ul>
+  </footer>
+</div>
+<script src="../vendor/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: 'base',
+    themeVariables: {
+      fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+      fontSize: '13px',
+      primaryColor: '#161b22', primaryBorderColor: '#3b4553', primaryTextColor: '#e6edf3',
+      lineColor: '#8b949e', textColor: '#d7dee6',
+      actorBkg: '#161b22', actorBorder: '#4b5563', actorTextColor: '#e6edf3', actorLineColor: '#3b4553',
+      signalColor: '#9aa4b2', signalTextColor: '#cbd5e1',
+      noteBkgColor: '#1b2430', noteTextColor: '#d7dee6', noteBorderColor: '#3b4553',
+      labelBoxBkgColor: '#1b2430', labelBoxBorderColor: '#3b4553', labelTextColor: '#cbd5e1',
+      loopTextColor: '#bc8cff', activationBkgColor: '#21262d', activationBorderColor: '#bc8cff',
+      sequenceNumberColor: '#0b0f14'
+    }
+  });
+  mermaid.run({ querySelector: '.mermaid' });
+</script>
+</body>
+</html>
