@@ -278,7 +278,7 @@ await Promise.all([
   loadPageScript("xterm.js"),
   loadPageScript("libv86-network.js"),
 ]);
-loadPageScript("https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js", { crossOrigin: "anonymous" })
+loadPageScript("vendor/peerjs-1.5.5.min.js")
   .catch(() => undefined);
 // Right-click belongs to terminal/guest applications inside the VM. Prevent the
 // host browser menu from covering their own mouse handling, while retaining the
