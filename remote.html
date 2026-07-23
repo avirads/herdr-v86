@@ -19,14 +19,19 @@
   #pairing { padding: 18px; border: 1px solid #30363d; border-radius: 10px; background: #161b22; }
   #connect { width: 100%; margin-top: 10px; }
   #status { min-height: 1.4em; margin-top: 10px; font-size: 12px; }
-  #chat { display: none; min-height: min(680px, calc(100dvh - 32px)); grid-template-rows: auto 1fr auto; gap: 10px; }
+  #chat { display: none; min-height: min(680px, calc(100dvh - 32px)); grid-template-rows: auto 1fr auto auto; gap: 10px; }
   #chat.active { display: grid; }
   #log { min-height: 180px; overflow-y: auto; padding: 12px; border: 1px solid #30363d; border-radius: 8px; background: #161b22; white-space: pre-wrap; line-height: 1.5; }
+  /* Voice is the primary way to talk to the agent in human mode. */
+  #voice-controls { display: grid; gap: 8px; justify-items: center; padding: 14px; border: 1px solid #30363d; border-radius: 10px; background: #161b22; }
+  #record { width: 100%; min-height: 60px; font-size: 17px; font-weight: 600; background: #1f6feb; color: #fff; border-color: #388bfd; }
+  #record:disabled { opacity: .55; }
+  #record.recording { background: #8b1a1a; border-color: #b62324; color: #fff; }
+  #voice-status { color: #8b949e; text-align: center; }
+  /* Text input stays available, de-emphasized beneath voice. */
   #chat-form { display: flex; gap: 8px; }
-  #prompt { flex: 1; min-width: 0; }
-  #voice-controls { display: flex; align-items: center; gap: 10px; }
-  #record.recording { background: #8b1a1a; color: white; }
-  #voice-status { color: #8b949e; }
+  #prompt { flex: 1; min-width: 0; font-size: 13px; }
+  #send { padding: 6px 14px; font-size: 13px; color: #8b949e; }
   a { color: #58a6ff; }
   @media (max-width: 520px) { #chat-form { flex-direction: column; } #send { width: 100%; } }
 </style>
@@ -46,14 +51,14 @@
   <section id="chat">
     <div><h1>Agent</h1><p id="chat-status">Connected over WebRTC</p></div>
     <div id="log" aria-live="polite"></div>
-    <form id="chat-form">
-      <input id="prompt" required autocomplete="off" placeholder="Message the agent">
-      <button id="send" type="submit">Send</button>
-    </form>
     <div id="voice-controls">
-      <button id="record" type="button">🎙 Record</button>
+      <button id="record" type="button">🎙 Tap to speak</button>
       <small id="voice-status">Voice is transcribed on the agent</small>
     </div>
+    <form id="chat-form">
+      <input id="prompt" required autocomplete="off" placeholder="Or type a message instead">
+      <button id="send" type="submit">Send</button>
+    </form>
   </section>
 </main>
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" crossorigin="anonymous"></script>
@@ -168,12 +173,12 @@ async function startRecording() {
     recorder = null;
     recordingStream = null;
     recordButton.classList.remove('recording');
-    recordButton.textContent = '🎙 Record';
+    recordButton.textContent = '🎙 Tap to speak';
     if (blob.size) submitVoice(blob);
   };
   recorder.start(500);
   recordButton.classList.add('recording');
-  recordButton.textContent = '■ Stop';
+  recordButton.textContent = '■ Stop recording';
   voiceStatus.textContent = 'Recording… tap Stop when finished';
   recordingTimer = setTimeout(() => stopRecording(), 30000);
 }
