@@ -55,6 +55,11 @@ export class LiteRtLmClient extends EventTarget {
     this.modelName = null;
     this.loading = null;
     this.runtimeError = null;
+    // Reused across turns so the engine keeps the conversation's KV cache
+    // instead of re-prefilling the whole history on every call.
+    this._session = null;
+    this._chatLock = Promise.resolve();
+    this.reuseSessions = true;
   }
 
   activity(message, progress = null) {
@@ -143,6 +148,7 @@ export class LiteRtLmClient extends EventTarget {
   async reset() {
     await this.engine?.delete?.();
     this.engine = null;
+    this._session = null;
     this.modelName = null;
     this.loading = null;
     localStorage.removeItem(LAST_MODEL_KEY);
@@ -169,6 +175,7 @@ export class LiteRtLmClient extends EventTarget {
     await this.ensureWasm();
     if (this.engine) await this.engine.delete?.();
     this.engine = null;
+    this._session = null;
     this.modelName = null;
     this.loading = name;
     this.activity(`loading ${name}; first load compiles WebGPU kernels`);
@@ -202,8 +209,34 @@ export class LiteRtLmClient extends EventTarget {
     return { object: 'list', data: cached.map(id => ({ id, object: 'model', owned_by: 'page-local-litert-lm', loaded: id === this.modelName })) };
   }
 
+  // OpenAI-compatible: takes the full messages array and returns a completion.
+  // Internally it keeps the engine conversation alive across turns, so a growing
+  // agent history is not re-prefilled from scratch on every call. Serialized so
+  // concurrent callers cannot corrupt the shared session.
   async chat(body) {
-    if (!this.engine) throw new Error('no page-local LiteRT-LM model loaded; use Configure LLM');
+    const run = this._chatLock.then(() => this._chat(body), () => this._chat(body));
+    this._chatLock = run.then(() => {}, () => {});
+    return run;
+  }
+
+  async _send(conversation, text) {
+    const response = await conversation.sendMessage(text);
+    return (response?.content || []).filter(item => item?.text !== undefined).map(item => item.text).join('');
+  }
+
+  _completion(content) {
+    return completionWithToolCall({
+      id: `litertlm-${Date.now()}`,
+      object: 'chat.completion',
+      model: this.modelName,
+      choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+    });
+  }
+
+  // Flatten OpenAI messages into engine turns. `input` marks user/system-side
+  // messages we actually send; assistant messages are model outputs the live
+  // conversation already holds, so they are never re-sent, only compared.
+  _normalize(body) {
     const messages = [...(body?.messages || [])];
     if (!messages.length) throw new Error('messages required');
     if (body?.tools?.length) {
@@ -213,21 +246,49 @@ export class LiteRtLmClient extends EventTarget {
         content: `You can call tools. When a tool is needed, output only one JSON object with this exact shape: {"tool_call":{"name":"tool_name","arguments":{}}}. Never wrap it in prose. Available tools: ${JSON.stringify(tools)}`,
       });
     }
-    const last = messages[messages.length - 1];
-    const preface = messages.slice(0, -1).map(message => ({ role: message.role === 'tool' ? 'user' : message.role, content: messageToText(message) }));
+    return messages.map(message => {
+      const role = message.role === 'tool' ? 'user' : message.role;
+      const text = messageToText(message);
+      return { role, text, key: `${role} ${text}`, input: role !== 'assistant' };
+    });
+  }
+
+  async _rebuild(norm, systemKey) {
+    await this._session?.conversation?.delete?.().catch(() => undefined);
+    this._session = null;
+    const preface = norm.slice(0, -1).map(unit => ({ role: unit.role, content: unit.text }));
     const conversation = await this.engine.createConversation(preface.length ? { preface: { messages: preface } } : {});
-    try {
-      const response = await conversation.sendMessage(contentToText(last.content));
-      const content = (response?.content || []).filter(item => item?.text !== undefined).map(item => item.text).join('');
-      return completionWithToolCall({
-        id: `litertlm-${Date.now()}`,
-        object: 'chat.completion',
-        model: this.modelName,
-        choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
-      });
-    } finally {
-      conversation.delete?.();
+    const content = await this._send(conversation, norm[norm.length - 1].text);
+    this._session = { conversation, norm: norm.slice(), systemKey };
+    return this._completion(content);
+  }
+
+  async _chat(body) {
+    if (!this.engine) throw new Error('no page-local LiteRT-LM model loaded; use Configure LLM');
+    const norm = this._normalize(body);
+    const systemKey = norm.filter(unit => unit.role === 'system').map(unit => unit.key).join('|');
+    const session = this._session;
+    const extendsSession = this.reuseSessions && session
+      && session.systemKey === systemKey
+      && session.norm.length < norm.length
+      && session.norm.every((unit, index) => unit.key === norm[index].key);
+
+    if (extendsSession) {
+      const delta = norm.slice(session.norm.length);
+      const inputs = delta.filter(unit => unit.input);
+      // Only the standard "one new user/tool turn" increment can stream into the
+      // live conversation; anything else re-prefaces to stay correct.
+      if (inputs.length === 1 && delta[delta.length - 1].input) {
+        try {
+          const content = await this._send(session.conversation, inputs[0].text);
+          session.norm = norm.slice();
+          return this._completion(content);
+        } catch (error) {
+          this.activity(`session reuse fell back to rebuild: ${error?.message || error}`);
+        }
+      }
     }
+    return this._rebuild(norm, systemKey);
   }
 
   async chatStream(body, onChunk) {

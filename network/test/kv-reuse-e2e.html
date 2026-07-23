@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>KV-cache reuse benchmark</title>
+<pre id="log"></pre>
+<script type="module">
+const startedAt = performance.now();
+let submitted = false;
+async function submit(ok, reason = '', extra = {}) {
+  if (submitted) return; submitted = true;
+  await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, reason, ...extra }) });
+}
+const log = m => { document.getElementById('log').textContent += m + '\n'; };
+setTimeout(() => submit(false, 'kv-reuse benchmark timed out'), 285000);
+
+// ~150-word filler so each appended turn grows the prefill meaningfully.
+const FILLER = ('The quick brown fox jumps over the lazy dog while the engine keeps a ' +
+  'running conversation in memory. Prefill cost scales with the number of tokens ' +
+  'the model must process before it can emit a single new token, so a growing ' +
+  'chat history that is re-ingested every turn pays that cost again and again. ' +
+  'A resident session keeps the key-value cache warm and only ingests the delta. ').repeat(3);
+
+try {
+  const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+  const client = new LiteRtLmClient();
+  const t0 = performance.now();
+  await client.initialize({ autoLoad: true, bundledModelUrl: '../../models/gemma-4-E2B-it-web.litertlm' });
+  const modelLoadMs = performance.now() - t0;
+  log(`model loaded in ${modelLoadMs.toFixed(0)} ms`);
+
+  const w0 = performance.now();
+  await client.chat({ messages: [{ role: 'user', content: 'Reply with exactly: warm' }] });
+  const warmupMs = performance.now() - w0;
+  client._session = null; // don't let warmup seed the measured runs
+  log(`warmup ${warmupMs.toFixed(0)} ms`);
+
+  const TURNS = 6;
+  async function runTurns(reuse) {
+    client.reuseSessions = reuse;
+    await client._session?.conversation?.delete?.().catch(() => {});
+    client._session = null;
+    const messages = [{ role: 'system', content: 'You are a concise assistant. Answer in one short word.' }];
+    const perTurn = [];
+    for (let turn = 1; turn <= TURNS; turn++) {
+      messages.push({ role: 'user', content: `${FILLER} (turn ${turn}) Reply with exactly: OK` });
+      const s = performance.now();
+      const completion = await client.chat({ messages });
+      perTurn.push(+(performance.now() - s).toFixed(0));
+      messages.push({ role: 'assistant', content: completion?.choices?.[0]?.message?.content || 'OK' });
+    }
+    return perTurn;
+  }
+
+  log('running reuse OFF (rebuild every turn)…');
+  const off = await runTurns(false);
+  log('off per-turn ms: ' + off.join(', '));
+  log('running reuse ON (resident session)…');
+  const on = await runTurns(true);
+  log('on  per-turn ms: ' + on.join(', '));
+
+  const sum = a => a.reduce((x, y) => x + y, 0);
+  const offTotal = sum(off), onTotal = sum(on);
+  await submit(true, '', {
+    modelLoadMs: +modelLoadMs.toFixed(0), warmupMs: +warmupMs.toFixed(0), turns: TURNS,
+    off, on, offTotalMs: offTotal, onTotalMs: onTotal,
+    speedup: +(offTotal / onTotal).toFixed(2),
+    offLastTurnMs: off[off.length - 1], onLastTurnMs: on[on.length - 1],
+    totalWallMs: +(performance.now() - startedAt).toFixed(0),
+  });
+} catch (error) {
+  await submit(false, error?.stack || error?.message || String(error));
+}
+</script>
