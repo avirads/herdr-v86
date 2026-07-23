@@ -1,0 +1,24 @@
+[Unit]
+Description=VM private PeerJS signaling server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/vm-peerjs
+ExecStart=/usr/bin/node /opt/vm-peerjs/node_modules/peer/dist/bin/peerjs.js --host 127.0.0.1 --port 9000 --path /peerjs --proxied true --concurrent_limit 5000 --cors https://avirads.github.io https://fapstaff.com http://127.0.0.1:8000 http://localhost:8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

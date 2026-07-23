@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { LiteRtLmClient } from '../../network/browser/litert-lm-client.js';
-import { RemoteLlmPeer } from '../../network/browser/remote-llm-peer.js';
+import { DEFAULT_PEER_OPTIONS, RemoteLlmPeer } from '../../network/browser/remote-llm-peer.js';
 
 if (!globalThis.CustomEvent) {
   globalThis.CustomEvent = class CustomEvent extends Event {
@@ -19,23 +19,32 @@ class FakeConnection {
 }
 
 class FakePeer {
-  constructor() { this.handlers = new Map(); queueMicrotask(() => this.emit('open', 'desktop-peer')); }
+  constructor() { this.handlers = new Map(); queueMicrotask(() => this.emit('open', 'agent-peer')); }
   on(type, handler) { const handlers = this.handlers.get(type) || []; handlers.push(handler); this.handlers.set(type, handlers); }
   once(type, handler) { this.on(type, handler); }
   emit(type, value) { for (const handler of this.handlers.get(type) || []) handler(value); }
   destroy() {}
 }
 
-test('remote hosting can start before the desktop model is loaded', async () => {
+test('remote LLM uses the private fapstaff.com PeerServer', () => {
+  assert.deepEqual(DEFAULT_PEER_OPTIONS, {
+    host: 'fapstaff.com',
+    path: '/peerjs',
+    secure: true,
+    key: 'peerjs',
+  });
+});
+
+test('remote agent can start before its model is loaded', async () => {
   const remote = new RemoteLlmPeer({ Peer: FakePeer, getLlmClient: () => null });
   const key = await remote.host();
-  assert.match(key, /^desktop-peer\.[a-f0-9]{32}$/);
+  assert.match(key, /^agent-peer\.[a-f0-9]{32}$/);
 });
 
 test('remote LLM host authenticates and serves a direct model response', async () => {
   const remote = new RemoteLlmPeer({
     Peer: class {},
-    getLlmClient: () => ({ async chat() { return { choices: [{ message: { content: 'from desktop' } }] }; } }),
+    getLlmClient: () => ({ async chat() { return { choices: [{ message: { content: 'from agent' } }] }; } }),
   });
   remote.secret = 'a'.repeat(32);
   const connection = new FakeConnection();
@@ -45,7 +54,7 @@ test('remote LLM host authenticates and serves a direct model response', async (
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.deepEqual(connection.sent, [
     { type: 'auth.ok' },
-    { type: 'llm.result', id: 'request-1', content: 'from desktop' },
+    { type: 'llm.result', id: 'request-1', content: 'from agent' },
   ]);
 });
 
@@ -107,7 +116,7 @@ test('LiteRT and WebRTC stream generated chunks to the mobile client', async () 
   assert.deepEqual(chunks, ['hello ', 'mobile']);
 });
 
-test('authenticated phone audio is transcribed on desktop and answered by the LLM', async () => {
+test('authenticated human audio is transcribed on the agent and answered by the LLM', async () => {
   let receivedAudio;
   const host = new RemoteLlmPeer({
     Peer: class {},
@@ -133,7 +142,7 @@ test('authenticated phone audio is transcribed on desktop and answered by the LL
   assert.equal(receivedAudio.audio.byteLength, 3);
   assert.deepEqual(connection.sent, [
     { type: 'auth.ok' },
-    { type: 'voice.progress', id: 'voice-1', stage: 'Recording received by desktop' },
+    { type: 'voice.progress', id: 'voice-1', stage: 'Recording received by agent' },
     { type: 'voice.transcript', id: 'voice-1', text: 'spoken request' },
     { type: 'llm.chunk', id: 'voice-1', delta: 'voice answer' },
     { type: 'llm.done', id: 'voice-1' },
@@ -155,14 +164,14 @@ test('mobile voice request exposes transcript and streamed response callbacks', 
     onProgress: value => { progress = value; },
   });
   const request = connection.sent[0];
-  connection.emit('data', { type: 'voice.progress', id: request.id, stage: 'Transcribing locally on desktop' });
+  connection.emit('data', { type: 'voice.progress', id: request.id, stage: 'Transcribing locally on agent' });
   connection.emit('data', { type: 'voice.transcript', id: request.id, text: 'hello by voice' });
   connection.emit('data', { type: 'llm.chunk', id: request.id, delta: 'hello back' });
   connection.emit('data', { type: 'llm.done', id: request.id });
   assert.equal(await result, 'hello back');
   assert.equal(transcript, 'hello by voice');
   assert.equal(streamed, 'hello back');
-  assert.equal(progress, 'Transcribing locally on desktop');
+  assert.equal(progress, 'Transcribing locally on agent');
   assert.equal(request.type, 'voice.transcribe');
 });
 

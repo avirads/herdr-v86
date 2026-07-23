@@ -10,11 +10,19 @@ function send(connection, message) {
   connection.send(message);
 }
 
+export const DEFAULT_PEER_OPTIONS = Object.freeze({
+  host: 'fapstaff.com',
+  path: '/peerjs',
+  secure: true,
+  key: 'peerjs',
+});
+
 export class RemoteLlmPeer extends EventTarget {
-  constructor({ Peer, getLlmClient, transcribeAudio = null }) {
+  constructor({ Peer, getLlmClient, transcribeAudio = null, peerOptions = DEFAULT_PEER_OPTIONS }) {
     super();
     if (!Peer) throw new Error('PeerJS is unavailable');
     this.Peer = Peer;
+    this.peerOptions = peerOptions;
     this.getLlmClient = getLlmClient;
     this.transcribeAudio = transcribeAudio;
     this.peer = null;
@@ -32,7 +40,7 @@ export class RemoteLlmPeer extends EventTarget {
   async host() {
     this.close();
     this.secret = randomSecret();
-    this.peer = new this.Peer();
+    this.peer = new this.Peer(undefined, this.peerOptions);
     this.peer.on('connection', connection => this.accept(connection));
     this.peer.on('error', error => this.activity(`error — ${error.message || error}`, { kind: 'error' }));
     const id = await new Promise((resolve, reject) => {
@@ -79,10 +87,10 @@ export class RemoteLlmPeer extends EventTarget {
         if (message.type === 'voice.transcribe') {
           const audio = message.audio instanceof ArrayBuffer ? message.audio : message.audio?.buffer;
           if (!audio || !audio.byteLength || audio.byteLength > 12 * 1024 * 1024) throw new Error('voice recording must be between 1 byte and 12 MiB');
-          if (!this.transcribeAudio) throw new Error('desktop voice transcription is unavailable');
+          if (!this.transcribeAudio) throw new Error('agent voice transcription is unavailable');
           this.activity(`received voice recording (${Math.ceil(audio.byteLength / 1024)} KiB)`, { kind: 'traffic', direction: 'in', id: message.id });
           const progress = stage => connection.send({ type: 'voice.progress', id: message.id, stage });
-          progress('Recording received by desktop');
+          progress('Recording received by agent');
           prompt = String(await this.transcribeAudio(audio, message.mimeType || '', progress) || '').trim();
           if (!prompt) throw new Error('no speech was recognized');
           this.activity('transcript sent to phone and LLM', { kind: 'traffic', direction: 'out', id: message.id, content: prompt });
@@ -103,8 +111,8 @@ export class RemoteLlmPeer extends EventTarget {
   async servePrompt(connection, id, prompt) {
     if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 32768) throw new Error('prompt must contain 1 to 32768 characters');
     const client = this.getLlmClient?.();
-    if (!client) throw new Error('desktop WebGPU LLM is not ready');
-    this.activity('prompt submitted to desktop LLM', { kind: 'llm', direction: 'in', id, content: prompt });
+    if (!client) throw new Error('agent WebGPU LLM is not ready');
+    this.activity('prompt submitted to agent LLM', { kind: 'llm', direction: 'in', id, content: prompt });
     const body = { messages: [{ role: 'user', content: prompt }] };
     let streamedContent = '';
     const completion = client.chatStream
@@ -128,7 +136,7 @@ export class RemoteLlmPeer extends EventTarget {
     const id = pairingKey.slice(0, separator);
     const secret = pairingKey.slice(separator + 1);
     if (!/^[a-f0-9]{32}$/i.test(secret)) throw new Error('invalid pairing key');
-    this.peer = new this.Peer();
+    this.peer = new this.Peer(undefined, this.peerOptions);
     await new Promise((resolve, reject) => {
       this.peer.once('open', resolve);
       this.peer.once('error', reject);
@@ -142,7 +150,7 @@ export class RemoteLlmPeer extends EventTarget {
         if (message?.type === 'auth.ok') {
           clearTimeout(timer);
           this.bindResults(connection);
-          this.activity('connected to desktop LLM', { kind: 'state' });
+          this.activity('connected to agent LLM', { kind: 'state' });
           resolve();
         } else if (message?.type === 'auth.error') {
           clearTimeout(timer);
@@ -182,7 +190,7 @@ export class RemoteLlmPeer extends EventTarget {
       else if (message.type === 'llm.result') pending.resolve(message.content);
       else if (message.type === 'llm.error') pending.reject(new Error(message.error));
     });
-    connection.on('close', () => this.activity('desktop disconnected', { kind: 'state' }));
+    connection.on('close', () => this.activity('agent disconnected', { kind: 'state' }));
   }
 
   responseTimer(id, reject) {

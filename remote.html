@@ -34,31 +34,31 @@
 <body>
 <main>
   <section id="pairing">
-    <h1>Connect to desktop LLM</h1>
-    <p>This lightweight client does not start the VM or load a model. The desktop VM page supplies the WebGPU LLM over WebRTC.</p>
+    <h1>Connect to agent LLM</h1>
+    <p>This lightweight human client does not start the VM or load a model. The agent VM page supplies the WebGPU LLM over WebRTC.</p>
     <label>Pairing key
-      <input id="key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the key shown on the desktop">
+      <input id="key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the key shown by the agent">
     </label>
     <button id="connect" type="button">Connect</button>
-    <p id="status">On the desktop, use Settings → Remote access → Host this LLM.</p>
-    <a href="./">Open the full VM</a>
+    <p id="status">On the agent, use Settings → Remote access → Run this agent.</p>
+    <a href="./">Back to Agent or Human selection</a>
   </section>
   <section id="chat">
-    <div><h1>Desktop LLM</h1><p id="chat-status">Connected over WebRTC</p></div>
+    <div><h1>Agent LLM</h1><p id="chat-status">Connected over WebRTC</p></div>
     <div id="log" aria-live="polite"></div>
     <form id="chat-form">
-      <input id="prompt" required autocomplete="off" placeholder="Message the desktop LLM">
+      <input id="prompt" required autocomplete="off" placeholder="Message the agent LLM">
       <button id="send" type="submit">Send</button>
     </form>
     <div id="voice-controls">
       <button id="record" type="button">🎙 Record</button>
-      <small id="voice-status">Voice is transcribed on the desktop</small>
+      <small id="voice-status">Voice is transcribed on the agent</small>
     </div>
   </section>
 </main>
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" crossorigin="anonymous"></script>
 <script type="module">
-import { RemoteLlmPeer } from './network/browser/remote-llm-peer.js?v=20260721-voice2';
+import { RemoteLlmPeer } from './network/browser/remote-llm-peer.js?v=20260723-private-peerjs';
 const pairing = document.getElementById('pairing');
 const chat = document.getElementById('chat');
 const status = document.getElementById('status');
@@ -98,7 +98,7 @@ document.getElementById('chat-form').onsubmit = async event => {
   const message = prompt.value.trim();
   if (!message) return;
   prompt.value = '';
-  log.textContent += `You: ${message}\n\nDesktop LLM: `;
+  log.textContent += `You: ${message}\n\nAgent LLM: `;
   log.scrollTop = log.scrollHeight;
   const send = document.getElementById('send');
   send.disabled = true;
@@ -123,14 +123,14 @@ function supportedRecordingType() {
 async function submitVoice(blob) {
   recordButton.disabled = true;
   document.getElementById('send').disabled = true;
-  voiceStatus.textContent = 'Sending to desktop…';
+  voiceStatus.textContent = 'Sending to agent…';
   log.textContent += 'You (voice): ';
   let streamed = false;
   try {
     const answer = await remote.voice(await blob.arrayBuffer(), {
       mimeType: blob.type,
       onTranscript: text => {
-        log.textContent += `${text}\n\nDesktop LLM: `;
+        log.textContent += `${text}\n\nAgent LLM: `;
         voiceStatus.textContent = `Transcript: ${text}`;
         log.scrollTop = log.scrollHeight;
       },
@@ -143,7 +143,7 @@ async function submitVoice(blob) {
     });
     if (!streamed) log.textContent += answer;
     log.textContent += '\n\n';
-    voiceStatus.textContent = 'Voice is transcribed on the desktop';
+    voiceStatus.textContent = 'Voice is transcribed on the agent';
   } catch (error) {
     log.textContent += `[error: ${error.message}]\n\n`;
     voiceStatus.textContent = 'Voice failed: ' + error.message;
