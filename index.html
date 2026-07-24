@@ -65,6 +65,9 @@
   .settings-action { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 12px 0; border-top: 1px solid #30363d; }
   .settings-action small, #settings-dialog p { color: #8b949e; }
   #remote-dialog { width: min(560px, calc(100vw - 32px)); }
+  #remote-status { display: flex; align-items: center; gap: 8px; }
+  .spinner { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   #remote-key-row { display: flex; gap: 6px; align-items: stretch; }
   #remote-key { flex: 1; min-width: 0; font: 12px monospace; }
   #remote-copy { flex: 0 0 auto; width: 44px; display: grid; place-items: center; padding: 0; color: #c9d1d9; }
@@ -954,7 +957,7 @@ document.getElementById("close-remote").onclick = () => remoteDialog.close();
 async function ensureHosting() {
   if (remoteHostingStarted) return;
   remoteHostingStarted = true;
-  remoteStatus.textContent = "Starting secure WebRTC agent…";
+  remoteStatus.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Starting secure WebRTC agent…</span>';
   try {
     if (!bootReady || !setupFinished) throw new Error("wait for the VM shell to be ready first");
     const modelPending = !llmReady;

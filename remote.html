@@ -18,12 +18,15 @@
   button:disabled { opacity: .55; }
   #pairing { padding: 18px; border: 1px solid #30363d; border-radius: 10px; background: #161b22; }
   #connect { width: 100%; margin-top: 10px; }
-  #scan { width: 100%; margin-top: 8px; }
+  #scan { width: 100%; margin-top: 8px; min-height: 60px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 17px; font-weight: 600; background: #1f6feb; color: #fff; border-color: #388bfd; }
+  #scan svg { width: 26px; height: 26px; flex: 0 0 auto; }
   #scanner { display: none; margin-top: 10px; }
   #scanner.active { display: grid; gap: 8px; }
   #scanner video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #000; }
   #scanner-cancel { width: 100%; }
-  #status { min-height: 1.4em; margin-top: 10px; font-size: 12px; }
+  #status { min-height: 1.4em; margin-top: 10px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .spinner { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   #chat { display: none; min-height: min(680px, calc(100dvh - 32px)); grid-template-rows: auto 1fr auto auto; gap: 10px; }
   .chat-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   #disconnect { flex: 0 0 auto; }
@@ -52,7 +55,16 @@
       <input id="key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the key shown by the agent">
     </label>
     <button id="connect" type="button">Connect</button>
-    <button id="scan" type="button">Scan QR code</button>
+    <button id="scan" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+        <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+        <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+        <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+        <rect x="7" y="7" width="10" height="10" rx="1"/>
+      </svg>
+      Scan QR code
+    </button>
     <div id="scanner">
       <video id="scanner-video" playsinline muted></video>
       <button id="scanner-cancel" type="button">Cancel scan</button>
@@ -110,10 +122,14 @@ function resetToPairingScreen(message) {
   remote = null;
 }
 
+function setConnectingStatus() {
+  status.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Connecting…</span>';
+}
+
 async function connectWithKey(rawKey) {
   if (!rawKey) return;
   connectButton.disabled = true;
-  status.textContent = 'Connecting…';
+  setConnectingStatus();
   try {
     if (!globalThis.Peer) throw new Error('WebRTC signaling library did not load');
     remote = new RemoteLlmPeer({ Peer: globalThis.Peer, getLlmClient: () => null });
