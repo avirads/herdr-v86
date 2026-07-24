@@ -52,3 +52,49 @@ test('vmagent reset and YOLO remain command-controlled and session-local', async
   assert.equal(controller.yolo, true);
   assert.match(outputs.at(-1), /YOLO is on by default/);
 });
+
+test('vmagent reports an unloaded model instead of stalling at "conversation started"', async () => {
+  const outputs = [];
+  let created = 0;
+  const controller = new VmAgentController({
+    createAgent: async () => { created += 1; return { run: async () => ({ output: 'should not run' }) }; },
+    getLlmClient: () => ({ status: async () => ({ modelName: '', webgpu: true, loading: false }) }),
+    getGuest: () => ({}),
+    approveAction: async () => true,
+    onOutput: output => outputs.push(output),
+  });
+  await controller.handle('run', 'hi');
+  assert.equal(created, 0, 'harness must not be created without a model');
+  assert.equal(controller.conversationActive, false, 'a not-ready run must not open a conversation (keeps the poll loop alive)');
+  assert.match(outputs.at(-1), /no model loaded/i);
+});
+
+test('vmagent surfaces model-not-ready states: missing WebGPU and still-loading', async () => {
+  const run = async status => {
+    const outputs = [];
+    const controller = new VmAgentController({
+      createAgent: async () => ({ run: async () => ({ output: 'x' }) }),
+      getLlmClient: () => ({ status: async () => status }),
+      getGuest: () => ({}),
+      approveAction: async () => true,
+      onOutput: output => outputs.push(output),
+    });
+    await controller.handle('run', 'hi');
+    return outputs.at(-1);
+  };
+  assert.match(await run({ webgpu: false, modelName: '' }), /WebGPU is unavailable/i);
+  assert.match(await run({ webgpu: true, loading: true, modelName: '' }), /still loading/i);
+});
+
+test('vmagent reports when the agent returns empty output rather than showing nothing', async () => {
+  const outputs = [];
+  const controller = new VmAgentController({
+    createAgent: async () => ({ run: async () => ({ output: '' }) }),
+    getLlmClient: () => ({ status: async () => ({ modelName: 'test-model', webgpu: true }) }),
+    getGuest: () => ({}),
+    approveAction: async () => true,
+    onOutput: output => outputs.push(output),
+  });
+  await controller.handle('run', 'hi');
+  assert.match(outputs.at(-1), /returned no output/i);
+});
