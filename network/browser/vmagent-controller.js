@@ -122,6 +122,18 @@ export class VmAgentController {
     if (!llmClient) return await this.onOutput('[vmagent] WebGPU LLM is not ready; use Configure LLM in the browser header.');
     if (!guest) return await this.onOutput('[vmagent] guest bridge is still initializing.');
 
+    // A LiteRtLmClient object exists from page load even before a model file is
+    // loaded, so the !llmClient guard above is not enough. Without a ready model
+    // the first inference throws deep inside the harness (or stalls), and the
+    // error never reaches the terminal — the user is left staring at
+    // "conversation started". Check readiness up front and report it plainly.
+    const model = typeof llmClient.status === 'function' ? await llmClient.status().catch(() => null) : null;
+    if (model) {
+      if (model.webgpu === false) return await this.onOutput('[vmagent] WebGPU is unavailable in this browser; open the page in a WebGPU-capable desktop browser (Chrome/Edge).');
+      if (model.loading) return await this.onOutput('[vmagent] the model is still loading; wait for it to finish, then run vmagent again.');
+      if (!model.modelName) return await this.onOutput('[vmagent] no model loaded; click "Configure LLM" in the header, load a .litertlm model, then run vmagent again.');
+    }
+
     this.conversationActive = true;
     this.abortController = new AbortController();
     this.onBusy(true);
@@ -134,9 +146,11 @@ export class VmAgentController {
         approveAction: (operation, detail) => this.yolo || this.approveAction(operation, detail),
       });
       const result = await this.harness.run(value, { signal: this.abortController.signal });
-      this.completedRuns.set(runKey, result.output);
+      const output = (result?.output ?? '').toString();
+      const display = output.trim() ? output : '[vmagent] the agent returned no output.';
+      this.completedRuns.set(runKey, display);
       if (this.completedRuns.size > 64) this.completedRuns.delete(this.completedRuns.keys().next().value);
-      await this.onOutput(result.output);
+      await this.onOutput(display);
     } catch (error) {
       await this.onOutput(`Error: ${error.message}`);
     } finally {
