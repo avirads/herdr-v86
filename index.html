@@ -73,12 +73,8 @@
   #remote-qr { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 12px 0; padding: 12px; background: #f0f6fc; border-radius: 8px; }
   #remote-qr svg { width: min(220px, 60vw); height: min(220px, 60vw); }
   #remote-qr small { color: #57606a; }
-  #remote-chat-log { box-sizing: border-box; height: min(42vh, 340px); overflow-y: auto; margin: 12px 0; padding: 12px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; white-space: pre-wrap; line-height: 1.45; }
-  #remote-chat-log:empty::before { content: "Connect to an agent, then send a message."; color: #8b949e; }
   #remote-activity { box-sizing: border-box; max-height: 180px; overflow-y: auto; margin: 12px 0; padding: 9px; border: 1px solid #30363d; border-radius: 6px; background: #090c10; color: #8b949e; font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
-  #remote-activity:empty::before { content: "Connection and message activity will appear here."; }
-  #remote-chat-form { display: flex; gap: 8px; }
-  #remote-prompt { flex: 1; min-width: 0; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 9px; }
+  #remote-activity:empty::before { content: "Connection activity will appear here."; }
   @media (max-width: 640px) {
     header { align-items: center; flex-wrap: wrap; gap: 5px 10px; padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left)); }
     header h1 { flex: 1 1 auto; font-size: 14px; }
@@ -97,8 +93,6 @@
     dialog { box-sizing: border-box; max-height: calc(100dvh - 24px); overflow-y: auto; width: calc(100vw - 24px); padding: 16px; }
     .settings-action { align-items: stretch; flex-direction: column; gap: 8px; }
     .settings-action button { width: 100%; }
-    #remote-chat-form { align-items: stretch; flex-direction: column; }
-    #remote-chat-form button { width: 100%; }
     .role-options { grid-template-columns: 1fr; }
     .role-card { min-height: 145px; }
   }
@@ -243,10 +237,10 @@
 </dialog>
 <dialog id="remote-dialog">
   <h2>Remote agent</h2>
-  <p id="remote-status">Choose whether this device runs the agent model or connects to another VM instance.</p>
+  <p id="remote-status">Starting secure WebRTC agent…</p>
   <label>Pairing key
     <div id="remote-key-row">
-      <input id="remote-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the agent pairing key">
+      <input id="remote-key" readonly autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Generating…">
       <button id="remote-copy" type="button" hidden title="Copy pairing key" aria-label="Copy pairing key">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="9" y="9" width="13" height="13" rx="2"/>
@@ -257,19 +251,12 @@
   </label>
   <div id="remote-qr" hidden></div>
   <div class="setup-actions">
-    <button id="remote-host" type="button">Run this agent</button>
-    <button id="remote-connect" type="button">Connect to agent</button>
     <button id="remote-disconnect" type="button" hidden>Disconnect phone</button>
   </div>
   <details open>
     <summary>Connection and model activity</summary>
     <div id="remote-activity" aria-live="polite"></div>
   </details>
-  <div id="remote-chat-log" aria-live="polite"></div>
-  <form id="remote-chat-form">
-    <input id="remote-prompt" required autocomplete="off" placeholder="Message the agent">
-    <button type="submit">Send</button>
-  </form>
   <div class="dialog-actions"><button id="close-remote" type="button">Close</button></div>
 </dialog>
 <dialog id="clipboard-dialog">
@@ -606,6 +593,7 @@ let autobroClient;
 let guestReadonlyClient;
 let vmAgentController;
 let remoteLlmPeer;
+let remoteHostingStarted = false;
 let remoteMoonshineModelPromise;
 let agentBusy = false;
 let agentInput = "";
@@ -892,7 +880,6 @@ const settingsDialog = document.getElementById("settings-dialog");
 const remoteDialog = document.getElementById("remote-dialog");
 const remoteStatus = document.getElementById("remote-status");
 const remoteKey = document.getElementById("remote-key");
-const remoteChatLog = document.getElementById("remote-chat-log");
 const remoteActivity = document.getElementById("remote-activity");
 function logRemoteActivity(detail) {
   const direction = detail.direction === "in" ? "←" : detail.direction === "out" ? "→" : "•";
@@ -938,6 +925,7 @@ async function getRemoteLlmPeer() {
 function openRemoteDialog() {
   settingsDialog.close();
   remoteDialog.showModal();
+  ensureHosting();
 }
 async function renderRemoteQr(url) {
   const container = document.getElementById("remote-qr");
@@ -960,7 +948,12 @@ document.getElementById("close-settings").onclick = () => settingsDialog.close()
 document.getElementById("open-remote").onclick = openRemoteDialog;
 document.getElementById("setup-connect-remote").onclick = () => { location.href = "remote.html"; };
 document.getElementById("close-remote").onclick = () => remoteDialog.close();
-document.getElementById("remote-host").onclick = async () => {
+// Hosting starts automatically as soon as the dialog opens — there's nothing
+// to click. host() tears down any existing session (see RemoteLlmPeer.host),
+// so this must run at most once per page load, not on every dialog reopen.
+async function ensureHosting() {
+  if (remoteHostingStarted) return;
+  remoteHostingStarted = true;
   remoteStatus.textContent = "Starting secure WebRTC agent…";
   try {
     if (!bootReady || !setupFinished) throw new Error("wait for the VM shell to be ready first");
@@ -970,10 +963,13 @@ document.getElementById("remote-host").onclick = async () => {
     document.getElementById("remote-copy").hidden = false;
     renderRemoteQr(new URL("remote.html?key=" + encodeURIComponent(key), location.href).href);
     remoteStatus.textContent = modelPending
-      ? "Share this one-time pairing key with your phone. The agent is ready; configure a model before sending a chat message."
-      : "Share this one-time pairing key with your phone. Keep this page open.";
-  } catch (error) { remoteStatus.textContent = "Agent failed: " + error.message; }
-};
+      ? "Scan this QR code with your phone to connect. The agent is ready; configure a model before sending a chat message."
+      : "Scan this QR code with your phone to connect. Keep this page open.";
+  } catch (error) {
+    remoteHostingStarted = false; // allow a retry next time the dialog opens
+    remoteStatus.textContent = "Agent failed: " + error.message;
+  }
+}
 document.getElementById("remote-copy").onclick = async () => {
   const button = document.getElementById("remote-copy");
   try {
@@ -986,43 +982,6 @@ document.getElementById("remote-copy").onclick = async () => {
 document.getElementById("remote-disconnect").onclick = async () => {
   (await getRemoteLlmPeer()).disconnectPhone();
   remoteStatus.textContent = "Disconnecting phone…";
-};
-document.getElementById("remote-connect").onclick = async () => {
-  const key = remoteKey.value.trim();
-  if (!key) return;
-  remoteStatus.textContent = "Connecting to agent…";
-  try {
-    await (await getRemoteLlmPeer()).connect(key);
-    remoteStatus.textContent = "Connected. Messages use the agent's local AI model directly.";
-    document.getElementById("remote-prompt").focus();
-  } catch (error) { remoteStatus.textContent = "Connection failed: " + error.message; }
-};
-document.getElementById("remote-chat-form").onsubmit = async event => {
-  event.preventDefault();
-  const input = document.getElementById("remote-prompt");
-  const prompt = input.value.trim();
-  if (!prompt) return;
-  input.value = "";
-  remoteChatLog.textContent += `You: ${prompt}\n\nAgent: `;
-  remoteChatLog.scrollTop = remoteChatLog.scrollHeight;
-  const submit = event.submitter;
-  if (submit) submit.disabled = true;
-  try {
-    let streamed = false;
-    const answer = await (await getRemoteLlmPeer()).chat(prompt, { onChunk: delta => {
-      streamed = true;
-      remoteChatLog.textContent += delta;
-      remoteChatLog.scrollTop = remoteChatLog.scrollHeight;
-    }});
-    if (!streamed) remoteChatLog.textContent += answer;
-    remoteChatLog.textContent += "\n\n";
-  } catch (error) {
-    remoteChatLog.textContent += `[error: ${error.message}]\n\n`;
-  } finally {
-    if (submit) submit.disabled = false;
-    remoteChatLog.scrollTop = remoteChatLog.scrollHeight;
-    input.focus();
-  }
 };
 function returnToSetup() {
   setupSkipped = false;

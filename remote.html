@@ -25,6 +25,8 @@
   #scanner-cancel { width: 100%; }
   #status { min-height: 1.4em; margin-top: 10px; font-size: 12px; }
   #chat { display: none; min-height: min(680px, calc(100dvh - 32px)); grid-template-rows: auto 1fr auto auto; gap: 10px; }
+  .chat-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  #disconnect { flex: 0 0 auto; }
   #chat.active { display: grid; }
   #log { min-height: 180px; overflow-y: auto; padding: 12px; border: 1px solid #30363d; border-radius: 8px; background: #161b22; white-space: pre-wrap; line-height: 1.5; }
   /* Voice is the primary way to talk to the agent in human mode. */
@@ -59,7 +61,10 @@
     <a href="./">Back to Agent or Human selection</a>
   </section>
   <section id="chat">
-    <div><h1>Agent</h1><p id="chat-status">Connected over WebRTC</p></div>
+    <div class="chat-header">
+      <div><h1>Agent</h1><p id="chat-status">Connected over WebRTC</p></div>
+      <button id="disconnect" type="button">Disconnect</button>
+    </div>
     <div id="log" aria-live="polite"></div>
     <div id="voice-controls">
       <button id="record" type="button">🎙 Tap to speak</button>
@@ -127,6 +132,11 @@ async function connectWithKey(rawKey) {
 }
 
 document.getElementById('connect').onclick = () => connectWithKey(key.value.trim());
+
+document.getElementById('disconnect').onclick = () => {
+  remote?.close();
+  resetToPairingScreen('Disconnected. Enter a pairing key or scan again to reconnect.');
+};
 
 // Scanning the QR code shown by "Run this agent" with the phone's own camera
 // app opens this page with the pairing key already in the URL, so it
