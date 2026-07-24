@@ -182,3 +182,45 @@ test('mobile remote page does not load the VM or local model runtime', async () 
   }
   assert.match(html, /remote-llm-peer\.js/);
 });
+
+test('only one phone may be connected at a time; a second attempt is rejected until the first disconnects', async () => {
+  const remote = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => null });
+  remote.secret = 'a'.repeat(32);
+
+  const first = new FakeConnection();
+  remote.accept(first);
+  first.emit('data', { type: 'auth', secret: remote.secret });
+  assert.equal(remote.connection, first);
+
+  const second = new FakeConnection();
+  remote.accept(second);
+  second.emit('open');
+  assert.deepEqual(second.sent, [{ type: 'auth.error' }]);
+  assert.equal(second.open, false);
+  assert.equal(remote.connection, first, 'the first connection must remain active');
+
+  first.close();
+  first.emit('close');
+  assert.equal(remote.connection, null);
+
+  const third = new FakeConnection();
+  remote.accept(third);
+  third.emit('data', { type: 'auth', secret: remote.secret });
+  assert.equal(remote.connection, third, 'a new phone can connect once the slot frees up');
+});
+
+test('activity events flag hostConnected true on connect and false on disconnect', async () => {
+  const remote = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => null });
+  remote.secret = 'a'.repeat(32);
+  const events = [];
+  remote.addEventListener('activity', event => events.push(event.detail));
+
+  const connection = new FakeConnection();
+  remote.accept(connection);
+  connection.emit('data', { type: 'auth', secret: remote.secret });
+  connection.close();
+  connection.emit('close');
+
+  assert.equal(events.find(detail => detail.message === 'phone connected')?.hostConnected, true);
+  assert.equal(events.find(detail => detail.message === 'phone disconnected')?.hostConnected, false);
+});

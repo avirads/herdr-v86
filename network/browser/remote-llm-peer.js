@@ -59,7 +59,7 @@ export class RemoteLlmPeer extends EventTarget {
     let authenticated = false;
     connection.on('close', () => {
       if (this.connection === connection) this.connection = null;
-      if (authenticated) this.activity('phone disconnected', { kind: 'state' });
+      if (authenticated) this.activity('phone disconnected', { kind: 'state', hostConnected: false });
     });
     connection.on('data', async message => {
       if (!authenticated) {
@@ -71,7 +71,7 @@ export class RemoteLlmPeer extends EventTarget {
         }
         else {
           this.connection = connection;
-          this.activity('phone connected', { kind: 'state' });
+          this.activity('phone connected', { kind: 'state', hostConnected: true });
         }
         return;
       }
