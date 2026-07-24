@@ -80,15 +80,15 @@ let recordingStream;
 let recordingChunks = [];
 let recordingTimer;
 
-document.getElementById('connect').onclick = async () => {
-  if (!key.value.trim()) return;
+async function connectWithKey(rawKey) {
+  if (!rawKey) return;
   connectButton.disabled = true;
   status.textContent = 'Connecting…';
   try {
     if (!globalThis.Peer) throw new Error('WebRTC signaling library did not load');
     remote = new RemoteLlmPeer({ Peer: globalThis.Peer, getLlmClient: () => null });
     remote.addEventListener('activity', event => { chatStatus.textContent = event.detail.message; });
-    await remote.connect(key.value.trim());
+    await remote.connect(rawKey);
     pairing.hidden = true;
     chat.classList.add('active');
     prompt.focus();
@@ -96,7 +96,21 @@ document.getElementById('connect').onclick = async () => {
     status.textContent = 'Connection failed: ' + error.message;
     connectButton.disabled = false;
   }
-};
+}
+
+document.getElementById('connect').onclick = () => connectWithKey(key.value.trim());
+
+// Scanning the QR code shown by "Run this agent" opens this page with the
+// pairing key already in the URL, so it connects immediately with no typing.
+const urlKey = new URLSearchParams(location.search).get('key');
+if (urlKey) {
+  // Drop the key from the visible URL/history now that it's been read — it's
+  // a bearer credential for this WebRTC session, not something to leave
+  // sitting in the address bar.
+  history.replaceState(null, '', location.pathname);
+  key.value = urlKey;
+  connectWithKey(urlKey.trim());
+}
 
 document.getElementById('chat-form').onsubmit = async event => {
   event.preventDefault();

@@ -66,6 +66,9 @@
   .settings-action small, #settings-dialog p { color: #8b949e; }
   #remote-dialog { width: min(560px, calc(100vw - 32px)); }
   #remote-key { font: 12px monospace; }
+  #remote-qr { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 12px 0; padding: 12px; background: #f0f6fc; border-radius: 8px; }
+  #remote-qr svg { width: min(220px, 60vw); height: min(220px, 60vw); }
+  #remote-qr small { color: #57606a; }
   #remote-chat-log { box-sizing: border-box; height: min(42vh, 340px); overflow-y: auto; margin: 12px 0; padding: 12px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; white-space: pre-wrap; line-height: 1.45; }
   #remote-chat-log:empty::before { content: "Connect to an agent, then send a message."; color: #8b949e; }
   #remote-activity { box-sizing: border-box; max-height: 180px; overflow-y: auto; margin: 12px 0; padding: 9px; border: 1px solid #30363d; border-radius: 6px; background: #090c10; color: #8b949e; font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
@@ -240,6 +243,7 @@
   <label>Pairing key
     <input id="remote-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the agent pairing key">
   </label>
+  <div id="remote-qr" hidden></div>
   <div class="setup-actions">
     <button id="remote-host" type="button">Run this agent</button>
     <button id="remote-connect" type="button">Connect to agent</button>
@@ -900,12 +904,42 @@ async function getRemoteLlmPeer() {
   remoteLlmPeer.addEventListener("activity", event => {
     remoteStatus.textContent = event.detail.message;
     logRemoteActivity(event.detail);
+    // Only one phone may be connected at a time (enforced in RemoteLlmPeer.accept,
+    // which rejects any other connection attempt while one is open). Mirror that
+    // here: once a phone is connected, stop inviting new ones; once it leaves,
+    // the same key/QR can accept the next one.
+    if (event.detail.hostConnected === true) {
+      document.getElementById("remote-qr").hidden = true;
+      document.getElementById("remote-copy").hidden = true;
+    } else if (event.detail.hostConnected === false) {
+      const key = remoteKey.value.trim();
+      if (key) {
+        document.getElementById("remote-copy").hidden = false;
+        renderRemoteQr(new URL("remote.html?key=" + encodeURIComponent(key), location.href).href);
+      }
+    }
   });
   return remoteLlmPeer;
 }
 function openRemoteDialog() {
   settingsDialog.close();
   remoteDialog.showModal();
+}
+async function renderRemoteQr(url) {
+  const container = document.getElementById("remote-qr");
+  try {
+    const { default: qrcodeFactory } = await import("./vendor/qrcode-generator-2.0.4.mjs");
+    const qr = qrcodeFactory(0, "M"); // typeNumber 0 = auto-select the smallest version that fits
+    qr.addData(url);
+    qr.make();
+    container.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true, alt: "QR code to connect a phone to this agent" });
+    const caption = document.createElement("small");
+    caption.textContent = "Scan with a phone to connect";
+    container.appendChild(caption);
+    container.hidden = false;
+  } catch {
+    container.hidden = true; // QR is a convenience; the pairing key field above still works
+  }
 }
 document.getElementById("open-settings").onclick = () => settingsDialog.showModal();
 document.getElementById("close-settings").onclick = () => settingsDialog.close();
@@ -920,6 +954,7 @@ document.getElementById("remote-host").onclick = async () => {
     const key = await (await getRemoteLlmPeer()).host();
     remoteKey.value = key;
     document.getElementById("remote-copy").hidden = false;
+    renderRemoteQr(new URL("remote.html?key=" + encodeURIComponent(key), location.href).href);
     remoteStatus.textContent = modelPending
       ? "Share this one-time pairing key with your phone. The agent is ready; configure a model before sending a chat message."
       : "Share this one-time pairing key with your phone. Keep this page open.";
