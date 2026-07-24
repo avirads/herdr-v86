@@ -38,6 +38,7 @@ esac
 if [ "$operation" = RUN ]; then
   if [ "$#" -gt 0 ]; then
     payload=$*
+    set --
   elif [ -t 0 ]; then
     printf 'vmagent> '
     IFS= read -r payload || exit 1

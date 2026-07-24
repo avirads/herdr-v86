@@ -353,7 +353,7 @@ function failBoot(message) {
   bootMessage.textContent = message;
 }
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "vm-shell-30-rig-fast-path";
+const DISK_VERSION = "vm-shell-31-vmagent-args-fix";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
