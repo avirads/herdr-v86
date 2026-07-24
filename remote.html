@@ -18,6 +18,11 @@
   button:disabled { opacity: .55; }
   #pairing { padding: 18px; border: 1px solid #30363d; border-radius: 10px; background: #161b22; }
   #connect { width: 100%; margin-top: 10px; }
+  #scan { width: 100%; margin-top: 8px; }
+  #scanner { display: none; margin-top: 10px; }
+  #scanner.active { display: grid; gap: 8px; }
+  #scanner video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #000; }
+  #scanner-cancel { width: 100%; }
   #status { min-height: 1.4em; margin-top: 10px; font-size: 12px; }
   #chat { display: none; min-height: min(680px, calc(100dvh - 32px)); grid-template-rows: auto 1fr auto auto; gap: 10px; }
   #chat.active { display: grid; }
@@ -45,6 +50,11 @@
       <input id="key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the key shown by the agent">
     </label>
     <button id="connect" type="button">Connect</button>
+    <button id="scan" type="button">Scan QR code</button>
+    <div id="scanner">
+      <video id="scanner-video" playsinline muted></video>
+      <button id="scanner-cancel" type="button">Cancel scan</button>
+    </div>
     <p id="status">On the agent, use Settings → Remote access → Run this agent.</p>
     <a href="./">Back to Agent or Human selection</a>
   </section>
@@ -62,6 +72,7 @@
   </section>
 </main>
 <script src="./vendor/peerjs-1.5.5.min.js"></script>
+<script src="./vendor/jsQR-1.4.0.js"></script>
 <script type="module">
 import { RemoteLlmPeer } from './network/browser/remote-llm-peer.js?v=20260723-private-peerjs';
 const pairing = document.getElementById('pairing');
@@ -100,8 +111,9 @@ async function connectWithKey(rawKey) {
 
 document.getElementById('connect').onclick = () => connectWithKey(key.value.trim());
 
-// Scanning the QR code shown by "Run this agent" opens this page with the
-// pairing key already in the URL, so it connects immediately with no typing.
+// Scanning the QR code shown by "Run this agent" with the phone's own camera
+// app opens this page with the pairing key already in the URL, so it
+// connects immediately with no typing.
 const urlKey = new URLSearchParams(location.search).get('key');
 if (urlKey) {
   // Drop the key from the visible URL/history now that it's been read — it's
@@ -111,6 +123,77 @@ if (urlKey) {
   key.value = urlKey;
   connectWithKey(urlKey.trim());
 }
+
+// In-page scanner: for when this page is already open (e.g. reopened from a
+// bookmark, or after a previous session ended) and there's no native
+// camera-app handoff to arrive here with ?key= pre-filled. Decodes camera
+// frames locally in the browser — nothing is uploaded anywhere.
+const scanButton = document.getElementById('scan');
+const scannerContainer = document.getElementById('scanner');
+const scannerVideo = document.getElementById('scanner-video');
+const scanCanvas = document.createElement('canvas');
+const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+let scanStream = null;
+let scanFrameHandle = null;
+
+function extractPairingKey(decodedText) {
+  const text = decodedText.trim();
+  // The QR shown by "Run this agent" encodes a full connect URL
+  // (remote.html?key=...); pull the key out of that. Fall back to treating
+  // the decoded text as a bare key, in case something else produced the code.
+  try {
+    const fromUrl = new URL(text, location.href).searchParams.get('key');
+    if (fromUrl) return fromUrl;
+  } catch { /* not a URL */ }
+  return text;
+}
+
+function stopScanning() {
+  if (scanFrameHandle) cancelAnimationFrame(scanFrameHandle);
+  scanFrameHandle = null;
+  scanStream?.getTracks().forEach(track => track.stop());
+  scanStream = null;
+  scannerVideo.srcObject = null;
+  scannerContainer.classList.remove('active');
+  scanButton.disabled = false;
+}
+
+function scanFrame() {
+  if (scannerVideo.readyState === scannerVideo.HAVE_ENOUGH_DATA) {
+    scanCanvas.width = scannerVideo.videoWidth;
+    scanCanvas.height = scannerVideo.videoHeight;
+    scanCtx.drawImage(scannerVideo, 0, 0, scanCanvas.width, scanCanvas.height);
+    const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+    const code = globalThis.jsQR?.(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+    if (code?.data) {
+      const scannedKey = extractPairingKey(code.data);
+      stopScanning();
+      key.value = scannedKey;
+      connectWithKey(scannedKey);
+      return;
+    }
+  }
+  scanFrameHandle = requestAnimationFrame(scanFrame);
+}
+
+async function startScanning() {
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera access is unsupported in this browser');
+  if (!globalThis.jsQR) throw new Error('QR scanner library did not load');
+  status.textContent = '';
+  scanButton.disabled = true;
+  scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  scannerVideo.srcObject = scanStream;
+  await scannerVideo.play();
+  scannerContainer.classList.add('active');
+  scanFrameHandle = requestAnimationFrame(scanFrame);
+}
+
+scanButton.onclick = async () => {
+  try { await startScanning(); }
+  catch (error) { status.textContent = 'Camera unavailable: ' + error.message; scanButton.disabled = false; }
+};
+document.getElementById('scanner-cancel').onclick = stopScanning;
+if (!navigator.mediaDevices?.getUserMedia) scanButton.disabled = true;
 
 document.getElementById('chat-form').onsubmit = async event => {
   event.preventDefault();
