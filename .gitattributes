@@ -1,3 +1,12 @@
 *.onnx binary
 *.wasm binary
-network/guest/zellij-*-x86.tar.gz binary
+
+# Guest scripts run inside the Alpine VM via #!/bin/sh; a CRLF-converted
+# checkout (core.autocrlf=true on Windows) turns the shebang into
+# "#!/bin/sh\r", which the kernel resolves to a nonexistent interpreter path
+# and getty/exec fails silently ("can't execute"). This previously broke the
+# ttyS1 RPC shell (autologin-rpc) baked into a released image, which in turn
+# silently dropped every vmagent/FETCH/CLIPBOARD/LLM_* request. Force LF
+# regardless of the checking-out machine's core.autocrlf.
+network/guest/* text eol=lf
+network/guest/*.tar.gz binary
