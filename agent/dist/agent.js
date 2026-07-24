@@ -95091,6 +95091,16 @@ function contentText(message) {
   if (typeof message.content === "string") return message.content;
   return JSON.stringify(message.content);
 }
+function coerceStringBody(value) {
+  if (value == null || typeof value === "string") return value;
+  if (typeof value === "object") return Object.keys(value).length ? JSON.stringify(value) : void 0;
+  return value;
+}
+function deriveInstruction(args) {
+  if (typeof args.instruction === "string") return args.instruction;
+  const target = args.parameters?.url || args.parameters?.query || args.parameters?.text;
+  return [args.command, target].filter(Boolean).join(" ");
+}
 function parseDecision(text) {
   const cleaned = String(text).trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   try {
@@ -95196,7 +95206,8 @@ function createVMAgent({ llmClient, guest, browserClient = null, onActivity = ()
       return `Error: ${reason}; AutoBro fallback also failed: ${error48.message}`;
     }
   };
-  const vmfetch = tool(async ({ url: url2, output, method, headers, data }) => {
+  const vmfetch = tool(async ({ url: url2, output, method, headers, data: rawData }) => {
+    const data = coerceStringBody(rawData);
     const detail = { url: url2, output, method, headers, hasBody: data != null, fallback: browserClient ? "AutoBro navigation/inspection on browser-fetch failure" : "none (AutoBro disconnected)" };
     onActivity({ tool: "vmfetch", detail, approval: true });
     if (!await approveAction("vmfetch", detail)) return "Operation rejected by user.";
@@ -95208,7 +95219,7 @@ function createVMAgent({ llmClient, guest, browserClient = null, onActivity = ()
       if (method === "GET") return await openWithAutoBro(url2, `vmfetch failed: ${error48.message}`);
       return `Error: ${error48.message}; automatic browser fallback is disabled for non-GET requests`;
     }
-  }, { name: "vmfetch", description: "Fetch a CORS-enabled HTTP API/resource when the guest has no route. This cannot operate interactive websites, scrape Google Search, bypass CORS, click pages, or automate a browser. HTTPS/localhost only; 16 MiB limit. Requires approval.", schema: external_exports2.object({ url: external_exports2.string().url(), output: external_exports2.string().default("-"), method: external_exports2.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET"), headers: external_exports2.array(external_exports2.string()).default([]), data: external_exports2.string().optional() }) });
+  }, { name: "vmfetch", description: "Fetch a CORS-enabled HTTP API/resource when the guest has no route. This cannot operate interactive websites, scrape Google Search, bypass CORS, click pages, or automate a browser. HTTPS/localhost only; 16 MiB limit. Requires approval.", schema: external_exports2.object({ url: external_exports2.string().url(), output: external_exports2.string().default("-"), method: external_exports2.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET"), headers: external_exports2.array(external_exports2.string()).default([]), data: external_exports2.union([external_exports2.string(), external_exports2.record(external_exports2.string(), external_exports2.unknown())]).optional() }) });
   const vmgithub = tool(async ({ action, repository, path: path2, ref, output }) => {
     let command;
     if (action === "repo") command = `vmgithub repo ${shellQuote(repository)}`;
@@ -95293,7 +95304,8 @@ ${text}`;
     description: "Search Google, Bing, or DuckDuckGo in a real AutoBro-controlled Chrome tab. Use this\u2014not vmfetch\u2014when asked to go to a search engine or search the web. Requires approval unless YOLO is active.",
     schema: external_exports2.object({ query: external_exports2.string(), engine: external_exports2.enum(["google", "bing", "duckduckgo"]).default("google") })
   }));
-  if (browserClient) browserTools.push(tool(async ({ instruction }) => {
+  if (browserClient) browserTools.push(tool(async (args) => {
+    const instruction = deriveInstruction(args);
     if (currentAutoBroExecution) {
       return `AUTOBRO_EXECUTION_COMPLETE
 A browser automation sequence has already run during this vmagent turn. Do not run another browser tool.
@@ -95355,7 +95367,10 @@ ${text}`;
   }, {
     name: "autobro_automate",
     description: "Preferred tool for natural-language browser tasks when AutoBro is connected. It gives the current page, exact visible controls, relevant AutoBro skills, and the requested action to the ready page-local WebGPU LLM; validates the resulting command sequence; then executes it. Use autobro_command only for an already-known low-level command.",
-    schema: external_exports2.object({ instruction: external_exports2.string().min(1) })
+    schema: external_exports2.union([
+      external_exports2.object({ instruction: external_exports2.string().min(1) }),
+      external_exports2.object({ command: external_exports2.string().min(1), parameters: external_exports2.record(external_exports2.string(), external_exports2.unknown()).optional() })
+    ])
   }));
   if (browserClient) browserTools.push(tool(async ({ command, parameters }) => {
     if (currentAutoBroExecution) return `AUTOBRO_EXECUTION_COMPLETE

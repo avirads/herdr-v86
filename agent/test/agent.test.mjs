@@ -190,3 +190,65 @@ test('duplicate AutoBro automation calls return the first execution result witho
   assert.doesNotMatch(result.output, /The form was submitted/);
   assert.deepEqual(executed, ['pressKey']);
 });
+
+test('vmfetch coerces an empty object body to no body instead of rejecting the tool call', async () => {
+  const guestCommands = [];
+  const guest = fallbackGuest(async command => { guestCommands.push(command); return '__V86AGENT_EXIT__0\nok'; });
+  const harness = createVMAgent({
+    llmClient: scriptedClient([
+      { tool: 'vmfetch', args: { url: 'https://example.com/api', output: '-', method: 'POST', headers: [], data: {} } },
+      { final: 'Request sent.' },
+    ]),
+    guest,
+    browserClient: { async command() { return {}; } },
+    approveAction: async () => true,
+  });
+  const result = await harness.run('Ping the API with no body.');
+  assert.match(result.output, /Request sent/);
+  assert.doesNotMatch(guestCommands.at(-1), /-d /);
+});
+
+test('vmfetch serializes a non-empty object body instead of rejecting the tool call', async () => {
+  const guestCommands = [];
+  const guest = fallbackGuest(async command => { guestCommands.push(command); return '__V86AGENT_EXIT__0\nok'; });
+  const harness = createVMAgent({
+    llmClient: scriptedClient([
+      { tool: 'vmfetch', args: { url: 'https://example.com/api', output: '-', method: 'POST', headers: [], data: { foo: 'bar' } } },
+      { final: 'Request sent.' },
+    ]),
+    guest,
+    browserClient: { async command() { return {}; } },
+    approveAction: async () => true,
+  });
+  const result = await harness.run('Post {foo: bar} to the API.');
+  assert.match(result.output, /Request sent/);
+  assert.match(guestCommands.at(-1), /-d '\{"foo":"bar"\}'/);
+});
+
+test('autobro_automate derives an instruction when the model uses autobro_command\'s {command, parameters} shape', async () => {
+  const browserCalls = [];
+  const browserClient = { async command(command, parameters) {
+    browserCalls.push([command, parameters]);
+    if (command === 'inventoryCurrentPage') return { url: 'https://example.com', controls: [] };
+    if (command === 'relatedActions') return [];
+    if (command === 'skills') return [];
+    if (command === 'gotoUrl') return { ok: true };
+    if (command === 'pageInfo') return { url: 'https://example.com', title: 'Example' };
+    return {};
+  } };
+  const harness = createVMAgent({
+    llmClient: scriptedClient([
+      { tool: 'autobro_automate', args: { command: 'gotoUrl', parameters: { url: 'https://example.com' } } },
+      { steps: [{ command: 'gotoUrl', args: ['https://example.com'] }] },
+      { final: 'Navigated to example.com.' },
+    ]),
+    guest: fallbackGuest(async () => '__V86AGENT_EXIT__0\nok'),
+    browserClient,
+    approveAction: async () => true,
+  });
+  const result = await harness.run('open new browser tab to example.com');
+  assert.match(result.output, /AutoBro task completed/);
+  assert.match(result.output, /Task: gotoUrl https:\/\/example\.com/);
+  assert.match(result.output, /gotoUrl: \{"ok":true\}/);
+  assert.deepEqual(browserCalls.map(call => call[0]), ['inventoryCurrentPage', 'relatedActions', 'skills', 'gotoUrl', 'pageInfo']);
+});

@@ -12,6 +12,31 @@ function contentText(message) {
   return JSON.stringify(message.content);
 }
 
+// Small on-device models frequently pass an already-decoded JSON object where a
+// tool schema expects a pre-serialized string body (e.g. HTTP POST data). A hard
+// zod rejection here throws before our own tool function runs, which surfaces as
+// a raw stack trace and can abort the whole agent turn. Coerce instead: an empty
+// object means "no body", any other object is serialized.
+function coerceStringBody(value) {
+  if (value == null || typeof value === 'string') return value;
+  if (typeof value === 'object') return Object.keys(value).length ? JSON.stringify(value) : undefined;
+  return value;
+}
+
+// autobro_automate takes a natural-language instruction, but the model
+// sometimes reaches for the sibling autobro_command tool's {command, parameters}
+// shape instead (both tools automate the browser). Its schema accepts either
+// shape (a zod union stays representable in the JSON Schema shown to the model,
+// unlike z.preprocess/.transform()); this derives a serviceable instruction
+// from whichever shape arrived rather than crashing the turn — the tool itself
+// re-plans concrete steps from live page context, so an approximate instruction
+// is a safe, useful fallback.
+function deriveInstruction(args) {
+  if (typeof args.instruction === 'string') return args.instruction;
+  const target = args.parameters?.url || args.parameters?.query || args.parameters?.text;
+  return [args.command, target].filter(Boolean).join(' ');
+}
+
 function parseDecision(text) {
   const cleaned = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   try { return JSON.parse(cleaned); } catch {}
@@ -106,7 +131,8 @@ export function createVMAgent({ llmClient, guest, browserClient = null, onActivi
       return JSON.stringify({ switchedProvider: 'autobro', reason, tab, page });
     } catch (error) { return `Error: ${reason}; AutoBro fallback also failed: ${error.message}`; }
   };
-  const vmfetch = tool(async ({ url, output, method, headers, data }) => {
+  const vmfetch = tool(async ({ url, output, method, headers, data: rawData }) => {
+    const data = coerceStringBody(rawData);
     const detail = { url, output, method, headers, hasBody: data != null, fallback: browserClient ? 'AutoBro navigation/inspection on browser-fetch failure' : 'none (AutoBro disconnected)' };
     onActivity({ tool: 'vmfetch', detail, approval: true });
     if (!await approveAction('vmfetch', detail)) return 'Operation rejected by user.';
@@ -117,7 +143,7 @@ export function createVMAgent({ llmClient, guest, browserClient = null, onActivi
       if (method === 'GET') return await openWithAutoBro(url, `vmfetch failed: ${error.message}`);
       return `Error: ${error.message}; automatic browser fallback is disabled for non-GET requests`;
     }
-  }, { name: 'vmfetch', description: 'Fetch a CORS-enabled HTTP API/resource when the guest has no route. This cannot operate interactive websites, scrape Google Search, bypass CORS, click pages, or automate a browser. HTTPS/localhost only; 16 MiB limit. Requires approval.', schema: z.object({ url: z.string().url(), output: z.string().default('-'), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).default('GET'), headers: z.array(z.string()).default([]), data: z.string().optional() }) });
+  }, { name: 'vmfetch', description: 'Fetch a CORS-enabled HTTP API/resource when the guest has no route. This cannot operate interactive websites, scrape Google Search, bypass CORS, click pages, or automate a browser. HTTPS/localhost only; 16 MiB limit. Requires approval.', schema: z.object({ url: z.string().url(), output: z.string().default('-'), method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).default('GET'), headers: z.array(z.string()).default([]), data: z.union([z.string(), z.record(z.string(), z.unknown())]).optional() }) });
   const vmgithub = tool(async ({ action, repository, path, ref, output }) => {
     let command;
     if (action === 'repo') command = `vmgithub repo ${shellQuote(repository)}`;
@@ -172,7 +198,8 @@ export function createVMAgent({ llmClient, guest, browserClient = null, onActivi
   }, {
     name: 'browser_search', description: 'Search Google, Bing, or DuckDuckGo in a real AutoBro-controlled Chrome tab. Use this—not vmfetch—when asked to go to a search engine or search the web. Requires approval unless YOLO is active.', schema: z.object({ query: z.string(), engine: z.enum(['google', 'bing', 'duckduckgo']).default('google') }),
   }));
-  if (browserClient) browserTools.push(tool(async ({ instruction }) => {
+  if (browserClient) browserTools.push(tool(async args => {
+    const instruction = deriveInstruction(args);
     if (currentAutoBroExecution) {
       return `AUTOBRO_EXECUTION_COMPLETE\nA browser automation sequence has already run during this vmagent turn. Do not run another browser tool.\n${currentAutoBroExecution.text}`;
     }
@@ -230,7 +257,10 @@ export function createVMAgent({ llmClient, guest, browserClient = null, onActivi
   }, {
     name: 'autobro_automate',
     description: 'Preferred tool for natural-language browser tasks when AutoBro is connected. It gives the current page, exact visible controls, relevant AutoBro skills, and the requested action to the ready page-local WebGPU LLM; validates the resulting command sequence; then executes it. Use autobro_command only for an already-known low-level command.',
-    schema: z.object({ instruction: z.string().min(1) }),
+    schema: z.union([
+      z.object({ instruction: z.string().min(1) }),
+      z.object({ command: z.string().min(1), parameters: z.record(z.string(), z.unknown()).optional() }),
+    ]),
   }));
   if (browserClient) browserTools.push(tool(async ({ command, parameters }) => {
     if (currentAutoBroExecution) return `AUTOBRO_EXECUTION_COMPLETE\nA browser task already ran during this vmagent turn.\n${currentAutoBroExecution.text}`;
