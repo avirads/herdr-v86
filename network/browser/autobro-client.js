@@ -1,3 +1,48 @@
+function sendToExtension(extensionId, payload, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    if (!globalThis.chrome?.runtime?.sendMessage) return reject(new Error('Chrome external messaging unavailable'));
+    let settled = false;
+    const timer = timeoutMs > 0 ? setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('AutoBro extension did not respond in time'));
+    }, timeoutMs) : null;
+    chrome.runtime.sendMessage(extensionId, payload, response => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const runtimeError = chrome.runtime.lastError;
+      if (runtimeError) reject(new Error(runtimeError.message));
+      else if (!response?.ok) reject(new Error(response?.error || 'AutoBro command failed'));
+      else resolve(response.result);
+    });
+  });
+}
+
+// Detects whether the AutoBro extension is installed and reachable at a
+// known, fixed ID (pinned via the extension's manifest "key"), without
+// needing a pairing token. Reuses the 'pair' command with no token: it
+// always answers { paired: false } for a missing/wrong token rather than
+// throwing, so a successful round trip alone proves the extension exists.
+export async function probeAutoBro(extensionId, timeoutMs = 1500) {
+  try {
+    await sendToExtension(extensionId, { command: 'pair', token: '' }, timeoutMs);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// One-click pairing: asks the extension to prompt whoever is physically at
+// this device to approve the connection via a native browser notification,
+// instead of the user copying a token out of the extension panel and typing
+// it in here. Resolves the granted token on approval.
+export async function requestAutoBroPairing(extensionId, timeoutMs = 65_000) {
+  const result = await sendToExtension(extensionId, { command: 'requestPairing' }, timeoutMs);
+  if (!result?.paired || !result.token) throw new Error(result?.reason || 'AutoBro pairing request was not approved');
+  return result.token;
+}
+
 export class AutoBroClient {
   constructor({ extensionId, token, getLlmClient = () => null }) {
     if (!extensionId || !/^[a-p]{32}$/.test(extensionId)) throw new Error('invalid AutoBro extension ID');
