@@ -219,6 +219,14 @@ export class RemoteLlmPeer extends EventTarget {
     return this.request({ type: 'voice.transcribe', audio, mimeType }, { onChunk, onTranscript, onProgress });
   }
 
+  // Host-side only: end the current phone's session without tearing down
+  // hosting itself, so the same key/QR can accept a new phone afterward.
+  // The connection's own 'close' handler (registered in accept()) clears
+  // this.connection and fires the 'phone disconnected' activity event.
+  disconnectPhone() {
+    this.connection?.close?.();
+  }
+
   close() {
     this.connection?.close?.();
     this.peer?.destroy?.();
