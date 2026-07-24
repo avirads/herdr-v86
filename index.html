@@ -45,6 +45,10 @@
   .setup-step input { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 9px; }
   .setup-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
   .setup-status { margin-top: 12px; color: #8b949e; font-size: 12px; min-height: 1.2em; }
+  .setup-step ol { color: #8b949e; line-height: 1.5; padding-left: 20px; }
+  .setup-step details { margin-top: 16px; color: #8b949e; font-size: 13px; }
+  .setup-step details summary { cursor: pointer; color: #58a6ff; }
+  .setup-step details form { margin-top: 12px; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   #voice-button.listening { color: #fff; background: #da3633; border-color: #f85149; }
@@ -136,23 +140,43 @@
     </section>
     <section id="setup-step-autobro" class="setup-step" hidden>
       <h3>Connect AutoBro</h3>
-      <p>Install AutoBro 0.3.0, then enter the extension ID and pairing token shown in its panel.</p>
+      <p id="autobro-intro">Checking whether the AutoBro extension is installed…</p>
       <div id="autobro-unavailable" class="setup-status" hidden>
         Chrome extensions are not supported in this mobile browser. You can continue without AutoBro; VM commands and <code>vmagent</code> remain available, but browser automation will not work.
       </div>
-      <form id="setup-autobro-form">
-        <label>Extension ID
-          <input id="setup-autobro-extension-id" required autocomplete="off" spellcheck="false" placeholder="Chrome extension ID">
-        </label>
-        <label>Pairing token
-          <input id="setup-autobro-token" type="password" required autocomplete="off" spellcheck="false" placeholder="Token from the AutoBro panel">
-        </label>
+      <div id="autobro-not-installed" hidden>
+        <ol>
+          <li>Download and extract the extension.</li>
+          <li>Open <code>chrome://extensions</code>, enable Developer mode, then Load unpacked and select the extracted folder.</li>
+          <li>Come back here and click "Check again."</li>
+        </ol>
         <div class="setup-actions">
-          <a class="tool-link" href="downloads/autobro-web-bridge-0.3.0.zip" download>Download AutoBro</a>
-          <button type="submit">Connect and open shell</button>
-          <button id="skip-autobro" type="button">Skip setup and open shell</button>
+          <a class="tool-link" href="downloads/autobro-web-bridge-0.4.0.zip" download>Download AutoBro</a>
+          <button id="autobro-recheck" type="button">Check again</button>
         </div>
-      </form>
+      </div>
+      <div id="autobro-installed" hidden>
+        <div class="setup-actions">
+          <button id="autobro-connect" type="button">Connect AutoBro</button>
+        </div>
+      </div>
+      <details id="autobro-manual">
+        <summary>Enter extension ID and pairing token manually instead</summary>
+        <form id="setup-autobro-form">
+          <label>Extension ID
+            <input id="setup-autobro-extension-id" required autocomplete="off" spellcheck="false" placeholder="Chrome extension ID">
+          </label>
+          <label>Pairing token
+            <input id="setup-autobro-token" type="password" required autocomplete="off" spellcheck="false" placeholder="Token from the AutoBro panel">
+          </label>
+          <div class="setup-actions">
+            <button type="submit">Connect manually</button>
+          </div>
+        </form>
+      </details>
+      <div class="setup-actions">
+        <button id="skip-autobro" type="button">Skip setup and open shell</button>
+      </div>
       <div id="setup-autobro-status" class="setup-status">AutoBro is not connected.</div>
     </section>
   </div>
@@ -292,6 +316,10 @@ const bootRing = document.getElementById("boot-ring");
 const bootPercent = document.getElementById("boot-percent");
 const bootMessage = document.getElementById("boot-message");
 const setupOverlay = document.getElementById("setup-overlay");
+// Pinned via the AutoBro extension's manifest "key", so its ID is the same on
+// every machine that loads the packaged zip — no more copying an ID that
+// otherwise varies per install path.
+const AUTOBRO_EXTENSION_ID = "aaigkodgcmkbipbacijelgebhchknkln";
 let bootReady = false;
 let llmReady = false;
 let autobroReady = false;
@@ -300,6 +328,7 @@ let setupSkipped = localStorage.getItem("vm.setupSkipped") === "true";
 let requestedSetupStep = null;
 let llmCheckComplete = false;
 let autobroCheckComplete = false;
+let autobroProbed = false;
 let setupFinished = false;
 function updateSetupWizard() {
   if (!bootReady || setupFinished) return;
@@ -323,6 +352,15 @@ function updateSetupWizard() {
   document.getElementById("setup-step-autobro").hidden = !onAutoBro;
   document.getElementById("setup-progress").textContent = onAutoBro ? "Step 2 of 2" : "Step 1 of 2";
   status(onAutoBro ? "Setup: connect AutoBro" : "Setup: configure local AI model");
+  if (onAutoBro && !autobroProbed && !autobroReady) {
+    autobroProbed = true;
+    if (extensionMessagingUnavailable) {
+      document.getElementById("autobro-intro").textContent = "Automatic detection isn't available in this browser. Use manual entry below, or open this page in a Chromium-based desktop browser with AutoBro installed.";
+      document.getElementById("autobro-manual").open = true;
+    } else {
+      refreshAutoBroAvailability();
+    }
+  }
 }
 let bootProgress = 1;
 function setBootProgress(value, message) {
@@ -772,7 +810,7 @@ voiceButton.onclick = () => voiceListening ? stopVoiceInput() : startVoiceInput(
 if (!isSecureContext || !navigator.mediaDevices?.getUserMedia) voiceStatus("unsupported in this browser");
 async function connectAutoBro({ extensionId = null, token = null } = {}) {
   const storedId = localStorage.getItem("vm.autobroExtensionId") || "";
-  const storedToken = sessionStorage.getItem("vm.autobroPairingToken") || "";
+  const storedToken = localStorage.getItem("vm.autobroPairingToken") || "";
   extensionId ??= storedId;
   token ??= storedToken;
   if (!extensionId || !token) return;
@@ -783,8 +821,12 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
     const health = await client.pair();
     autobroClient = client;
     vmAgentController?.resetHarness();
+    // Persisted in localStorage, not just for this tab: both the one-click
+    // notification approval and the manual token from the extension panel
+    // are already a deliberate human action, so remembering across tabs and
+    // browser restarts avoids re-pairing on every fresh page load.
     localStorage.setItem("vm.autobroExtensionId", extensionId.trim());
-    sessionStorage.setItem("vm.autobroPairingToken", token.trim());
+    localStorage.setItem("vm.autobroPairingToken", token.trim());
     browserStatus(`connected — bridge v${health.bridgeVersion || "?"}`);
     autobroReady = true;
     autobroCheckComplete = true;
@@ -801,6 +843,35 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
     return false;
   }
 }
+async function refreshAutoBroAvailability() {
+  const introEl = document.getElementById("autobro-intro");
+  const notInstalledEl = document.getElementById("autobro-not-installed");
+  const installedEl = document.getElementById("autobro-installed");
+  introEl.textContent = "Checking whether the AutoBro extension is installed…";
+  notInstalledEl.hidden = true;
+  installedEl.hidden = true;
+  const { probeAutoBro } = await import("./network/browser/autobro-client.js");
+  const installed = await probeAutoBro(AUTOBRO_EXTENSION_ID);
+  if (installed) {
+    introEl.textContent = "AutoBro is installed.";
+    installedEl.hidden = false;
+  } else {
+    introEl.textContent = "AutoBro isn't installed in this browser yet.";
+    notInstalledEl.hidden = false;
+  }
+}
+async function oneClickConnectAutoBro() {
+  document.getElementById("setup-autobro-status").textContent = "Waiting for approval — check your browser for a notification…";
+  try {
+    const { requestAutoBroPairing } = await import("./network/browser/autobro-client.js");
+    const token = await requestAutoBroPairing(AUTOBRO_EXTENSION_ID);
+    await connectAutoBro({ extensionId: AUTOBRO_EXTENSION_ID, token });
+  } catch (error) {
+    document.getElementById("setup-autobro-status").textContent = "Pairing failed: " + error.message;
+  }
+}
+document.getElementById("autobro-recheck").onclick = refreshAutoBroAvailability;
+document.getElementById("autobro-connect").onclick = oneClickConnectAutoBro;
 const settingsDialog = document.getElementById("settings-dialog");
 const remoteDialog = document.getElementById("remote-dialog");
 const remoteStatus = document.getElementById("remote-status");
@@ -953,10 +1024,11 @@ document.getElementById("reset-autobro").onclick = () => {
   autobroSkipped = false;
   localStorage.removeItem("vm.autobroExtensionId");
   localStorage.removeItem("vm.autobroSkipped");
-  sessionStorage.removeItem("vm.autobroPairingToken");
+  localStorage.removeItem("vm.autobroPairingToken");
   document.getElementById("setup-autobro-extension-id").value = "";
   document.getElementById("setup-autobro-token").value = "";
   document.getElementById("setup-autobro-status").textContent = "AutoBro is not connected.";
+  autobroProbed = false;
   vmAgentController?.resetHarness();
   browserStatus("not connected");
   settingsDialog.close();
@@ -993,8 +1065,8 @@ document.getElementById("skip-autobro").onclick = () => {
   skipSetupAndOpenShell();
 };
 document.getElementById("setup-autobro-extension-id").value = localStorage.getItem("vm.autobroExtensionId") || "";
-document.getElementById("setup-autobro-token").value = sessionStorage.getItem("vm.autobroPairingToken") || "";
-if (localStorage.getItem("vm.autobroExtensionId") && sessionStorage.getItem("vm.autobroPairingToken")) connectAutoBro();
+document.getElementById("setup-autobro-token").value = localStorage.getItem("vm.autobroPairingToken") || "";
+if (localStorage.getItem("vm.autobroExtensionId") && localStorage.getItem("vm.autobroPairingToken")) connectAutoBro();
 else if (mobileBrowser && extensionMessagingUnavailable && autobroSkipped) {
   autobroReady = true;
   autobroCheckComplete = true;

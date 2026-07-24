@@ -2,8 +2,8 @@
 
 Download the packaged Manifest V3 extension:
 
-- [AutoBro Web Bridge 0.3.0](../downloads/autobro-web-bridge-0.3.0.zip)
-- SHA-256: `ACB5C1444A875439FAC9AC7B386B79EEB22211DBDDDDEC6AEDCA841337E09AB0`
+- [AutoBro Web Bridge 0.4.0](../downloads/autobro-web-bridge-0.4.0.zip)
+- SHA-256: `704A958C9D310B9A2571C05C400ADC622A3C882CA87D78ADF4C5F449AD456B23`
 
 ## Install in Chrome or Chromium
 
@@ -12,10 +12,24 @@ Download the packaged Manifest V3 extension:
 3. Enable **Developer mode**.
 4. Select **Load unpacked**.
 5. Select the extracted directory that contains `manifest.json`.
-6. Pin or open **AutoBro Web Bridge**, then copy the extension ID from
-   `chrome://extensions` and the pairing token from the extension panel.
-7. Open the [VM](https://avirads.github.io/herdr-v86/), select
-   **Connect AutoBro**, and enter the extension ID and pairing token.
+6. Open the [VM](https://avirads.github.io/herdr-v86/), select
+   **Connect AutoBro**, then click **Connect AutoBro** and approve the
+   browser notification that appears. No copying an extension ID or pairing
+   token is needed — the extension's ID is pinned (via its manifest `key`),
+   so the page detects it automatically, and the notification click hands
+   over a pairing token directly.
+
+The extension ID and pairing token fields are still available for manual
+entry (under "Enter extension ID and pairing token manually instead") as a
+fallback if browser notifications are blocked, or for advanced/scripted
+setups.
+
+### Upgrading from 0.3.0
+
+0.3.0 was loaded unpacked without a pinned ID, so its extension ID varies per
+install path. Reload the unpacked extension from the 0.4.0 ZIP (same Load
+unpacked steps, pointed at the new directory) to pick up the fixed ID and the
+one-click pairing flow; the page will no longer recognize the old ID.
 
 AutoBro uses VM's ready page-local WebGPU LLM for chat and automation
 planning. It contains no model picker or extension-local LiteRT runtime. Keep
