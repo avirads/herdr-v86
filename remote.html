@@ -91,6 +91,20 @@ let recordingStream;
 let recordingChunks = [];
 let recordingTimer;
 
+// The agent side can end the session at any point — the "Disconnect phone"
+// button, closing the VM page/tab, or a dropped connection. Return to the
+// pairing screen instead of leaving the chat UI stuck talking to a dead peer.
+function resetToPairingScreen(message) {
+  if (recorder?.state === 'recording') stopRecording();
+  chat.classList.remove('active');
+  pairing.hidden = false;
+  connectButton.disabled = false;
+  status.textContent = message;
+  log.textContent = '';
+  chatStatus.textContent = '';
+  remote = null;
+}
+
 async function connectWithKey(rawKey) {
   if (!rawKey) return;
   connectButton.disabled = true;
@@ -98,7 +112,10 @@ async function connectWithKey(rawKey) {
   try {
     if (!globalThis.Peer) throw new Error('WebRTC signaling library did not load');
     remote = new RemoteLlmPeer({ Peer: globalThis.Peer, getLlmClient: () => null });
-    remote.addEventListener('activity', event => { chatStatus.textContent = event.detail.message; });
+    remote.addEventListener('activity', event => {
+      chatStatus.textContent = event.detail.message;
+      if (event.detail.agentConnected === false) resetToPairingScreen('Agent disconnected. Enter a pairing key or scan again to reconnect.');
+    });
     await remote.connect(rawKey);
     pairing.hidden = true;
     chat.classList.add('active');
