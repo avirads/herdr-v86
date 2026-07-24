@@ -53,7 +53,7 @@ export class RemoteLlmPeer extends EventTarget {
 
   accept(connection) {
     if (this.connection?.open) {
-      connection.on('open', () => { connection.send({ type: 'auth.error' }); connection.close(); });
+      connection.on('open', () => { connection.send({ type: 'auth.error', reason: 'occupied' }); connection.close(); });
       return;
     }
     let authenticated = false;
@@ -64,7 +64,7 @@ export class RemoteLlmPeer extends EventTarget {
     connection.on('data', async message => {
       if (!authenticated) {
         authenticated = message?.type === 'auth' && message?.secret === this.secret;
-        connection.send({ type: authenticated ? 'auth.ok' : 'auth.error' });
+        connection.send(authenticated ? { type: 'auth.ok' } : { type: 'auth.error', reason: 'invalid' });
         if (!authenticated) {
           this.activity('rejected unauthenticated connection', { kind: 'error' });
           connection.close();
@@ -154,7 +154,9 @@ export class RemoteLlmPeer extends EventTarget {
           resolve();
         } else if (message?.type === 'auth.error') {
           clearTimeout(timer);
-          reject(new Error('pairing was rejected'));
+          reject(new Error(message.reason === 'occupied'
+            ? 'only one phone can be connected to this agent at a time — wait for the current session to disconnect, then try again'
+            : 'pairing was rejected — check the pairing key and try again'));
         }
       });
       connection.on('error', error => { clearTimeout(timer); reject(error); });

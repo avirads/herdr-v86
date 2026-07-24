@@ -196,7 +196,7 @@ test('only one phone may be connected at a time; a second attempt is rejected un
   const second = new FakeConnection();
   remote.accept(second);
   second.emit('open');
-  assert.deepEqual(second.sent, [{ type: 'auth.error' }]);
+  assert.deepEqual(second.sent, [{ type: 'auth.error', reason: 'occupied' }]);
   assert.equal(second.open, false);
   assert.equal(remote.connection, first, 'the first connection must remain active');
 
@@ -253,6 +253,26 @@ test('disconnectPhone ends the current session without tearing down hosting, fre
 test('disconnectPhone is a no-op when no phone is connected', () => {
   const remote = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => null });
   assert.doesNotThrow(() => remote.disconnectPhone());
+});
+
+test('connect() surfaces a clear message when the agent already has a phone connected', async () => {
+  const remote = new RemoteLlmPeer({ Peer: FakePeer, getLlmClient: () => null });
+  const connectPromise = remote.connect('agent-peer.' + 'a'.repeat(32));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const connection = remote.connection;
+  connection.emit('open');
+  connection.emit('data', { type: 'auth.error', reason: 'occupied' });
+  await assert.rejects(connectPromise, /only one phone can be connected to this agent at a time/);
+});
+
+test('connect() surfaces a generic rejection message for an invalid pairing key', async () => {
+  const remote = new RemoteLlmPeer({ Peer: FakePeer, getLlmClient: () => null });
+  const connectPromise = remote.connect('agent-peer.' + 'a'.repeat(32));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const connection = remote.connection;
+  connection.emit('open');
+  connection.emit('data', { type: 'auth.error', reason: 'invalid' });
+  await assert.rejects(connectPromise, /pairing was rejected/);
 });
 
 test('client activity flags agentConnected true once paired', async () => {
