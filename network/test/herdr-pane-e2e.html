@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>herdr pane-creation crash check</title>
+<pre id="serial"></pre><div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+let serial = '', started = false, submitted = false;
+async function submit(ok, reason = '', extra = {}) {
+  if (submitted) return; submitted = true;
+  await fetch('/__result', { method: 'POST', body: JSON.stringify({ ok, reason, ...extra }) });
+}
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm', memory_size: 256 << 20, vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' }, vga_bios: { url: '../../vgabios.bin' }, bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 }, uart1: true,
+  screen_container: document.querySelector('#screen_container'), autostart: true,
+});
+setTimeout(() => submit(false, 'herdr pane test timed out', { serial: serial.slice(-4000) }), 120000);
+emulator.add_listener('serial0-output-byte', byte => {
+  serial = (serial + String.fromCharCode(byte)).slice(-200000);
+  document.querySelector('#serial').textContent = serial;
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    started = true;
+    // First: does the herdr binary even exist? Then run the crash report's
+    // startup-workspace+pane repro and check whether the server survives.
+    const cmd = "echo HERDR_HAS=$(command -v herdr || echo none); " +
+      "stty rows 32 cols 100; echo HERDR_TEST_BEGIN; " +
+      "HERDR_STARTUP_CWD=/root HERDR_SESSION=t1 setsid sh -c 'exec herdr server </dev/null >/tmp/s.log 2>&1'; " +
+      "sleep 8; " +
+      "(pgrep -f 'herdr server' >/dev/null && echo HERDR_SERVER_ALIVE || echo HERDR_SERVER_DEAD); " +
+      "echo ===LOG===; tail -6 /tmp/s.log 2>/dev/null; echo ===END===; echo HERDR_TEST_END\n";
+    emulator.serial0_send(cmd);
+  }
+  if (/\nHERDR_TEST_END\r?\n/.test(serial)) {
+    const alive = serial.includes('HERDR_SERVER_ALIVE');
+    const dead = serial.includes('HERDR_SERVER_DEAD');
+    const panicked = /panic|attempt to use null|Aborted/i.test(serial.split('HERDR_TEST_BEGIN')[1] || '');
+    const hasHerdr = !/HERDR_HAS=none/.test(serial);
+    submit(true, '', {
+      hasHerdr, serverSurvivedPaneCreation: alive && !dead, panicSeen: panicked,
+      logTail: (serial.split('===LOG===')[1] || '').split('===END===')[0].trim().slice(-800),
+    });
+  }
+});
+</script>

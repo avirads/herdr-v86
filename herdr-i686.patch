@@ -1,6 +1,8 @@
---- a/build.rs	2026-07-18 13:53:18.054949458 +0000
-+++ b/build.rs	2026-07-18 13:53:18.056934133 +0000
-@@ -8,6 +8,8 @@
+diff --git a/build.rs b/build.rs
+index 66ed262..2825e00 100644
+--- a/build.rs
++++ b/build.rs
+@@ -8,6 +8,8 @@ fn zig_target(target: &str) -> &str {
          "x86_64-unknown-linux-gnu" => "x86_64-linux-gnu",
          "aarch64-unknown-linux-gnu" => "aarch64-linux-gnu",
          "x86_64-unknown-linux-musl" => "x86_64-linux-musl",
@@ -10,7 +12,7 @@
          "x86_64-apple-darwin" => "x86_64-macos",
          "aarch64-apple-darwin" => "aarch64-macos",
 diff --git a/src/ghostty/bindings.rs b/src/ghostty/bindings.rs
-index af743ea..a5339c0 100644
+index af743ea..5715c8b 100644
 --- a/src/ghostty/bindings.rs
 +++ b/src/ghostty/bindings.rs
 @@ -197,6 +197,7 @@ pub struct GhosttyString {
@@ -293,6 +295,33 @@ index af743ea..a5339c0 100644
  const _: () = {
      ["Size of GhosttyClipboardWrite"][::std::mem::size_of::<GhosttyClipboardWrite>() - 32usize];
      ["Alignment of GhosttyClipboardWrite"]
+@@ -2583,7 +2618,7 @@ unsafe extern "C" {
+     pub fn ghostty_terminal_new(
+         allocator: *const GhosttyAllocator,
+         terminal: *mut GhosttyTerminal,
+-        options: GhosttyTerminalOptions,
++        options: *const GhosttyTerminalOptions,
+     ) -> GhosttyResult;
+ }
+ unsafe extern "C" {
+@@ -2620,7 +2655,7 @@ unsafe extern "C" {
+     #[doc = " Scroll the terminal viewport.\n\n Scrolls the terminal's viewport according to the given behavior.\n When using GHOSTTY_SCROLL_VIEWPORT_DELTA, set the delta field in\n the value union to specify the number of rows to scroll (negative\n for up, positive for down). When using GHOSTTY_SCROLL_VIEWPORT_ROW,\n set the row field to the absolute row offset from the top of the\n scrollable area (the same row space as the offset field of\n GhosttyTerminalScrollbar). For other behaviors, the value is ignored.\n\n @param terminal The terminal handle (may be NULL, in which case this is a no-op)\n @param behavior The scroll behavior as a tagged union\n\n @ingroup terminal"]
+     pub fn ghostty_terminal_scroll_viewport(
+         terminal: GhosttyTerminal,
+-        behavior: GhosttyTerminalScrollViewport,
++        behavior: *const GhosttyTerminalScrollViewport,
+     );
+ }
+ unsafe extern "C" {
+@@ -2676,7 +2711,7 @@ unsafe extern "C" {
+     #[doc = " Resolve a point in the terminal grid to a grid reference.\n\n Resolves the given point (which can be in active, viewport, screen,\n or history coordinates) to a grid reference for that location. Use\n ghostty_grid_ref_cell() and ghostty_grid_ref_row() to extract the cell\n and row.\n\n Lookups using the `active` and `viewport` tags are fast. The `screen`\n and `history` tags may require traversing the full scrollback page list\n to resolve the y coordinate, so they can be expensive for large\n scrollback buffers.\n\n This function isn't meant to be used as the core of render loop. It\n isn't built to sustain the framerates needed for rendering large screens.\n Use the render state API for that. This API is instead meant for less\n strictly performance-sensitive use cases.\n\n @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)\n @param point The point specifying which cell to look up\n @param[out] out_ref On success, set to the grid reference at the given point (may be NULL)\n @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal\n         is NULL or the point is out of bounds\n\n @ingroup terminal"]
+     pub fn ghostty_terminal_grid_ref(
+         terminal: GhosttyTerminal,
+-        point: GhosttyPoint,
++        point: *const GhosttyPoint,
+         out_ref: *mut GhosttyGridRef,
+     ) -> GhosttyResult;
+ }
 @@ -2717,6 +2752,7 @@ pub struct GhosttyFormatterScreenExtra {
      pub charsets: bool,
  }
@@ -317,6 +346,15 @@ index af743ea..a5339c0 100644
  const _: () = {
      ["Size of GhosttyFormatterTerminalOptions"]
          [::std::mem::size_of::<GhosttyFormatterTerminalOptions>() - 56usize];
+@@ -2832,7 +2870,7 @@ unsafe extern "C" {
+         allocator: *const GhosttyAllocator,
+         formatter: *mut GhosttyFormatter,
+         terminal: GhosttyTerminal,
+-        options: GhosttyFormatterTerminalOptions,
++        options: *const GhosttyFormatterTerminalOptions,
+     ) -> GhosttyResult;
+ }
+ unsafe extern "C" {
 @@ -2984,6 +3022,7 @@ pub struct GhosttyRenderStateRowSelection {
      pub end_x: u16,
  }
@@ -373,6 +411,15 @@ index af743ea..a5339c0 100644
  const _: () = {
      ["Size of GhosttyMousePosition"][::std::mem::size_of::<GhosttyMousePosition>() - 8usize];
      ["Alignment of GhosttyMousePosition"][::std::mem::align_of::<GhosttyMousePosition>() - 4usize];
+@@ -4074,7 +4119,7 @@ unsafe extern "C" {
+     #[doc = " Set the event position in surface-space pixels.\n\n @param event The event handle, must not be NULL\n @param position The position to set\n\n @ingroup mouse"]
+     pub fn ghostty_mouse_event_set_position(
+         event: GhosttyMouseEvent,
+-        position: GhosttyMousePosition,
++        position: *const GhosttyMousePosition,
+     );
+ }
+ unsafe extern "C" {
 @@ -4135,6 +4180,7 @@ pub struct GhosttyMouseEncoderSize {
      pub padding_left: u32,
  }
@@ -381,3 +428,167 @@ index af743ea..a5339c0 100644
  const _: () = {
      ["Size of GhosttyMouseEncoderSize"][::std::mem::size_of::<GhosttyMouseEncoderSize>() - 40usize];
      ["Alignment of GhosttyMouseEncoderSize"]
+diff --git a/src/ghostty/mod.rs b/src/ghostty/mod.rs
+index 3a3a079..cccc647 100644
+--- a/src/ghostty/mod.rs
++++ b/src/ghostty/mod.rs
+@@ -723,7 +723,7 @@ impl Terminal {
+         };
+         // SAFETY: valid out pointer and options, null allocator means default allocator.
+         unsafe {
+-            ffi::ghostty_terminal_new(ptr::null(), &mut raw, options).into_result()?;
++            ffi::ghostty_terminal_new(ptr::null(), &mut raw, &options).into_result()?;
+         }
+ 
+         let mut terminal = Self {
+@@ -992,7 +992,7 @@ impl Terminal {
+             ..Default::default()
+         };
+         unsafe {
+-            ffi::ghostty_terminal_grid_ref(self.raw, point, &mut grid_ref).into_result()?;
++            ffi::ghostty_terminal_grid_ref(self.raw, &point, &mut grid_ref).into_result()?;
+         }
+         Ok(grid_ref)
+     }
+@@ -1090,7 +1090,7 @@ impl Terminal {
+             selection: ptr::null(),
+         };
+         unsafe {
+-            ffi::ghostty_formatter_terminal_new(ptr::null(), &mut formatter, self.raw, options)
++            ffi::ghostty_formatter_terminal_new(ptr::null(), &mut formatter, self.raw, &options)
+                 .into_result()?;
+         }
+ 
+@@ -1138,8 +1138,8 @@ impl Terminal {
+             ..Default::default()
+         };
+         unsafe {
+-            ffi::ghostty_terminal_grid_ref(self.raw, start, &mut start_ref).into_result()?;
+-            ffi::ghostty_terminal_grid_ref(self.raw, end, &mut end_ref).into_result()?;
++            ffi::ghostty_terminal_grid_ref(self.raw, &start, &mut start_ref).into_result()?;
++            ffi::ghostty_terminal_grid_ref(self.raw, &end, &mut end_ref).into_result()?;
+         }
+ 
+         let selection = ffi::GhosttySelection {
+@@ -1165,7 +1165,7 @@ impl Terminal {
+             selection: &selection,
+         };
+         unsafe {
+-            ffi::ghostty_formatter_terminal_new(ptr::null(), &mut formatter, self.raw, options)
++            ffi::ghostty_formatter_terminal_new(ptr::null(), &mut formatter, self.raw, &options)
+                 .into_result()?;
+         }
+ 
+@@ -1202,7 +1202,7 @@ impl Terminal {
+         };
+         // SAFETY: self.raw is valid and viewport value matches the tag.
+         unsafe {
+-            ffi::ghostty_terminal_scroll_viewport(self.raw, viewport);
++            ffi::ghostty_terminal_scroll_viewport(self.raw, &viewport);
+         }
+     }
+ 
+@@ -1213,7 +1213,7 @@ impl Terminal {
+         };
+         // SAFETY: self.raw is valid and viewport value matches the tag.
+         unsafe {
+-            ffi::ghostty_terminal_scroll_viewport(self.raw, viewport);
++            ffi::ghostty_terminal_scroll_viewport(self.raw, &viewport);
+         }
+     }
+ 
+@@ -1224,7 +1224,7 @@ impl Terminal {
+         };
+         // SAFETY: self.raw is valid and viewport value matches the tag.
+         unsafe {
+-            ffi::ghostty_terminal_scroll_viewport(self.raw, viewport);
++            ffi::ghostty_terminal_scroll_viewport(self.raw, &viewport);
+         }
+     }
+ 
+@@ -2481,7 +2481,7 @@ impl MouseEvent {
+ 
+     pub fn set_position(&mut self, x: f32, y: f32) {
+         unsafe {
+-            ffi::ghostty_mouse_event_set_position(self.raw, ffi::GhosttyMousePosition { x, y })
++            ffi::ghostty_mouse_event_set_position(self.raw, &ffi::GhosttyMousePosition { x, y })
+         }
+     }
+ }
+diff --git a/vendor/libghostty-vt/src/terminal/c/formatter.zig b/vendor/libghostty-vt/src/terminal/c/formatter.zig
+index 5b4504c..c850dc7 100644
+--- a/vendor/libghostty-vt/src/terminal/c/formatter.zig
++++ b/vendor/libghostty-vt/src/terminal/c/formatter.zig
+@@ -107,12 +107,12 @@ pub fn terminal_new(
+     alloc_: ?*const CAllocator,
+     result: *Formatter,
+     terminal_: terminal_c.Terminal,
+-    opts: TerminalOptions,
++    opts: *const TerminalOptions,
+ ) callconv(lib.calling_conv) Result {
+     result.* = terminal_new_(
+         alloc_,
+         terminal_,
+-        opts,
++        opts.*,
+     ) catch |err| {
+         result.* = null;
+         return switch (err) {
+diff --git a/vendor/libghostty-vt/src/terminal/c/mouse_event.zig b/vendor/libghostty-vt/src/terminal/c/mouse_event.zig
+index b3c19dd..c63be58 100644
+--- a/vendor/libghostty-vt/src/terminal/c/mouse_event.zig
++++ b/vendor/libghostty-vt/src/terminal/c/mouse_event.zig
+@@ -96,8 +96,8 @@ pub fn get_mods(event_: Event) callconv(lib.calling_conv) Mods {
+     return event_.?.event.mods;
+ }
+ 
+-pub fn set_position(event_: Event, pos: Position) callconv(lib.calling_conv) void {
+-    event_.?.event.pos = pos;
++pub fn set_position(event_: Event, pos: *const Position) callconv(lib.calling_conv) void {
++    event_.?.event.pos = pos.*;
+ }
+ 
+ pub fn get_position(event_: Event) callconv(lib.calling_conv) Position {
+diff --git a/vendor/libghostty-vt/src/terminal/c/terminal.zig b/vendor/libghostty-vt/src/terminal/c/terminal.zig
+index a896c0f..40c3251 100644
+--- a/vendor/libghostty-vt/src/terminal/c/terminal.zig
++++ b/vendor/libghostty-vt/src/terminal/c/terminal.zig
+@@ -310,9 +310,11 @@ const NewError = error{
+ pub fn new(
+     alloc_: ?*const CAllocator,
+     result: *Terminal,
+-    opts: Options,
++    // i686: passed by pointer — Zig's x86-32 C ABI mishandles by-value structs
++    // (scalarized per-field slots instead of the psABI memory blob).
++    opts: *const Options,
+ ) callconv(lib.calling_conv) Result {
+-    result.* = new_(alloc_, opts) catch |err| {
++    result.* = new_(alloc_, opts.*) catch |err| {
+         result.* = null;
+         return switch (err) {
+             error.InvalidValue => .invalid_value,
+@@ -633,8 +635,9 @@ pub const ScrollViewport = ZigTerminal.ScrollViewport.C;
+ 
+ pub fn scroll_viewport(
+     terminal_: Terminal,
+-    behavior: ScrollViewport,
++    behavior_: *const ScrollViewport,
+ ) callconv(lib.calling_conv) void {
++    const behavior = behavior_.*;
+     const t: *ZigTerminal = (terminal_ orelse return).terminal;
+     t.scrollViewport(switch (behavior.tag) {
+         .top => .top,
+@@ -906,11 +909,11 @@ fn getTyped(
+ 
+ pub fn grid_ref(
+     terminal_: Terminal,
+-    pt: point.Point.C,
++    pt: *const point.Point.C,
+     out_ref: ?*grid_ref_c.CGridRef,
+ ) callconv(lib.calling_conv) Result {
+     const t: *ZigTerminal = (terminal_ orelse return .invalid_value).terminal;
+-    const zig_pt: point.Point = .fromC(pt);
++    const zig_pt: point.Point = .fromC(pt.*);
+     const p = t.screens.active.pages.pin(zig_pt) orelse
+         return .invalid_value;
+     if (out_ref) |out| out.* = grid_ref_c.CGridRef.fromPin(p);

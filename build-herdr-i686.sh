@@ -11,7 +11,7 @@ rustup target add i686-unknown-linux-musl --toolchain 1.96.1
 # 2. Get herdr and apply the target-map patch
 git clone https://github.com/ogulcancelik/herdr.git
 cd herdr
-git apply ../herdr-i686.patch  # includes build.rs target map + bindings.rs 32-bit layout-test gate (required)
+git apply ../herdr-i686.patch  # build.rs target map + bindings.rs 32-bit layout-test gate + the libghostty-vt FFI ABI fix (by-value structs -> *const; required, or panes panic at runtime on i686)
 
 # 3. Build.
 #    - VERIFIED: libghostty-vt compiles for x86-linux-musl with Zig 0.15.2,

@@ -1,7 +1,19 @@
 # i686 crash: Zig panic in libghostty-vt on pane creation
 
-Status: **open** — root cause isolated to the vendored libghostty-vt (Zig) in the
-i686 build; exact function not yet identified because the shipped binary is stripped.
+Status: **RESOLVED** (2026-07-22). Root cause was the vendored libghostty-vt C
+shim passing small structs (Options/TerminalOptions/Position/ScrollViewport/
+Point) **by value** across the FFI boundary. Zig's x86-32 C ABI scalarizes those
+per-field instead of using the psABI memory blob, so on i686 the callee received
+a corrupted struct — surfacing as the `.?`-on-null panic on the pane/VT path.
+
+Fix: pass those structs by `*const` pointer (ABI-stable on 32- and 64-bit), with
+matching `&`-references at the Rust FFI callsites. Shipped in the ABI-fixed
+`herdr-i686` baked into `vm-network-ext4.img` (commit "Reinstate herdr as a
+command in the VM"); the fix is captured in `herdr-i686.patch`. Re-verified on
+the committed image with `network/test/herdr-pane-e2e.html`: the startup-
+workspace + pane repro below now survives (server alive, no panic).
+
+The original investigation is kept below for reference.
 
 ## Symptom
 
