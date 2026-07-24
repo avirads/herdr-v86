@@ -150,7 +150,7 @@ export class RemoteLlmPeer extends EventTarget {
         if (message?.type === 'auth.ok') {
           clearTimeout(timer);
           this.bindResults(connection);
-          this.activity('connected to agent LLM', { kind: 'state' });
+          this.activity('connected to agent LLM', { kind: 'state', agentConnected: true });
           resolve();
         } else if (message?.type === 'auth.error') {
           clearTimeout(timer);
@@ -190,7 +190,17 @@ export class RemoteLlmPeer extends EventTarget {
       else if (message.type === 'llm.result') pending.resolve(message.content);
       else if (message.type === 'llm.error') pending.reject(new Error(message.error));
     });
-    connection.on('close', () => this.activity('agent disconnected', { kind: 'state' }));
+    connection.on('close', () => {
+      // The host may end the session (e.g. the "Disconnect phone" button) at
+      // any point, including mid-request — don't leave callers hanging until
+      // their own response timeout.
+      for (const pending of this.pending.values()) {
+        clearTimeout(pending.timer);
+        pending.reject(new Error('agent disconnected'));
+      }
+      this.pending.clear();
+      this.activity('agent disconnected', { kind: 'state', agentConnected: false });
+    });
   }
 
   responseTimer(id, reject) {

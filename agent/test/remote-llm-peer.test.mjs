@@ -23,6 +23,7 @@ class FakePeer {
   on(type, handler) { const handlers = this.handlers.get(type) || []; handlers.push(handler); this.handlers.set(type, handlers); }
   once(type, handler) { this.on(type, handler); }
   emit(type, value) { for (const handler of this.handlers.get(type) || []) handler(value); }
+  connect() { this.connection = new FakeConnection(); return this.connection; }
   destroy() {}
 }
 
@@ -252,4 +253,37 @@ test('disconnectPhone ends the current session without tearing down hosting, fre
 test('disconnectPhone is a no-op when no phone is connected', () => {
   const remote = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => null });
   assert.doesNotThrow(() => remote.disconnectPhone());
+});
+
+test('client activity flags agentConnected true once paired', async () => {
+  const remote = new RemoteLlmPeer({ Peer: FakePeer, getLlmClient: () => null });
+  const events = [];
+  remote.addEventListener('activity', event => events.push(event.detail));
+
+  const connectPromise = remote.connect('agent-peer.' + 'a'.repeat(32));
+  await new Promise(resolve => setTimeout(resolve, 0)); // let the peer 'open' microtask + connect() run
+  const connection = remote.connection;
+  connection.emit('open');
+  connection.emit('data', { type: 'auth.ok' });
+  await connectPromise;
+
+  assert.equal(events.find(detail => detail.message === 'connected to agent LLM')?.agentConnected, true);
+});
+
+test('client activity flags agentConnected false when the agent ends the session, and rejects in-flight requests instead of hanging', async () => {
+  const remote = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => null });
+  const events = [];
+  remote.addEventListener('activity', event => events.push(event.detail));
+
+  const connection = new FakeConnection();
+  remote.connection = connection;
+  remote.bindResults(connection);
+
+  const pendingChat = remote.chat('are you there?');
+  connection.close();
+  connection.emit('close');
+
+  await assert.rejects(pendingChat, /agent disconnected/);
+  assert.equal(events.find(detail => detail.message === 'agent disconnected')?.agentConnected, false);
+  assert.equal(remote.pending.size, 0, 'the closed connection must not leave a dangling pending request');
 });
