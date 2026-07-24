@@ -65,7 +65,11 @@
   .settings-action { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 12px 0; border-top: 1px solid #30363d; }
   .settings-action small, #settings-dialog p { color: #8b949e; }
   #remote-dialog { width: min(560px, calc(100vw - 32px)); }
-  #remote-key { font: 12px monospace; }
+  #remote-key-row { display: flex; gap: 6px; align-items: stretch; }
+  #remote-key { flex: 1; min-width: 0; font: 12px monospace; }
+  #remote-copy { flex: 0 0 auto; width: 44px; display: grid; place-items: center; padding: 0; color: #c9d1d9; }
+  #remote-copy svg { width: 18px; height: 18px; }
+  #remote-copy.copied { color: #3fb950; border-color: #3fb950; }
   #remote-qr { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 12px 0; padding: 12px; background: #f0f6fc; border-radius: 8px; }
   #remote-qr svg { width: min(220px, 60vw); height: min(220px, 60vw); }
   #remote-qr small { color: #57606a; }
@@ -241,13 +245,21 @@
   <h2>Remote agent</h2>
   <p id="remote-status">Choose whether this device runs the agent model or connects to another VM instance.</p>
   <label>Pairing key
-    <input id="remote-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the agent pairing key">
+    <div id="remote-key-row">
+      <input id="remote-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the agent pairing key">
+      <button id="remote-copy" type="button" hidden title="Copy pairing key" aria-label="Copy pairing key">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="13" height="13" rx="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+      </button>
+    </div>
   </label>
   <div id="remote-qr" hidden></div>
   <div class="setup-actions">
     <button id="remote-host" type="button">Run this agent</button>
     <button id="remote-connect" type="button">Connect to agent</button>
-    <button id="remote-copy" type="button" hidden>Copy pairing key</button>
+    <button id="remote-disconnect" type="button" hidden>Disconnect phone</button>
   </div>
   <details open>
     <summary>Connection and model activity</summary>
@@ -911,7 +923,9 @@ async function getRemoteLlmPeer() {
     if (event.detail.hostConnected === true) {
       document.getElementById("remote-qr").hidden = true;
       document.getElementById("remote-copy").hidden = true;
+      document.getElementById("remote-disconnect").hidden = false;
     } else if (event.detail.hostConnected === false) {
+      document.getElementById("remote-disconnect").hidden = true;
       const key = remoteKey.value.trim();
       if (key) {
         document.getElementById("remote-copy").hidden = false;
@@ -961,10 +975,17 @@ document.getElementById("remote-host").onclick = async () => {
   } catch (error) { remoteStatus.textContent = "Agent failed: " + error.message; }
 };
 document.getElementById("remote-copy").onclick = async () => {
+  const button = document.getElementById("remote-copy");
   try {
     await navigator.clipboard.writeText(remoteKey.value);
     remoteStatus.textContent = "Pairing key copied.";
+    button.classList.add("copied");
+    setTimeout(() => button.classList.remove("copied"), 1200);
   } catch { remoteKey.select(); remoteStatus.textContent = "Copy the selected pairing key."; }
+};
+document.getElementById("remote-disconnect").onclick = async () => {
+  (await getRemoteLlmPeer()).disconnectPhone();
+  remoteStatus.textContent = "Disconnecting phone…";
 };
 document.getElementById("remote-connect").onclick = async () => {
   const key = remoteKey.value.trim();

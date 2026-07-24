@@ -224,3 +224,32 @@ test('activity events flag hostConnected true on connect and false on disconnect
   assert.equal(events.find(detail => detail.message === 'phone connected')?.hostConnected, true);
   assert.equal(events.find(detail => detail.message === 'phone disconnected')?.hostConnected, false);
 });
+
+test('disconnectPhone ends the current session without tearing down hosting, freeing the slot for a new phone', async () => {
+  const remote = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => null });
+  remote.secret = 'a'.repeat(32);
+  const events = [];
+  remote.addEventListener('activity', event => events.push(event.detail));
+
+  const first = new FakeConnection();
+  remote.accept(first);
+  first.emit('data', { type: 'auth', secret: remote.secret });
+  assert.equal(remote.connection, first);
+
+  remote.disconnectPhone();
+  assert.equal(first.open, false, 'disconnectPhone must close the underlying connection');
+  first.emit('close'); // real PeerJS fires this asynchronously once the data channel closes
+  assert.equal(remote.connection, null);
+  assert.equal(events.at(-1).message, 'phone disconnected');
+  assert.equal(events.at(-1).hostConnected, false);
+
+  const second = new FakeConnection();
+  remote.accept(second);
+  second.emit('data', { type: 'auth', secret: remote.secret });
+  assert.equal(remote.connection, second, 'hosting must still be active — a new phone can connect');
+});
+
+test('disconnectPhone is a no-op when no phone is connected', () => {
+  const remote = new RemoteLlmPeer({ Peer: class {}, getLlmClient: () => null });
+  assert.doesNotThrow(() => remote.disconnectPhone());
+});
