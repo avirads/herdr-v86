@@ -24,7 +24,19 @@ export function createMastraVMAgent({
   llmClient,
   browserClient = null,
   modelId = 'gemma-4-e2b',
-  instructions = 'You are a coding agent working in /root/project on a 32-bit Linux VM running inside a browser tab.',
+  // Real-inference testing showed the default matters. Given only "you work in
+  // /root/project", the on-device model calls read_file("README.md"), the
+  // workspace rejects it with "workspace path must be absolute", and the model
+  // concludes the file does not exist and stops — a confident wrong answer
+  // after zero guest calls. Stating the path rule up front is what makes the
+  // tier usable with a 2B model. The batching line is here for the same
+  // reason: every tool call is one serial round-trip on an emulated CPU.
+  instructions = [
+    'You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.',
+    'Workspace paths are ABSOLUTE and rooted at the project directory: use "/README.md", never "README.md" or "./README.md".',
+    'The shell runs BusyBox sh, so prefer portable POSIX commands over bash-isms or GNU-only flags.',
+    'Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read.',
+  ].join('\n'),
   approveAction = async () => false,
   yolo = true,
   onActivity = () => {},

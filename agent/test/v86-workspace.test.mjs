@@ -138,10 +138,12 @@ const fsFor = (init, options = {}) => new V86Filesystem({ guest: fakeGuest(init)
 // helpers
 // ---------------------------------------------------------------------------
 
-test('path conversion is absolute-in, relative-out, and rejects traversal', () => {
+test('path conversion is relative-out and rejects traversal', () => {
   assert.equal(toGuestPath('/src/main.rs'), 'src/main.rs');
   assert.equal(toGuestPath('/'), '.');
-  assert.throws(() => toGuestPath('relative/path'), /must be absolute/);
+  // Relative input used to throw. It now resolves against the workspace root
+  // — see the dedicated test below for why that changed.
+  assert.equal(toGuestPath('relative/path'), 'relative/path');
   assert.throws(() => toGuestPath('/a/../../etc/passwd'), /cannot contain \.\./);
 });
 
@@ -400,4 +402,19 @@ test('the tool names Mastra generates for this workspace', async () => {
   const names = Object.keys(await createWorkspaceTools(workspace)).sort();
   console.log('    tools:', names.join(', '));
   assert.ok(names.length >= 5);
+});
+
+test('toGuestPath resolves relative paths against the workspace root, still refusing traversal', () => {
+  // Real gemma-4-E2B emits relative paths even when told not to; rejecting
+  // them cost the whole turn. "/" is the project root, so these are
+  // unambiguous.
+  assert.equal(toGuestPath('/README.md'), 'README.md');
+  assert.equal(toGuestPath('README.md'), 'README.md');
+  assert.equal(toGuestPath('./README.md'), 'README.md');
+  assert.equal(toGuestPath('src/main.js'), 'src/main.js');
+  assert.equal(toGuestPath('/'), '.');
+
+  // Safety is unchanged.
+  assert.throws(() => toGuestPath('../etc/passwd'), /cannot contain \.\./);
+  assert.throws(() => toGuestPath('/a/../../b'), /cannot contain \.\./);
 });

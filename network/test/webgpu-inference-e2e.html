@@ -1,0 +1,149 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Real WebGPU inference through the LiteRT provider</title>
+<pre id="log">idle</pre>
+<script type="module">
+// The one path the headless e2es cannot cover: ACTUAL WebGPU inference on real
+// model weights, driving the LiteRT provider and a Mastra agent loop.
+//
+// Headless Chrome exposes navigator.gpu but requestAdapter() returns null, so
+// this page is meant to be run in a real browser (the Browser pane / a normal
+// Chrome window) against a locally served model. It deliberately does NOT boot
+// v86: the guest bridge is already covered by the other e2es, and loading a
+// 2 GB model plus an emulator in one tab is a needless way to run out of
+// memory. The guest is stubbed; the MODEL is real.
+//
+// Progress is written to #log and to window.__result so an automation harness
+// can poll it.
+const logEl = document.querySelector('#log');
+const steps = [];
+const log = (m) => { steps.push(`${new Date().toISOString().slice(11, 19)} ${m}`); logEl.textContent = steps.join('\n'); };
+window.__steps = steps;
+window.__result = { state: 'idle' };
+
+const MODEL_URL = new URLSearchParams(location.search).get('model')
+  || '../../models/gemma-4-E2B-it-web.litertlm';
+
+function stubGuest(calls) {
+  return {
+    async execute(command) { calls.push(command); return '__V86AGENT_EXIT__0\ni686\n'; },
+    async read() { return 'herdr-v86: linux in a browser tab\n'; },
+    async list() { return 'regular file\tREADME.md\t34'; },
+    async write(path) { calls.push(`write:${path}`); return 'ok'; },
+    async delete() { return 'ok'; },
+    async grep() { return ''; },
+    async glob() { return ''; },
+    async test() { return 'ok'; },
+  };
+}
+
+window.__runRealInference = async () => {
+  const t = {};
+  const mark = (k, from) => { t[k] = Math.round(performance.now() - from); };
+  try {
+    window.__result = { state: 'running' };
+
+    const adapter = await navigator.gpu?.requestAdapter();
+    if (!adapter) throw new Error('no WebGPU adapter — run this in a real browser window');
+    log(`WebGPU adapter: ${adapter.info?.vendor ?? '?'} ${adapter.info?.architecture ?? ''}`);
+
+    log('importing the real LiteRtLmClient');
+    const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+    const client = new LiteRtLmClient();
+    client.addEventListener?.('activity', (e) => log(`  client: ${e.detail?.message ?? ''}`));
+
+    // initialize() is what imports the LiteRT-LM runtime and populates
+    // Engine/loadLiteRtLm; loadBundledModel() alone throws without it.
+    // autoLoad:false so we load the weights we were asked for, not whatever
+    // happens to be sitting in this origin's OPFS from a previous run.
+    log('initializing the LiteRT-LM runtime');
+    let from = performance.now();
+    await client.initialize({ autoLoad: false });
+    mark('runtimeInitMs', from);
+
+    log(`loading model weights: ${MODEL_URL}`);
+    from = performance.now();
+    await client.loadBundledModel(MODEL_URL);
+    mark('modelLoadMs', from);
+    const status = await client.status();
+    log(`model ready in ${t.modelLoadMs} ms — ${status.modelName}`);
+
+    // 1) Raw inference through the real client. Proves weights + WebGPU.
+    log('running raw inference…');
+    from = performance.now();
+    const raw = await client.chat({
+      messages: [{ role: 'user', content: 'Reply with exactly one word: hello' }],
+      max_tokens: 24,
+      temperature: 0,
+    });
+    mark('rawInferenceMs', from);
+    const rawText = raw?.choices?.[0]?.message?.content ?? '';
+    log(`raw inference ${t.rawInferenceMs} ms -> ${JSON.stringify(rawText).slice(0, 120)}`);
+
+    // 2) Through the AI SDK provider, which is the layer Mastra actually uses.
+    log('running through the LiteRT provider (AI SDK spec-v2)…');
+    const { createLiteRt } = await import('../../agent/src/litert-provider.js');
+    const model = createLiteRt({ client })(status.modelName || 'gemma');
+    from = performance.now();
+    const viaProvider = await model.doGenerate({
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'Reply with exactly one word: ready' }] }],
+    });
+    mark('providerMs', from);
+    const providerText = (viaProvider?.content ?? [])
+      .filter((part) => part.type === 'text').map((part) => part.text).join('');
+    log(`provider ${t.providerMs} ms -> ${JSON.stringify(providerText).slice(0, 120)}`);
+
+    // 3) The full Mastra agent loop on real inference, stubbed guest.
+    // The runtime is a page-level singleton, so a second client cannot be
+    // built to inspect this after the fact — record the exchange inline.
+    log('running the Mastra agent loop on real inference…');
+    const { createMastraVMAgent } = await import('../../agent/dist/mastra-agent.js');
+    const calls = [];
+    const transcript = [];
+    const realChat = client.chat.bind(client);
+    client.chat = async (body) => {
+      const response = await realChat(body);
+      const message = response?.choices?.[0]?.message ?? {};
+      transcript.push({
+        toolsAdvertised: Array.isArray(body?.tools) ? body.tools.length : 0,
+        lastPrompt: String(body?.messages?.[body.messages.length - 1]?.content ?? '').slice(0, 200),
+        replyContent: String(message.content ?? '').slice(0, 300),
+        replyToolCalls: message.tool_calls ? message.tool_calls.map((c) => c.function?.name) : null,
+      });
+      return response;
+    };
+    window.__client = client;
+    const vm = createMastraVMAgent({ guest: stubGuest(calls), llmClient: client, yolo: true });
+    const tools = await vm.listTools();
+    from = performance.now();
+    const agentText = await vm.run('Read README.md and tell me in one short sentence what this project is.');
+    mark('agentMs', from);
+    log(`agent ${t.agentMs} ms, ${calls.length} guest calls -> ${JSON.stringify(String(agentText).slice(0, 160))}`);
+
+    const checks = {
+      adapter: `${adapter.info?.vendor ?? '?'}/${adapter.info?.architecture ?? '?'}`,
+      modelName: status.modelName,
+      rawInferenceProducedText: rawText.trim().length > 0,
+      providerProducedText: providerText.trim().length > 0,
+      agentProducedText: String(agentText).trim().length > 0,
+      agentUsedTools: calls.length > 0,
+      toolCount: tools.length,
+      timingsMs: t,
+      rawText, providerText, agentText: String(agentText),
+      guestCalls: calls,
+      // What the model actually emitted when handed the tool protocol. If
+      // agentUsedTools is false this is the only thing that explains why.
+      transcript,
+    };
+    checks.ok = checks.rawInferenceProducedText && checks.providerProducedText && checks.agentProducedText;
+    log(`checks: ${JSON.stringify({ ...checks, rawText: undefined, providerText: undefined, agentText: undefined, guestCalls: undefined })}`);
+    window.__result = { state: 'done', ...checks };
+    return window.__result;
+  } catch (error) {
+    log(`FAILED: ${error?.message ?? error}`);
+    window.__result = { state: 'error', error: String(error?.stack || error) };
+    return window.__result;
+  }
+};
+log('ready — call window.__runRealInference()');
+</script>

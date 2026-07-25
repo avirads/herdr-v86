@@ -31,14 +31,26 @@ export function completionWithToolCall(completion) {
     return completion;
   }
   const call = value?.tool_call || value?.toolCall;
-  if (!call?.name || typeof call.arguments !== 'object' || Array.isArray(call.arguments)) return completion;
+  if (!call?.name) return completion;
+  // Real gemma-4-E2B output sometimes omits the arguments wrapper and puts the
+  // parameters straight on the call: {"tool_call":{"name":"x","path":"/a.md"}}.
+  // Bailing out here turned that into plain assistant text and the tool never
+  // ran, so treat the leftover keys as the arguments.
+  let callArguments = call.arguments;
+  if (typeof callArguments !== 'object' || callArguments === null || Array.isArray(callArguments)) {
+    const leftover = Object.fromEntries(
+      Object.entries(call).filter(([key]) => key !== 'name' && key !== 'arguments'),
+    );
+    if (!Object.keys(leftover).length) return completion;
+    callArguments = leftover;
+  }
   choice.message = {
     role: 'assistant',
     content: null,
     tool_calls: [{
       id: `call_${Date.now().toString(36)}`,
       type: 'function',
-      function: { name: call.name, arguments: JSON.stringify(call.arguments) },
+      function: { name: call.name, arguments: JSON.stringify(callArguments) },
     }],
   };
   choice.finish_reason = 'tool_calls';

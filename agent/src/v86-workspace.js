@@ -41,8 +41,18 @@ const STDERR_MARKER = '__V86_STDERR__';
 
 export function toGuestPath(path) {
   const value = String(path ?? '/').replace(/\\/g, '/');
-  if (!value.startsWith('/')) throw new Error(`workspace path must be absolute: ${value}`);
-  const relative = value.replace(/^\/+/, '') || '.';
+
+  // Relative paths resolve against the workspace root rather than throwing.
+  // The workspace has no working directory — "/" IS the project root — so
+  // "README.md" and "./README.md" can only mean "/README.md"; rejecting them
+  // discarded information we already had. Measured against real gemma-4-E2B:
+  // the model emits a relative path even when the system prompt explicitly
+  // demands an absolute one, then reads the rejection as "file not found" and
+  // stops, producing a confident wrong answer with zero tool effects.
+  // Traversal is still refused below, so this loosens ergonomics, not safety.
+  const rooted = value.startsWith('/') ? value : `/${value.replace(/^\.\/+/, '')}`;
+
+  const relative = rooted.replace(/^\/+/, '') || '.';
   if (relative.split('/').includes('..')) throw new Error('path cannot contain ..');
   return relative;
 }
