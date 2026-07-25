@@ -8,8 +8,10 @@
 
 import { Agent } from '@mastra/core/agent';
 import { Workspace, WORKSPACE_TOOLS, createWorkspaceTools } from '@mastra/core/workspace';
+import { taskWriteTool, taskUpdateTool } from '@mastra/core/tools';
 import { createLiteRt } from './litert-provider.js';
 import { V86Filesystem, V86Sandbox } from './v86-workspace.js';
+import { createVmTools } from './vm-tools.js';
 
 // V86GuestAgentClient defaults to a 30 s per-RPC timeout and serializes every
 // call through one queue. Time out just under that so a slow command surfaces
@@ -20,6 +22,7 @@ const SANDBOX_TIMEOUT_MS = 25_000;
 export function createMastraVMAgent({
   guest,
   llmClient,
+  browserClient = null,
   modelId = 'gemma-4-e2b',
   instructions = 'You are a coding agent working in /root/project on a 32-bit Linux VM running inside a browser tab.',
   approveAction = async () => false,
@@ -29,6 +32,13 @@ export function createMastraVMAgent({
   // on-device model has a 16k window. Measured ~2.9k tokens with all ten.
   enableLsp = false,
   enableDelete = false,
+  // Parity with the Deep Agents tier: the browser-backed vm* commands and the
+  // AutoBro tools. Off by default — they roughly double the system prompt, and
+  // the agent can already reach most of them via execute_command. Measure with
+  // listTools()/systemPromptCost() before enabling on a 16k-window model.
+  enableVmTools = false,
+  // Mastra's own planning tools, the equivalent of Deep Agents' write_todos.
+  enablePlanning = false,
 } = {}) {
   if (!guest) throw new Error('createMastraVMAgent requires the guest bridge');
   if (!llmClient?.chat) throw new Error('createMastraVMAgent requires an LLM client with chat()');
@@ -55,13 +65,33 @@ export function createMastraVMAgent({
     },
   });
 
+  const extraTools = {
+    ...(enableVmTools
+      ? createVmTools({
+          guest,
+          browserClient,
+          llmClient,
+          approveAction,
+          isYolo: () => yolo,
+          onActivity,
+        })
+      : {}),
+    ...(enablePlanning ? { taskWrite: taskWriteTool, taskUpdate: taskUpdateTool } : {}),
+  };
+
   const agent = new Agent({
     id: 'vm-agent-mastra',
     name: 'vm-agent-mastra',
     instructions,
     model: createLiteRt({ client: llmClient })(modelId),
     workspace,
+    ...(Object.keys(extraTools).length ? { tools: extraTools } : {}),
   });
+
+  const allToolNames = async () => {
+    await workspace.init();
+    return [...Object.keys(await createWorkspaceTools(workspace)), ...Object.keys(extraTools)];
+  };
 
   return {
     agent,
@@ -69,11 +99,22 @@ export function createMastraVMAgent({
     setYolo(value) {
       yolo = Boolean(value);
     },
-    async listTools() {
-      await workspace.init();
-      return Object.keys(await createWorkspaceTools(workspace));
+    listTools: allToolNames,
+    // Prompt budget is the live constraint on a 16k-window on-device model, so
+    // make it measurable rather than a guess. char/4 is a floor, not an
+    // estimate — real tokenisers run higher on JSON-ish schema text.
+    async systemPromptCost() {
+      const tools = await allToolNames();
+      const descriptions = await createWorkspaceTools(workspace);
+      const chars = [
+        instructions,
+        ...Object.values(descriptions).map(tool => `${tool.id ?? ''}${tool.description ?? ''}${JSON.stringify(tool.inputSchema ?? '')}`),
+        ...Object.values(extraTools).map(tool => `${tool.id ?? ''}${tool.description ?? ''}${JSON.stringify(tool.inputSchema ?? '')}`),
+      ].join('').length;
+      return { toolCount: tools.length, chars, approxTokens: Math.ceil(chars / 4) };
     },
     async run(task) {
+      extraTools.resetTurn?.();
       const result = await agent.generate(task);
       return result.text ?? result?.response?.text ?? '';
     },

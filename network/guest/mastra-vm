@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+[ "$#" -gt 0 ] || { echo 'usage: mastra TASK...' >&2; exit 2; }
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+printf '__V86RPC__\tAGENT_MASTRA\t%s\t%s\n' "$$-$(date +%s)" "$(b64 "$*")" > /dev/ttyS0
+echo '[mastra] submitted to the ready browser agent.'

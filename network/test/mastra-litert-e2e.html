@@ -1,0 +1,138 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mastra + real LiteRT client e2e</title>
+<pre id="serial"></pre>
+<pre id="log"></pre>
+<div id="screen_container"><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+// Real v86, real guest bridge, real Mastra bundle, and the REAL LiteRtLmClient.
+// Only the GPU engine is substituted: headless Chrome exposes navigator.gpu but
+// requestAdapter() returns null, so real weights cannot run here. Everything
+//
+// above the engine seam is the genuine client: message normalisation, session
+// handling and tool-call parsing. Assertions remain on GUEST SIDE EFFECTS.
+import { V86HostBridge } from '../browser/v86-host-bridge.js';
+import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+
+const logEl = document.querySelector('#log');
+const steps = [];
+const log = (message) => { steps.push(message); logEl.textContent = steps.join('\n'); };
+
+let serial = '';
+let started = false;
+let submitted = false;
+
+const report = (payload) =>
+  fetch('/__result', { method: 'POST', body: JSON.stringify({ ...payload, steps, serial: serial.slice(-4000) }) });
+
+setTimeout(() => { if (!submitted) report({ ok: false, error: 'timed out after 180s' }); }, 180_000);
+
+const compat = new URLSearchParams(location.search).get('compat') === '1';
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 512 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet loglevel=4${compat ? ' libata.force=pio4' : ''}`,
+  hda: { url: '../../vm-network-ext4.img', async: !compat, size: 100663296 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+
+const hostBridge = new V86HostBridge(emulator);
+hostBridge.setAgentHandler(async () => {});
+setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
+const guest = new V86GuestAgentClient(emulator, hostBridge);
+
+emulator.add_listener('serial0-output-byte', (byte) => {
+  serial = (serial + String.fromCharCode(byte)).slice(-100000);
+  document.querySelector('#serial').textContent = serial.slice(-4000);
+
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    started = true;
+    log('shell ready — seeding /root/project');
+    emulator.serial0_send(
+      "mkdir -p /root/project && cd /root/project && " +
+      "printf 'herdr-v86: linux in a browser tab\\n' > README.md && " +
+      "echo MASTRA_LITERT_SEEDED\n",
+    );
+  }
+
+  if (!submitted && /\r?\nMASTRA_LITERT_SEEDED\r?\n/.test(serial)) {
+    submitted = true;
+    run().catch((error) => report({ ok: false, error: String(error?.stack || error) }));
+  }
+});
+
+
+async function run() {
+  log('importing Mastra bundle + the real LiteRtLmClient');
+  const { createMastraVMAgent } = await import('../../agent/dist/mastra-agent.js');
+  const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+
+  // The genuine client, not a stand-in. Only `engine` — the WASM/WebGPU
+  // inference handle — is replaced, because headless has no GPU adapter.
+  const llmClient = new LiteRtLmClient();
+  let turn = 0;
+  const replies = [
+    '{"tool_call":{"name":"mastra_workspace_read_file","arguments":{"path":"/README.md"}}}',
+    '{"tool_call":{"name":"mastra_workspace_execute_command","arguments":{"command":"uname -m"}}}',
+    '{"tool_call":{"name":"mastra_workspace_write_file","arguments":{"path":"/NOTES.md","content":"arch checked\\n"}}}',
+    '{"final":"Read README, checked arch, wrote NOTES.md."}',
+  ];
+  const prompts = [];
+  llmClient.modelName = 'litert-e2e-stub';
+  llmClient.engine = {
+    async createConversation(options) {
+      return {
+        async sendMessage(text) {
+          prompts.push(String(text));
+          return { content: [{ text: replies[turn++] ?? '{"final":"done"}' }] };
+        },
+      };
+    },
+  };
+
+  // Prove we are exercising the real client, not bypassing it.
+  const status = await llmClient.status();
+  log(`client provider: ${status.provider}`);
+
+  const vm = createMastraVMAgent({ guest, llmClient, yolo: true });
+  const tools = await vm.listTools();
+  log(`workspace tools: ${tools.length}`);
+
+  const startedAt = performance.now();
+  const text = await vm.run('Read README.md, check the architecture, write NOTES.md.');
+  const elapsedMs = Math.round(performance.now() - startedAt);
+  log(`agent finished in ${elapsedMs} ms: ${text}`);
+
+  // --- guest side effects: the only evidence that counts --------------------
+  const notes = await guest.read('NOTES.md').catch((error) => `ERROR: ${error.message}`);
+  const unameProof = await guest.execute('uname -m');
+
+  const checks = {
+    // Confirms the real LiteRtLmClient was in the loop, not a scripted object.
+    realClientUsed: status.provider === 'page-local-litert-lm',
+    // The real client's _normalize() built prompts and reached the engine.
+    clientNormalisedPrompts: prompts.length >= 2,
+    // The real client's tool-call parsing turned JSON into tool calls that ran.
+    toolCallsParsedByRealClient: /i[3-6]86/.test(unameProof) && notes === 'arch checked\n',
+    modelTurnsUsed: turn,
+    guestStillResponsive: /i[3-6]86/.test(unameProof),
+  };
+  const ok =
+    checks.realClientUsed &&
+    checks.clientNormalisedPrompts &&
+    checks.toolCallsParsedByRealClient &&
+    checks.modelTurnsUsed === 4 &&
+    checks.guestStillResponsive;
+
+  log(`checks: ${JSON.stringify(checks)}`);
+  await guest.delete('NOTES.md').catch(() => {});
+  await report({ ok, checks, elapsedMs, tools, text, notes });
+}
+</script>

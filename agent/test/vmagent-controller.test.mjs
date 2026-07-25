@@ -98,3 +98,68 @@ test('vmagent reports when the agent returns empty output rather than showing no
   await controller.handle('run', 'hi');
   assert.match(outputs.at(-1), /returned no output/i);
 });
+
+test('mastra runs as a third tier: lazy harness, reused across runs, YOLO propagated', async () => {
+  const outputs = [];
+  const prompts = [];
+  let created = 0;
+  let yoloSeen = null;
+  const controller = new VmAgentController({
+    createAgent: async () => ({ run: async () => ({ output: 'deepagents' }) }),
+    createMastraAgent: async options => {
+      created += 1;
+      return {
+        run: async task => { prompts.push(task); return `mastra: ${task}`; },
+        setYolo(value) { yoloSeen = value; },
+      };
+    },
+    getLlmClient: () => ({ status: async () => ({ modelName: 'test-model' }) }),
+    getGuest: () => ({}),
+    approveAction: async () => true,
+    onOutput: output => outputs.push(output),
+  });
+
+  // Not constructed until first use — the bundle must stay unimported.
+  assert.equal(created, 0);
+
+  await controller.handle('mastra', 'inspect the project');
+  assert.equal(created, 1);
+  assert.deepEqual(prompts, ['inspect the project']);
+  assert.equal(outputs.at(-1), 'mastra: inspect the project');
+
+  await controller.handle('mastra', 'second task');
+  assert.equal(created, 1, 'harness is reused, not rebuilt');
+
+  // One YOLO setting governs every tier.
+  await controller.handle('yolo', 'off');
+  assert.equal(yoloSeen, false);
+
+  // Deep Agents is untouched by any of this.
+  await controller.handle('run', 'deep task');
+  assert.equal(outputs.at(-1), 'deepagents');
+});
+
+test('mastra reports a missing model rather than failing silently, and is optional', async () => {
+  const outputs = [];
+  const noModel = new VmAgentController({
+    createAgent: async () => ({ run: async () => ({ output: 'x' }) }),
+    createMastraAgent: async () => ({ run: async () => 'should not run' }),
+    getLlmClient: () => ({ status: async () => ({ modelName: '', webgpu: true }) }),
+    getGuest: () => ({}),
+    approveAction: async () => true,
+    onOutput: output => outputs.push(output),
+  });
+  await noModel.handle('mastra', 'hi');
+  assert.match(outputs.at(-1), /no model loaded/i);
+
+  // A build without the tier says so instead of throwing.
+  const absent = new VmAgentController({
+    createAgent: async () => ({ run: async () => ({ output: 'x' }) }),
+    getLlmClient: () => ({ status: async () => ({ modelName: 'm' }) }),
+    getGuest: () => ({}),
+    approveAction: async () => true,
+    onOutput: output => outputs.push(output),
+  });
+  await absent.handle('mastra', 'hi');
+  assert.match(outputs.at(-1), /not available in this build/i);
+});
