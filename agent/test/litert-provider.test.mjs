@@ -326,3 +326,52 @@ test('a client error becomes an error part plus a finish', async () => {
   assert.equal(parts.find(p => p.type === 'error').error.message, 'no model loaded');
   assert.equal(parts.at(-1).finishReason, 'error');
 });
+
+test('extractToolCall accepts a flattened call, as real gemma-4-E2B emits', () => {
+  // Observed live: the arguments wrapper is dropped and parameters sit on the
+  // call itself. Previously the leftover keys were discarded, the tool ran
+  // with {}, the schema rejected it, and the model reported the file missing.
+  assert.deepEqual(
+    extractToolCall({ tool_call: { name: 'mastra_workspace_read_file', path: '/README.md' } }),
+    { name: 'mastra_workspace_read_file', arguments: { path: '/README.md' } },
+  );
+  assert.deepEqual(
+    extractToolCall({ tool_call: { name: 'x', command: 'uname -m', timeout: 5 } }),
+    { name: 'x', arguments: { command: 'uname -m', timeout: 5 } },
+  );
+  // The documented shape must keep working unchanged.
+  assert.deepEqual(
+    extractToolCall({ tool_call: { name: 'x', arguments: { path: '/a' } } }),
+    { name: 'x', arguments: { path: '/a' } },
+  );
+  // A bare call with no parameters is still a valid call, not a mis-parse.
+  assert.deepEqual(extractToolCall({ tool_call: { name: 'x' } }), { name: 'x', arguments: {} });
+  // Non-calls stay non-calls.
+  assert.equal(extractToolCall({ final: 'done' }), undefined);
+});
+
+test('the client turns a flattened tool call into a real OpenAI tool_calls message', async () => {
+  const { LiteRtLmClient } = await import('../../network/browser/litert-lm-client.js');
+  const client = new LiteRtLmClient();
+  client.modelName = 'test';
+  // Drive the real _chat path with the engine seam replaced.
+  const replies = [
+    '{"tool_call":{"name":"mastra_workspace_read_file","path":"/README.md"}}',
+    '{"tool_call":{"name":"ok","arguments":{"a":1}}}',
+    '{"final":"done"}',
+  ];
+  let turn = 0;
+  client.engine = { async createConversation() { return { async sendMessage() { return { content: [{ text: replies[turn++] }] } ; } }; } };
+
+  const flattened = await client.chat({ messages: [{ role: 'user', content: 'x' }] });
+  const call = flattened?.choices?.[0]?.message?.tool_calls?.[0];
+  assert.ok(call, 'flattened call must still become a tool call');
+  assert.equal(call.function.name, 'mastra_workspace_read_file');
+  assert.deepEqual(JSON.parse(call.function.arguments), { path: '/README.md' });
+
+  const wrapped = await client.chat({ messages: [{ role: 'user', content: 'x' }] });
+  assert.deepEqual(JSON.parse(wrapped.choices[0].message.tool_calls[0].function.arguments), { a: 1 });
+
+  const final = await client.chat({ messages: [{ role: 'user', content: 'x' }] });
+  assert.equal(final.choices[0].message.tool_calls, undefined, 'a final answer is not a tool call');
+});

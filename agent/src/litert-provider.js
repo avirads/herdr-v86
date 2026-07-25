@@ -147,6 +147,9 @@ function normalizeArguments(value) {
   return typeof value === 'object' ? value : { value };
 }
 
+const TOOL_NAME_KEYS = ['name', 'tool', 'tool_name', 'toolName'];
+const TOOL_ARG_KEYS = ['arguments', 'args', 'parameters', 'input'];
+
 // Small models reach for whichever call shape they saw most in training.
 // Accept all of them rather than losing the turn to a schema mismatch.
 export function extractToolCall(value) {
@@ -159,7 +162,24 @@ export function extractToolCall(value) {
     candidate?.toolName ??
     (typeof value.tool === 'string' ? value.tool : undefined);
   if (typeof name !== 'string' || !name) return undefined;
-  const args = candidate?.arguments ?? candidate?.args ?? candidate?.parameters ?? candidate?.input;
+
+  let args = TOOL_ARG_KEYS.map((key) => candidate?.[key]).find((found) => found !== undefined);
+
+  // Observed on real gemma-4-E2B output: the arguments wrapper is dropped and
+  // the parameters sit directly on the call —
+  //   {"tool_call":{"name":"read_file","path":"/README.md"}}
+  // Without this the leftover keys were discarded and the tool ran with {},
+  // which the schema rejects. The model then reports the file as missing and
+  // stops: a confident wrong answer after zero tool effects.
+  if (args === undefined && candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+    const leftover = Object.fromEntries(
+      Object.entries(candidate).filter(
+        ([key]) => !TOOL_NAME_KEYS.includes(key) && !TOOL_ARG_KEYS.includes(key),
+      ),
+    );
+    if (Object.keys(leftover).length) args = leftover;
+  }
+
   return { name, arguments: normalizeArguments(args) };
 }
 

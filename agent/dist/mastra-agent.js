@@ -256055,12 +256055,22 @@ function normalizeArguments(value) {
   if (Array.isArray(value)) return { value };
   return typeof value === "object" ? value : { value };
 }
+var TOOL_NAME_KEYS = ["name", "tool", "tool_name", "toolName"];
+var TOOL_ARG_KEYS = ["arguments", "args", "parameters", "input"];
 function extractToolCall(value) {
   if (!value || typeof value !== "object") return void 0;
   const candidate = value.tool_call ?? value.toolCall ?? value.function ?? value;
   const name30 = candidate?.name ?? candidate?.tool ?? candidate?.tool_name ?? candidate?.toolName ?? (typeof value.tool === "string" ? value.tool : void 0);
   if (typeof name30 !== "string" || !name30) return void 0;
-  const args = candidate?.arguments ?? candidate?.args ?? candidate?.parameters ?? candidate?.input;
+  let args = TOOL_ARG_KEYS.map((key) => candidate?.[key]).find((found) => found !== void 0);
+  if (args === void 0 && candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+    const leftover = Object.fromEntries(
+      Object.entries(candidate).filter(
+        ([key]) => !TOOL_NAME_KEYS.includes(key) && !TOOL_ARG_KEYS.includes(key)
+      )
+    );
+    if (Object.keys(leftover).length) args = leftover;
+  }
   return { name: name30, arguments: normalizeArguments(args) };
 }
 var callCounter = 0;
@@ -256275,8 +256285,8 @@ var EXIT_MARKER = /^__V86AGENT_EXIT__(\d+)\n?/;
 var STDERR_MARKER = "__V86_STDERR__";
 function toGuestPath(path5) {
   const value = String(path5 ?? "/").replace(/\\/g, "/");
-  if (!value.startsWith("/")) throw new Error(`workspace path must be absolute: ${value}`);
-  const relative4 = value.replace(/^\/+/, "") || ".";
+  const rooted = value.startsWith("/") ? value : `/${value.replace(/^\.\/+/, "")}`;
+  const relative4 = rooted.replace(/^\/+/, "") || ".";
   if (relative4.split("/").includes("..")) throw new Error("path cannot contain ..");
   return relative4;
 }
@@ -256993,7 +257003,19 @@ function createMastraVMAgent({
   llmClient,
   browserClient = null,
   modelId = "gemma-4-e2b",
-  instructions = "You are a coding agent working in /root/project on a 32-bit Linux VM running inside a browser tab.",
+  // Real-inference testing showed the default matters. Given only "you work in
+  // /root/project", the on-device model calls read_file("README.md"), the
+  // workspace rejects it with "workspace path must be absolute", and the model
+  // concludes the file does not exist and stops — a confident wrong answer
+  // after zero guest calls. Stating the path rule up front is what makes the
+  // tier usable with a 2B model. The batching line is here for the same
+  // reason: every tool call is one serial round-trip on an emulated CPU.
+  instructions = [
+    "You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.",
+    'Workspace paths are ABSOLUTE and rooted at the project directory: use "/README.md", never "README.md" or "./README.md".',
+    "The shell runs BusyBox sh, so prefer portable POSIX commands over bash-isms or GNU-only flags.",
+    "Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read."
+  ].join("\n"),
   approveAction = async () => false,
   yolo = true,
   onActivity = () => {
