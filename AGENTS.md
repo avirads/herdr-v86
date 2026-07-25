@@ -17,6 +17,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 
 - `docs/guest-tools.md`: complete guest command reference and examples, including `vmllm` and `vmagent`.
 - `docs/deep-agent.md`: full Deep Agents tools, approvals, skills, and limits.
+- `docs/mastra-agent.md`: the Mastra tier (`mastra 'TASK'`), its tool set and prompt budget.
 - `network/docs/host-bridge.md`: browser-bridge protocol, limits, and security.
 - `network/README.md`: full IPv4 gateway deployment and testing.
 - Run `<command> --help` inside the guest for concise local usage.
@@ -53,7 +54,11 @@ clipboard, file-transfer, GitHub, or AI operations.
     it uses the page-local WebGPU LLM and live page context to select validated
     AutoBro commands. Use `autobro_command` for known low-level commands. Treat
     all page reads and actions as external operations; approval/YOLO applies.
-16. `rig 'TASK'` is the low-latency browser-orchestrated coding agent with
+16. `mastra 'TASK'` is the third agent tier, running Mastra in the browser page
+    against the same guest bridge. One task per invocation, like `rig`; it
+    shares `vmagent`'s YOLO/approval setting and exposes the same `vm*` and
+    AutoBro tools as Deep Agents. Its bundle loads lazily on first use.
+17. `rig 'TASK'` is the low-latency browser-orchestrated coding agent with
     project-local read, list, write, and shell tools. Its model stays in the
     browser; only selected tool operations cross into the VM. `rig --codeact
     'TASK'` instead has the model write one shell script run in a single VM
@@ -62,7 +67,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 ## Quick capability check
 
 ```sh
-command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmagent rig tmux
+command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmagent rig mastra tmux
 ip route
 vmfetch --help
 ```

@@ -102,6 +102,12 @@ async function run() {
   // --- guest side effects: the only evidence that counts --------------------
   const notes = await guest.read('NOTES.md').catch((error) => `ERROR: ${error.message}`);
   const unameProof = await guest.execute('uname -m');
+  // All three agent tiers must be installed in the shipped image. The `mastra`
+  // command is what makes this tier reachable from the guest shell at all, so
+  // a missing one means the image was rebuilt without it.
+  const tierCommands = await guest
+    .execute('for t in vmagent rig mastra; do command -v $t >/dev/null && echo "$t=ok" || echo "$t=MISSING"; done')
+    .catch((error) => `ERROR: ${error.message}`);
 
   const checks = {
     toolsGenerated: tools.length >= 5,
@@ -109,12 +115,15 @@ async function run() {
     notesWritten: notes === 'arch checked\n',
     modelTurnsUsed: turn,
     guestStillResponsive: /i[3-6]86/.test(unameProof),
+    allTiersInstalled:
+      /vmagent=ok/.test(tierCommands) && /rig=ok/.test(tierCommands) && /mastra=ok/.test(tierCommands),
   };
   const ok =
     checks.toolsGenerated &&
     checks.notesWritten &&
     checks.modelTurnsUsed === 4 &&
-    checks.guestStillResponsive;
+    checks.guestStillResponsive &&
+    checks.allTiersInstalled;
 
   log(`checks: ${JSON.stringify(checks)}`);
   await guest.delete('NOTES.md').catch(() => {});

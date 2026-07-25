@@ -255953,6 +255953,11 @@ init_globals();
 init_chunk_YU5XS4H4();
 init_chunk_TY5V5RIZ();
 
+// node_modules/@mastra/core/dist/tools/index.js
+init_globals();
+init_chunk_YU5XS4H4();
+init_chunk_33NALIO3();
+
 // src/litert-provider.js
 init_globals();
 var DEFAULT_MODEL_ID = "litert-lm";
@@ -256655,12 +256660,338 @@ var V86Sandbox = class extends MastraSandbox {
   }
 };
 
+// src/vm-tools.js
+init_globals();
+init_zod();
+function shellQuote3(value) {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+function commandResult(response) {
+  const match = String(response).match(/^__V86AGENT_EXIT__(\d+)\n?/);
+  const output = match ? String(response).slice(match[0].length) : String(response);
+  if (match && Number(match[1]) !== 0) throw new Error(`guest command exited ${match[1]}: ${output}`);
+  return output;
+}
+function coerceStringBody(value) {
+  if (value == null || typeof value === "string") return value;
+  if (typeof value === "object") return Object.keys(value).length ? JSON.stringify(value) : void 0;
+  return value;
+}
+var INTERACTIVE_SITE = /^https?:\/\/(?:www\.)?(?:google\.[^/]+|bing\.com|duckduckgo\.com)(?:\/|$)/i;
+function createVmTools({
+  guest,
+  browserClient = null,
+  llmClient = null,
+  approveAction = async () => false,
+  isYolo = () => false,
+  onActivity = () => {
+  }
+} = {}) {
+  if (!guest) throw new Error("createVmTools requires the guest bridge");
+  const approve = async (toolName, detail) => {
+    onActivity({ tool: toolName, detail, approval: true });
+    if (isYolo()) return true;
+    return Boolean(await approveAction(toolName, detail));
+  };
+  const approvedCommand = async (toolName, detail, command) => {
+    if (!await approve(toolName, detail)) return "Operation rejected by user.";
+    try {
+      return commandResult(await guest.execute(command));
+    } catch (error51) {
+      return `Error: ${error51.message}`;
+    }
+  };
+  const openWithAutoBro = async (url2, reason) => {
+    if (!browserClient) return `Error: ${reason}. AutoBro is not connected.`;
+    try {
+      const tab = await browserClient.command("newTab", { url: url2 }, 12e4);
+      await browserClient.command("waitForLoad", { tabId: tab.tabId, timeout: 20 }, 3e4).catch(() => void 0);
+      const page = await browserClient.command("pageInfo", { tabId: tab.tabId }, 3e4).catch(() => tab);
+      return JSON.stringify({ switchedProvider: "autobro", reason, tab, page });
+    } catch (error51) {
+      return `Error: ${reason}; AutoBro fallback also failed: ${error51.message}`;
+    }
+  };
+  const tools = {};
+  tools.vmfetch = createTool({
+    id: "vmfetch",
+    description: "Fetch a CORS-enabled HTTP API/resource when the guest has no route. Cannot operate interactive websites, scrape Google Search, bypass CORS, or automate a browser. HTTPS/localhost only; 16 MiB limit. Requires approval.",
+    inputSchema: external_exports.object({
+      url: external_exports.string(),
+      output: external_exports.string().default("-"),
+      method: external_exports.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET"),
+      headers: external_exports.array(external_exports.string()).default([]),
+      data: external_exports.union([external_exports.string(), external_exports.record(external_exports.string(), external_exports.unknown())]).optional()
+    }),
+    execute: async ({ url: url2, output = "-", method = "GET", headers = [], data: rawData }) => {
+      const data = coerceStringBody(rawData);
+      const detail = { url: url2, output, method, headers, hasBody: data != null };
+      if (!await approve("vmfetch", detail)) return "Operation rejected by user.";
+      if (INTERACTIVE_SITE.test(url2)) return await openWithAutoBro(url2, "interactive search sites cannot be fetched through CORS");
+      const command = [
+        "vmfetch",
+        "-o",
+        shellQuote3(output),
+        "-X",
+        shellQuote3(method),
+        ...headers.flatMap((header) => ["-H", shellQuote3(header)]),
+        ...data == null ? [] : ["-d", shellQuote3(data)],
+        shellQuote3(url2)
+      ].join(" ");
+      try {
+        return commandResult(await guest.execute(command));
+      } catch (error51) {
+        if (method === "GET") return await openWithAutoBro(url2, `vmfetch failed: ${error51.message}`);
+        return `Error: ${error51.message}; automatic browser fallback is disabled for non-GET requests`;
+      }
+    }
+  });
+  tools.vmgithub = createTool({
+    id: "vmgithub",
+    description: "Read GitHub metadata/API or download a repository archive through browser fetch. Not full Git; CORS/rate limits apply. Requires approval.",
+    inputSchema: external_exports.object({
+      action: external_exports.enum(["repo", "api", "archive"]),
+      repository: external_exports.string().default(""),
+      path: external_exports.string().default(""),
+      ref: external_exports.string().default("HEAD"),
+      output: external_exports.string().default("source.tar.gz")
+    }),
+    execute: async ({ action, repository = "", path: path5 = "", ref = "HEAD", output = "source.tar.gz" }) => {
+      let command;
+      if (action === "repo") command = `vmgithub repo ${shellQuote3(repository)}`;
+      else if (action === "api") command = `vmgithub api ${shellQuote3(path5)}`;
+      else command = `vmgithub archive ${shellQuote3(repository)} ${shellQuote3(ref)} ${shellQuote3(output)}`;
+      const result = await approvedCommand("vmgithub", { action, repository, path: path5, ref, output }, command);
+      if (String(result).startsWith("Error:") && browserClient && action !== "api") {
+        return await openWithAutoBro(`https://github.com/${repository}`, `vmgithub ${action} failed`);
+      }
+      return result;
+    }
+  });
+  tools.vmclip = createTool({
+    id: "vmclip",
+    description: "Read or write the system clipboard through the browser. Browser permission or a user gesture may be required. Requires approval.",
+    inputSchema: external_exports.object({ action: external_exports.enum(["read", "write"]), text: external_exports.string().optional() }),
+    execute: async ({ action, text: text10 }) => {
+      const command = action === "read" ? "vmclip read" : `printf %s ${shellQuote3(text10 || "")} | vmclip write`;
+      const result = await approvedCommand("vmclip", { action, textLength: text10?.length || 0 }, command);
+      if (String(result).startsWith("Error:") && browserClient && action === "write") {
+        try {
+          return JSON.stringify({ switchedProvider: "autobro", reason: result, result: await browserClient.command("typeText", { text: text10 || "" }, 3e4) });
+        } catch (error51) {
+          return `${result}; AutoBro typing fallback also failed: ${error51.message}`;
+        }
+      }
+      return result;
+    }
+  });
+  tools.vmexport = createTool({
+    id: "vmexport",
+    description: "Download one guest file through the browser, maximum 8 MiB. Requires approval.",
+    inputSchema: external_exports.object({ path: external_exports.string() }),
+    execute: async ({ path: path5 }) => approvedCommand("vmexport", { path: path5 }, `vmexport ${shellQuote3(path5)}`)
+  });
+  tools.vmai = createTool({
+    id: "vmai",
+    description: "Call an OpenAI-compatible Responses API using the guest OPENAI_API_KEY and browser fetch. Never exposes the key to the model. Requires approval.",
+    inputSchema: external_exports.object({ prompt: external_exports.string(), model: external_exports.string().optional(), baseUrl: external_exports.string().optional() }),
+    execute: async ({ prompt, model, baseUrl }) => {
+      const environment = `${model ? `OPENAI_MODEL=${shellQuote3(model)} ` : ""}${baseUrl ? `OPENAI_BASE_URL=${shellQuote3(baseUrl)} ` : ""}`;
+      return approvedCommand("vmai", { model, baseUrl, promptLength: prompt.length }, `${environment}vmai ${shellQuote3(prompt)}`);
+    }
+  });
+  tools.vmllm_info = createTool({
+    id: "vmllm_info",
+    description: "Inspect the page-local LiteRT-LM status or cached model list. Chat is intentionally excluded to avoid recursive inference.",
+    inputSchema: external_exports.object({ operation: external_exports.enum(["status", "models"]) }),
+    execute: async ({ operation }) => {
+      try {
+        return commandResult(await guest.execute(`vmllm ${operation}`));
+      } catch (error51) {
+        return `Error: ${error51.message}`;
+      }
+    }
+  });
+  if (!browserClient) return tools;
+  let currentExecution = null;
+  const AUTOBRO_COMMANDS = /* @__PURE__ */ new Set([
+    "pageInfo",
+    "inventoryCurrentPage",
+    "visibleActions",
+    "relatedActions",
+    "extractGrids",
+    "findSearchAction",
+    "fillInput",
+    "setSelect",
+    "elementState",
+    "dispatchKey",
+    "clickAtXY",
+    "typeText",
+    "pressKey",
+    "scroll",
+    "waitForElement",
+    "waitForLoad",
+    "waitNetworkIdle",
+    "gotoUrl",
+    "currentTab",
+    "newTab",
+    "gwClick"
+  ]);
+  tools.browser_search = createTool({
+    id: "browser_search",
+    description: "Search Google, Bing, or DuckDuckGo in a real AutoBro-controlled Chrome tab. Use this \u2014 not vmfetch \u2014 when asked to search the web. Requires approval unless YOLO is active.",
+    inputSchema: external_exports.object({ query: external_exports.string(), engine: external_exports.enum(["google", "bing", "duckduckgo"]).default("google") }),
+    execute: async ({ query, engine = "google" }) => {
+      if (currentExecution) return `AUTOBRO_EXECUTION_COMPLETE
+${currentExecution.text}`;
+      const base = engine === "bing" ? "https://www.bing.com/search?q=" : engine === "duckduckgo" ? "https://duckduckgo.com/?q=" : "https://www.google.com/search?q=";
+      const url2 = base + encodeURIComponent(query);
+      if (!await approve("browser_search", { engine, query, url: url2 })) return "Browser search rejected by user.";
+      try {
+        const tab = await browserClient.command("newTab", { url: url2 }, 12e4);
+        await browserClient.command("waitForLoad", { tabId: tab.tabId, timeout: 20 }, 3e4).catch(() => void 0);
+        const page = await browserClient.command("pageInfo", { tabId: tab.tabId }, 3e4).catch(() => tab);
+        const text10 = [
+          "AutoBro task completed.",
+          `Search: ${query}`,
+          `Engine: ${engine}`,
+          `Final page: ${page?.title || "(untitled)"}${page?.url ? ` \u2014 ${page.url}` : ""}`
+        ].join("\n");
+        currentExecution = { text: text10 };
+        return `AUTOBRO_EXECUTION_COMPLETE
+${text10}`;
+      } catch (error51) {
+        return `Browser search error: ${error51.message}`;
+      }
+    }
+  });
+  tools.autobro_command = createTool({
+    id: "autobro_command",
+    description: "Control the user-authorized Chrome browser through AutoBro bridge-v3 with a known low-level command (gotoUrl, newTab, pageInfo, fillInput, pressKey, clickAtXY, scroll, waitForLoad, ...). Pass command fields in parameters. Requires approval unless YOLO is active.",
+    inputSchema: external_exports.object({ command: external_exports.string(), parameters: external_exports.record(external_exports.string(), external_exports.unknown()).default({}) }),
+    execute: async ({ command, parameters = {} }) => {
+      if (currentExecution) return `AUTOBRO_EXECUTION_COMPLETE
+A browser task already ran during this turn.
+${currentExecution.text}`;
+      const fallbackUrl = ["gotoUrl", "newTab"].includes(command) ? parameters?.url : null;
+      const canFetchFallback = fallbackUrl && /^https:\/\//i.test(fallbackUrl);
+      if (!await approve("autobro_command", { command, parameters })) return "Browser operation rejected by user.";
+      let result;
+      try {
+        result = await browserClient.command(command, parameters, 12e4);
+      } catch (error51) {
+        if (canFetchFallback) {
+          try {
+            const raw = commandResult(await guest.execute(`vmfetch -o - ${shellQuote3(fallbackUrl)}`));
+            return JSON.stringify({ switchedProvider: "vmfetch", reason: `AutoBro ${command} failed: ${error51.message}`, content: raw });
+          } catch (fetchError) {
+            return `AutoBro error: ${error51.message}; vmfetch fallback also failed: ${fetchError.message}`;
+          }
+        }
+        return `AutoBro error: ${error51.message}; no equivalent vm* fallback exists for ${command}`;
+      }
+      if (command === "captureScreenshot" && result?.data) {
+        return JSON.stringify({ ...result, data: "<omitted from text context>", byteLength: Math.ceil(result.data.length * 3 / 4) });
+      }
+      const output = typeof result === "string" ? result : JSON.stringify(result);
+      return output.length > 6e4 ? `${output.slice(0, 6e4)}
+[AutoBro result truncated]` : output;
+    }
+  });
+  if (llmClient?.chat) {
+    tools.autobro_automate = createTool({
+      id: "autobro_automate",
+      description: "Preferred tool for natural-language browser tasks when AutoBro is connected. Gives the live page, its exact visible controls and relevant skills to the page-local model, validates the resulting command sequence, then executes it. Use autobro_command only for an already-known low-level command.",
+      inputSchema: external_exports.object({
+        instruction: external_exports.string().min(1).optional(),
+        command: external_exports.string().optional(),
+        parameters: external_exports.record(external_exports.string(), external_exports.unknown()).optional()
+      }),
+      execute: async (args) => {
+        const instruction = typeof args.instruction === "string" && args.instruction ? args.instruction : [args.command, args.parameters?.url || args.parameters?.query || args.parameters?.text].filter(Boolean).join(" ");
+        if (!instruction) return "autobro_automate needs an instruction.";
+        if (currentExecution) {
+          return `AUTOBRO_EXECUTION_COMPLETE
+A browser automation sequence has already run during this turn. Do not run another browser tool.
+${currentExecution.text}`;
+        }
+        if (!await approve("autobro_automate", { instruction })) return "Browser automation rejected by user.";
+        const page = await browserClient.command("inventoryCurrentPage", {}, 3e4).catch(() => browserClient.command("pageInfo", {}, 3e4).catch(() => ({})));
+        const relatedActions = await browserClient.command("relatedActions", { args: [instruction, 12] }, 3e4).catch(() => []);
+        const skills = await browserClient.command("skills", { q: instruction, limit: 2, maxChars: 1200 }, 3e4).catch(() => []);
+        const compactPage = {
+          url: page?.url,
+          title: page?.title || page?.pageTitle,
+          controls: (page?.controls || []).slice(0, 30).map(({ tag, type, id, name: name30, label, disabled, readonly: readonly2 }) => ({ tag, type, id, name: name30, label, disabled, readonly: readonly2 })),
+          actions: (page?.actions || []).slice(0, 20).map(({ id, text: text11, tag, dataGwClick }) => ({ id, text: text11, tag, dataGwClick })),
+          relatedActions: (relatedActions || []).slice(0, 12)
+        };
+        const skillContext = (Array.isArray(skills) ? skills : skills?.skills || []).slice(0, 2).map((skill) => ({ path: skill.path, content: String(skill.content || "").slice(0, 1200) }));
+        const completion = await llmClient.chat({
+          model: llmClient.modelName,
+          temperature: 0,
+          max_tokens: 1024,
+          chat_template_kwargs: { enable_thinking: false },
+          messages: [
+            { role: "system", content: 'Convert the browser task into the smallest safe AutoBro command sequence. Return only JSON: {"steps":[{"command":"commandName","args":[],"tabId":1}]}. Use exact selectors and action IDs from page context; never invent selectors.' },
+            { role: "user", content: `Task: ${instruction}
+Allowed commands: ${[...AUTOBRO_COMMANDS].join(", ")}
+Current page: ${JSON.stringify(compactPage)}
+Relevant skills: ${JSON.stringify(skillContext)}` }
+          ]
+        });
+        const raw = String(completion?.choices?.[0]?.message?.content ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+        let plan;
+        try {
+          plan = JSON.parse(raw);
+        } catch {
+          const start = raw.indexOf("{");
+          const end = raw.lastIndexOf("}");
+          plan = start >= 0 && end > start ? JSON.parse(raw.slice(start, end + 1)) : {};
+        }
+        let steps = Array.isArray(plan?.steps) ? plan.steps : [];
+        if (!steps.length || steps.length > 12) throw new Error("planner returned no usable AutoBro steps");
+        const signatures = steps.map((step) => JSON.stringify({ command: step?.command, args: step?.args || [], tabId: step?.tabId || null }));
+        for (let period = 1; period <= Math.floor(steps.length / 2); period += 1) {
+          if (steps.length % period === 0 && signatures.every((signature, index2) => signature === signatures[index2 % period])) {
+            steps = steps.slice(0, period);
+            break;
+          }
+        }
+        const results = [];
+        for (const step of steps) {
+          if (!step || !AUTOBRO_COMMANDS.has(step.command)) throw new Error(`planner selected unsupported AutoBro command: ${step?.command || "<missing>"}`);
+          if (step.args != null && !Array.isArray(step.args)) throw new Error(`AutoBro ${step.command} args must be an array`);
+          const parameters = { ...step.args?.length ? { args: step.args } : {}, ...step.tabId ? { tabId: step.tabId } : {} };
+          results.push({ command: step.command, result: await browserClient.command(step.command, parameters, 12e4) });
+        }
+        const finalPage = await browserClient.command("pageInfo", {}, 3e4).catch(() => null);
+        const stepLines = results.map(({ command, result }, index2) => `${index2 + 1}. ${command}: ${typeof result === "string" ? result : JSON.stringify(result)}`);
+        const pageLine = finalPage ? `Final page: ${finalPage.title || finalPage.pageTitle || "(untitled)"}${finalPage.url ? ` \u2014 ${finalPage.url}` : ""}` : "Final page: unavailable";
+        const text10 = ["AutoBro task completed.", `Task: ${instruction}`, ...stepLines, pageLine].join("\n");
+        currentExecution = { text: text10 };
+        return `AUTOBRO_EXECUTION_COMPLETE
+The browser task ran exactly once. Report its results directly.
+${text10}`;
+      }
+    });
+  }
+  Object.defineProperty(tools, "resetTurn", {
+    value: () => {
+      currentExecution = null;
+    },
+    enumerable: false
+  });
+  return tools;
+}
+
 // src/mastra-browser.js
 var GUEST_RPC_TIMEOUT_MS = 3e4;
 var SANDBOX_TIMEOUT_MS = 25e3;
 function createMastraVMAgent({
   guest,
   llmClient,
+  browserClient = null,
   modelId = "gemma-4-e2b",
   instructions = "You are a coding agent working in /root/project on a 32-bit Linux VM running inside a browser tab.",
   approveAction = async () => false,
@@ -256670,7 +257001,14 @@ function createMastraVMAgent({
   // Trimmed by default: every enabled tool costs system-prompt tokens, and the
   // on-device model has a 16k window. Measured ~2.9k tokens with all ten.
   enableLsp = false,
-  enableDelete = false
+  enableDelete = false,
+  // Parity with the Deep Agents tier: the browser-backed vm* commands and the
+  // AutoBro tools. Off by default — they roughly double the system prompt, and
+  // the agent can already reach most of them via execute_command. Measure with
+  // listTools()/systemPromptCost() before enabling on a 16k-window model.
+  enableVmTools = false,
+  // Mastra's own planning tools, the equivalent of Deep Agents' write_todos.
+  enablePlanning = false
 } = {}) {
   if (!guest) throw new Error("createMastraVMAgent requires the guest bridge");
   if (!llmClient?.chat) throw new Error("createMastraVMAgent requires an LLM client with chat()");
@@ -256694,24 +257032,51 @@ function createMastraVMAgent({
       [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: { enabled: enableLsp }
     }
   });
+  const extraTools = {
+    ...enableVmTools ? createVmTools({
+      guest,
+      browserClient,
+      llmClient,
+      approveAction,
+      isYolo: () => yolo,
+      onActivity
+    }) : {},
+    ...enablePlanning ? { taskWrite: taskWriteTool, taskUpdate: taskUpdateTool } : {}
+  };
   const agent = new Agent({
     id: "vm-agent-mastra",
     name: "vm-agent-mastra",
     instructions,
     model: createLiteRt({ client: llmClient })(modelId),
-    workspace
+    workspace,
+    ...Object.keys(extraTools).length ? { tools: extraTools } : {}
   });
+  const allToolNames = async () => {
+    await workspace.init();
+    return [...Object.keys(await createWorkspaceTools(workspace)), ...Object.keys(extraTools)];
+  };
   return {
     agent,
     workspace,
     setYolo(value) {
       yolo = Boolean(value);
     },
-    async listTools() {
-      await workspace.init();
-      return Object.keys(await createWorkspaceTools(workspace));
+    listTools: allToolNames,
+    // Prompt budget is the live constraint on a 16k-window on-device model, so
+    // make it measurable rather than a guess. char/4 is a floor, not an
+    // estimate — real tokenisers run higher on JSON-ish schema text.
+    async systemPromptCost() {
+      const tools = await allToolNames();
+      const descriptions = await createWorkspaceTools(workspace);
+      const chars = [
+        instructions,
+        ...Object.values(descriptions).map((tool6) => `${tool6.id ?? ""}${tool6.description ?? ""}${JSON.stringify(tool6.inputSchema ?? "")}`),
+        ...Object.values(extraTools).map((tool6) => `${tool6.id ?? ""}${tool6.description ?? ""}${JSON.stringify(tool6.inputSchema ?? "")}`)
+      ].join("").length;
+      return { toolCount: tools.length, chars, approxTokens: Math.ceil(chars / 4) };
     },
     async run(task) {
+      extraTools.resetTurn?.();
       const result = await agent.generate(task);
       return result.text ?? result?.response?.text ?? "";
     }

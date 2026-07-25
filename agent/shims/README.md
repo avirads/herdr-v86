@@ -47,10 +47,20 @@ crypto.createHash and the node stream classes all throw if called. The happy
 path never reaches them — but any Mastra feature that does will fail at
 RUNTIME with no build-time warning.
 
-async_hooks is the dangerous one. AsyncLocalStorage here is synchronous-only;
-it does not propagate across `await`. Mastra's requestContext (dynamic
-filesystem/sandbox resolvers) may ride on it. Sequential use is fine;
-concurrent agent runs could leak context between them — silently.
+async_hooks: AsyncLocalStorage here is synchronous-only and does not propagate
+across `await`. This was originally flagged as the dangerous one, on the
+assumption that Mastra's requestContext (dynamic filesystem/sandbox resolvers)
+rides on it. It does not — requestContext is threaded explicitly
+(`input.requestContext`, `buildRequestContext(...)`), and the single
+AsyncLocalStorage instance in @mastra/core@1.52.1 is `spanContextStorage`,
+i.e. tracing span parentage. Nothing on the agent's data path reads it, and
+two concurrent agent runs were measured clean — see
+test/als-concurrency.test.mjs, which fails if a future release moves anything
+that matters onto it.
+
+What the stub does still cost you: spans opened across an `await` boundary
+mis-parent. Harmless with no tracing exporter configured. Replace with a real
+polyfill if you start exporting traces.
 
 Only `@mastra/core/workspace` was verified. `@mastra/core/agent` pulls a larger
 chunk graph and is untested.

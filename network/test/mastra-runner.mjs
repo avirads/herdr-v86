@@ -76,7 +76,9 @@ const browser = spawn(
     '--disable-gpu',
     '--enable-unsafe-webgpu',
     `--user-data-dir=${profile}`,
-    `http://127.0.0.1:${port}/network/test/mastra-e2e.html`,
+    // PAGE lets the same harness drive either e2e (scripted-model transport
+    // test, or the real-LiteRtLmClient variant).
+    `http://127.0.0.1:${port}/network/test/${process.env.PAGE || 'mastra-e2e.html'}`,
   ],
   { stdio: 'ignore' },
 );
