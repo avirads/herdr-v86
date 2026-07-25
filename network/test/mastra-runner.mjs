@@ -85,7 +85,11 @@ const result = await completed;
 
 browser.kill();
 server.close();
-rmSync(profile, { recursive: true, force: true });
+// Best-effort: the profile dir is disposable, and on Windows Chrome can still
+// hold a lock on it for a moment after kill(). Never let cleanup throw — it
+// runs before the result is reported, so a failure here would discard the
+// entire test outcome.
+try { rmSync(profile, { recursive: true, force: true }); } catch { /* leaked temp dir */ }
 
 for (const step of result.steps ?? []) console.log(`  ${step}`);
 if (result.checks) console.log('\nchecks:', JSON.stringify(result.checks, null, 2));

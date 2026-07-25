@@ -10,11 +10,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const BUNDLE = '/tmp/fullloop-regression.mjs';
+// tmpdir() rather than a hardcoded /tmp: on Windows the latter resolves to a
+// different place for the shell (which writes the bundle) than for node (which
+// imports it), so the two halves of this test silently disagree.
+const BUNDLE = join(tmpdir(), 'fullloop-regression.mjs');
 
 test('browser bundle builds with the shim layer', () => {
-  execFileSync('./build-browser.sh', ['probe/fullloop.js', BUNDLE], { stdio: 'pipe' });
+  // Invoked through `sh` explicitly — node cannot exec a .sh directly on
+  // Windows (EFTYPE), and this is equivalent everywhere else.
+  execFileSync('sh', ['./build-browser.sh', 'probe/fullloop.js', BUNDLE], { stdio: 'pipe' });
   assert.ok(existsSync(BUNDLE));
 });
 
@@ -22,7 +30,7 @@ test('full agent loop runs with no node globals present', () => {
   const script = `
     for (const k of ['process','Buffer','setImmediate','clearImmediate','__dirname','__filename','require','global'])
       globalThis[k] = undefined;
-    await import(${JSON.stringify(BUNDLE)});
+    await import(${JSON.stringify(pathToFileURL(BUNDLE).href)});
     console.log(JSON.stringify(await globalThis.__runFullLoop()));
   `;
   const raw = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
