@@ -18,6 +18,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 - `docs/guest-tools.md`: complete guest command reference and examples, including `vmllm` and `vmagent`.
 - `docs/deep-agent.md`: full Deep Agents tools, approvals, skills, and limits.
 - `docs/mastra-agent.md`: the Mastra tier (`mastra 'TASK'`), its tool set and prompt budget.
+- `docs/agent-tiers.md`: measured comparison of vmagent, rig and mastra per feature.
 - `network/docs/host-bridge.md`: browser-bridge protocol, limits, and security.
 - `network/README.md`: full IPv4 gateway deployment and testing.
 - Run `<command> --help` inside the guest for concise local usage.

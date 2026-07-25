@@ -112,6 +112,13 @@ export function createMastraVMAgent({
       yolo = Boolean(value);
     },
     listTools: allToolNames,
+    // The callable tools, not just their names. @mastra/core is only reachable
+    // through this bundle, so a page that wants to exercise a single tool
+    // (benchmarks, diagnostics) has no other way to reach one.
+    async toolMap() {
+      await workspace.init();
+      return { ...(await createWorkspaceTools(workspace)), ...extraTools };
+    },
     // Prompt budget is the live constraint on a 16k-window on-device model, so
     // make it measurable rather than a guess. char/4 is a floor, not an
     // estimate — real tokenisers run higher on JSON-ish schema text.
