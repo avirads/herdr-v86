@@ -1,0 +1,138 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>vmbench baseline on the shipped i686 guest</title>
+<pre id="serial"></pre>
+<pre id="log"></pre>
+<div id="screen_container"><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+// Runs network/guest/vmbench on the real shipped guest to produce the i686
+// reference row that docs/perf.md and the 64-bit decision doc are measured
+// against.
+//
+// Driven over the SERIAL console rather than the guest RPC: several workloads
+// exceed the RPC's 30 s ceiling, and a transport timeout mid-benchmark would
+// look like a slow guest rather than a harness limit.
+//
+// `termio` is excluded on purpose — it writes 100 KB to /dev/tty, which is the
+// same serial console this page scrapes, so it would destroy the output being
+// parsed. `herdr` self-skips when absent.
+import { V86HostBridge } from '../browser/v86-host-bridge.js';
+import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+
+const logEl = document.querySelector('#log');
+const steps = [];
+const log = (message) => { steps.push(message); logEl.textContent = steps.join('\n'); };
+
+let serial = '';
+let started = false;
+let submitted = false;
+let benchStartedAt = 0;
+
+const report = (payload) => {
+  if (submitted) return;
+  submitted = true;
+  return fetch('/__result', { method: 'POST', body: JSON.stringify({ ...payload, steps, serial: serial.slice(-6000) }) });
+};
+
+// Emulated i686 plus a 2 MB hash blob is slow; give it room.
+setTimeout(() => report({ ok: false, error: 'timed out after 540s' }), 540_000);
+
+const BLOB_MB = Number(new URLSearchParams(location.search).get('blob') || 2);
+// Median of N. Emulated-guest timings are noisy enough that a single sample
+// is not a baseline anyone should compare against later.
+const REPS = Number(new URLSearchParams(location.search).get('reps') || 3);
+const LIST = 'syscall,forkexec,cpu,pipe,fileio,sha256,sha512,int64';
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 512 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet loglevel=4',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+
+const hostBridge = new V86HostBridge(emulator);
+hostBridge.setAgentHandler(async () => {});
+setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
+const guest = new V86GuestAgentClient(emulator, hostBridge);
+
+emulator.add_listener('serial0-output-byte', (byte) => {
+  serial = (serial + String.fromCharCode(byte)).slice(-200000);
+  document.querySelector('#serial').textContent = serial.slice(-3000);
+
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    started = true;
+    run().catch((error) => report({ ok: false, error: String(error?.stack || error) }));
+  }
+
+  if (started && /\r?\nVMBENCH_DONE\r?\n/.test(serial)) finish();
+});
+
+let finished = false;
+function finish() {
+  if (finished) return;
+  finished = true;
+  const elapsedMs = Math.round(performance.now() - benchStartedAt);
+
+  // Pull the TSV block the run emitted: name<TAB>value, one per line.
+  const region = serial.slice(serial.lastIndexOf('VMBENCH_BEGIN'));
+  const rows = {};
+  for (const line of region.split(/\r?\n/)) {
+    const match = line.match(/^([a-z0-9_]+)\t(-?\d+|[a-z0-9_.-]+)\s*$/i);
+    if (match) rows[match[1]] = match[2];
+  }
+
+  const numeric = (key) => (rows[key] === undefined ? null : Number(rows[key]));
+  const sha256 = numeric('sha256');
+  const sha512 = numeric('sha512');
+  const wordSizeRatio = sha256 && sha512 ? Number((sha512 / sha256).toFixed(2)) : null;
+
+  const expected = ['syscall', 'forkexec', 'cpu', 'pipe', 'fileio', 'sha256', 'sha512', 'int64'];
+  const missing = expected.filter((key) => numeric(key) === null);
+
+  log(`results: ${JSON.stringify(rows)}`);
+  report({
+    ok: missing.length === 0,
+    error: missing.length ? `no timing captured for: ${missing.join(', ')}` : undefined,
+    checks: {
+      arch: rows.arch ?? 'unknown',
+      kernel: rows.kernel ?? 'unknown',
+      blobMB: BLOB_MB,
+      reps: REPS,
+      timingsMs: Object.fromEntries(expected.map((key) => [key, numeric(key)])),
+      wordSizeRatio,
+    },
+    elapsedMs,
+  });
+}
+
+async function run() {
+  // vmbench ships in the image at /usr/local/bin/vmbench alongside the agent
+  // tiers. Writing 7 KB in over the UART at runtime exceeded the RPC's 30 s
+  // ceiling, and a benchmark harness should not be measuring its own setup.
+  log('shell ready — running vmbench from the image');
+  benchStartedAt = performance.now();
+  log(`blob=${BLOB_MB}MB reps=${REPS} list=${LIST} (termio excluded — it writes to the console being scraped)`);
+
+  // Warm pass first, discarded: the script's own guidance, and it pulls the
+  // working set into page cache so the timed pass is not charged for I/O a
+  // real user would only pay once.
+  emulator.serial0_send(
+    'cd /root && vmbench -t -b 1 -l cpu >/dev/null 2>&1; ' +
+    'echo VMBENCH_BEGIN; ' +
+    // Timer diagnostics: vmbench derives milliseconds from `date +%s%N`, so if
+    // busybox lacks %N every workload measures as 0 and the run looks instant.
+    'printf "diag_pctN\\t%s\\n" "$(date +%N)"; ' +
+    'printf "diag_sN\\t%s\\n" "$(date +%s%N)"; ' +
+    `vmbench -t -n ${REPS} -b ${BLOB_MB} -l ${LIST} 2>/dev/null; ` +
+    'echo VMBENCH_DONE\n',
+  );
+}
+</script>

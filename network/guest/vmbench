@@ -1,0 +1,192 @@
+#!/bin/sh
+# vmbench - arch-portable guest benchmark for browser-VM backend comparison.
+#
+# Mirrors the workloads in docs/perf.md so results drop straight into the
+# existing baseline table. Pure POSIX sh + busybox: runs unchanged on
+# i686/v86, x86_64/QEMU-Wasm, riscv64/TinyEMU, x86_64/Bochs.
+#
+#   vmbench                 # run all, human-readable
+#   vmbench -t              # machine-readable TSV (name<TAB>ms)
+#   vmbench -n 3            # 3 reps, report the median
+#   vmbench -l syscall,cpu  # only the named benchmarks
+#   vmbench -b 4            # 4 MB hash blob (use on slow emulated guests)
+#
+# Report alongside `uname -m`, the backend, and browser+host so the numbers
+# mean something. Always run warm (run it twice, discard the first).
+
+set -u
+
+REPS=1
+TSV=0
+ONLY=""
+BLOB_MB=16   # hash blob size; drop to 2-4 on a slow emulated guest (-b)
+
+while getopts 'tn:l:b:h' o; do
+  case "$o" in
+    t) TSV=1 ;;
+    n) REPS=$OPTARG ;;
+    l) ONLY=$OPTARG ;;
+    b) BLOB_MB=$OPTARG ;;
+    h) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "vmbench: bad option (try -h)" >&2; exit 2 ;;
+  esac
+done
+
+# ---- timing ---------------------------------------------------------------
+# Three tiers, best first. The middle one matters: busybox `date` is commonly
+# built without %N (the herdr i686 guest is), and falling straight to whole
+# seconds makes every sub-second workload read 0 ms — a silent, total loss of
+# signal that looks like an impossibly fast guest. /proc/uptime gives 10 ms on
+# any Linux guest, which is enough for workloads in the 100 ms range and keeps
+# this script arch-portable for the 64-bit comparison it exists to support.
+_pctn=$(date +%N 2>/dev/null)
+if [ -n "$_pctn" ] && [ "$_pctn" != "%N" ]; then
+  CLOCK=ns
+elif [ -r /proc/uptime ]; then
+  CLOCK=uptime
+  echo "vmbench: date +%N unavailable; using /proc/uptime (10 ms resolution)" >&2
+else
+  CLOCK=sec
+  echo "vmbench: only whole-second resolution available; sub-second workloads will report 0" >&2
+fi
+
+now_ms() {
+  case "$CLOCK" in
+    ns)     date +%s%N | awk '{printf "%d", substr($0,1,length($0)-6)}' ;;
+    uptime) awk '{printf "%d", $1*1000}' /proc/uptime ;;
+    *)      date +%s | awk '{printf "%d", $1*1000}' ;;
+  esac
+}
+
+# median of stdin values
+median() { sort -n | awk '{v[NR]=$1} END{ if(NR%2) print v[(NR+1)/2]; else printf "%d", (v[NR/2]+v[NR/2+1])/2 }'; }
+
+WORK=${TMPDIR:-/tmp}/vmbench.$$
+mkdir -p "$WORK" || exit 1
+trap 'rm -rf "$WORK"' EXIT INT TERM
+
+# ---- benchmarks -----------------------------------------------------------
+# Each b_<name> runs one iteration of the workload and prints nothing.
+
+# 100k 1-byte read+write syscalls. Pure syscall-path cost.
+b_syscall() { dd if=/dev/zero of=/dev/null bs=1 count=100000 2>/dev/null; }
+
+# 200 fork+exec cycles. Process creation + page-table churn.
+b_forkexec() { i=0; while [ $i -lt 200 ]; do /bin/true; i=$((i+1)); done; }
+
+# 20k pure-CPU shell loop. No syscalls in the hot path; tracks raw
+# interpreter throughput, which is where JIT vs interpreter shows up most.
+b_cpu() { i=0; while [ $i -lt 20000 ]; do i=$((i+1)); done; }
+
+# 16 MB through a pipe. Bulk copy + scheduler handoff.
+b_pipe() { dd if=/dev/zero bs=64k count=256 2>/dev/null | cat > /dev/null; }
+
+# 400 small cold-ish file reads. Block layer + page cache.
+b_fileio() {
+  i=0
+  while [ $i -lt 400 ]; do cat "$WORK/f$((i % 40))" > /dev/null; i=$((i+1)); done
+}
+
+# --- the word-size discriminators -----------------------------------------
+# sha256 is built from 32-bit adds/rotates: a 32-bit guest runs it natively.
+# sha512 is the same algorithm shape on 64-BIT words, so on i686 every op
+# becomes a multi-instruction sequence while on a 64-bit guest it stays one.
+# The sha512/sha256 RATIO is therefore a direct read on what dropping to
+# 32-bit actually costs you, independent of emulator speed. Expect roughly
+# Use it RELATIVELY: record the ratio on your current i686 guest first, then
+# compare. A 64-bit guest should show a markedly lower ratio running the same
+# busybox build. Absolute values are implementation-dependent, so the i686
+# reference number is the only baseline that means anything.
+b_sha256() { sha256sum "$WORK/blob" > /dev/null 2>&1; }
+b_sha512() { sha512sum "$WORK/blob" > /dev/null 2>&1; }
+
+# 64-bit integer arithmetic in the shell. Values above 2^32 force the same
+# multi-instruction lowering on a 32-bit target.
+b_int64() {
+  i=0; a=1
+  while [ $i -lt 5000 ]; do a=$(( (a * 6364136223846793005 + 1442695040888963407) & 4611686018427387903 )); i=$((i+1)); done
+}
+
+# 100 KB line-buffered to the terminal. The interactive-feel proxy: this is
+# the tty line-discipline + console path, not UART throughput (see perf.md).
+b_termio() { ( : > /dev/tty ) 2>/dev/null || return 0; yes | head -c 100000 > /dev/tty 2>/dev/null; }
+
+# herdr's own startup path, if present. The workload you actually care about.
+b_herdr() { herdr api schema > /dev/null 2>&1 || return 0; }
+
+setup() {
+  i=0; while [ $i -lt 40 ]; do dd if=/dev/urandom of="$WORK/f$i" bs=1k count=4 2>/dev/null; i=$((i+1)); done
+  dd if=/dev/urandom of="$WORK/blob" bs=1M count="$BLOB_MB" 2>/dev/null
+  sync 2>/dev/null
+}
+
+ALL="syscall forkexec cpu pipe fileio sha256 sha512 int64 termio herdr"
+[ -n "$ONLY" ] && ALL=$(echo "$ONLY" | tr ',' ' ')
+
+label_syscall="100k 1-byte syscalls"
+label_forkexec="200x fork/exec"
+label_cpu="20k pure-CPU shell loop"
+label_pipe="16 MB pipe"
+label_fileio="400-file read"
+label_sha256="sha256 ${BLOB_MB}MB (32-bit words)"
+label_sha512="sha512 ${BLOB_MB}MB (64-bit words)"
+label_int64="5k 64-bit int ops"
+label_termio="100 KB -> terminal"
+label_herdr="herdr api schema"
+
+# ---- run ------------------------------------------------------------------
+setup
+
+if [ "$TSV" = 0 ]; then
+  printf '\nvmbench  arch=%s  kernel=%s  reps=%s\n' \
+    "$(uname -m)" "$(uname -r)" "$REPS"
+  printf -- '---------------------------------------------------\n'
+fi
+
+RESULTS="$WORK/results"
+: > "$RESULTS"
+[ "$TSV" = 1 ] && printf 'arch\t%s\nkernel\t%s\n' "$(uname -m)" "$(uname -r)"
+
+for name in $ALL; do
+  command -v "b_$name" > /dev/null 2>&1 || true
+  case " $ALL " in *" $name "*) ;; *) continue ;; esac
+
+  # skip herdr cleanly when it isn't installed
+  if [ "$name" = herdr ] && ! command -v herdr > /dev/null 2>&1; then
+    continue
+  fi
+
+  r=0
+  : > "$WORK/times"
+  while [ $r -lt "$REPS" ]; do
+    t0=$(now_ms)
+    "b_$name"
+    t1=$(now_ms)
+    echo $((t1 - t0)) >> "$WORK/times"
+    r=$((r+1))
+  done
+  ms=$(median < "$WORK/times")
+
+  eval "lbl=\${label_$name}"
+  printf '%s\t%s\n' "$name" "$ms" >> "$RESULTS"
+
+  if [ "$TSV" = 1 ]; then
+    printf '%s\t%s\n' "$name" "$ms"
+  else
+    printf '%-28s %8s ms\n' "$lbl" "$ms"
+  fi
+done
+
+# ---- derived signal -------------------------------------------------------
+if [ "$TSV" = 0 ]; then
+  s256=$(awk -F'\t' '$1=="sha256"{print $2}' "$RESULTS")
+  s512=$(awk -F'\t' '$1=="sha512"{print $2}' "$RESULTS")
+  if [ -n "$s256" ] && [ -n "$s512" ] && [ "$s256" -gt 0 ]; then
+    printf -- '---------------------------------------------------\n'
+    printf 'word-size probe (sha512/sha256): %s\n' \
+      "$(awk -v a="$s512" -v b="$s256" 'BEGIN{printf "%.2fx", a/b}')"
+    printf '  compare against the ratio from your current i686 guest;\n'
+    printf '  a 64-bit guest should come in visibly lower.\n'
+  fi
+  printf '\nReport with: backend, browser+version, host CPU, warm/cold.\n\n'
+fi

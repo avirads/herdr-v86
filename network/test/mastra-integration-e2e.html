@@ -1,0 +1,172 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>mastra tier integration — guest command through the real controller</title>
+<pre id="serial"></pre>
+<pre id="log"></pre>
+<div id="screen_container"><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+// The other Mastra e2es call createMastraVMAgent directly. This one exercises
+// the path a user actually takes and nothing else does end to end:
+//
+//   guest `mastra 'TASK'` -> /dev/ttyS0 -> V86HostBridge -> AGENT_MASTRA
+//     -> VmAgentController.handle('mastra', ...) -> Mastra harness
+//     -> onOutput back to the terminal
+//
+// The controller is the real one from network/browser, wired the way
+// index.html wires it. Only the model is scripted — WebGPU is unavailable
+// headless, and this is a plumbing test, not a model test.
+//
+// Assertions are on GUEST SIDE EFFECTS plus the controller's output, never on
+// agent text alone.
+import { V86HostBridge } from '../browser/v86-host-bridge.js';
+import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+
+const logEl = document.querySelector('#log');
+const steps = [];
+const log = (message) => { steps.push(message); logEl.textContent = steps.join('\n'); };
+
+let serial = '';
+let seeded = false;
+let dispatched = false;
+let submitted = false;
+
+const report = (payload) => {
+  if (submitted) return;
+  submitted = true;
+  return fetch('/__result', { method: 'POST', body: JSON.stringify({ ...payload, steps, serial: serial.slice(-4000) }) });
+};
+setTimeout(() => report({ ok: false, error: 'timed out after 240s' }), 240_000);
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 512 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet loglevel=4',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+
+const hostBridge = new V86HostBridge(emulator);
+const guest = new V86GuestAgentClient(emulator, hostBridge);
+
+const outputs = [];
+const busy = [];
+const activity = [];
+let controllerReady = false;
+let sawMastraCommand = false;
+let harnessOptions = null;
+
+async function wireController() {
+  const { VmAgentController } = await import('../browser/vmagent-controller.js');
+
+  // Scripted model. status() must report a loaded model or the controller
+  // short-circuits with "no model loaded" — which is itself behaviour worth
+  // not tripping over accidentally here.
+  let turn = 0;
+  const replies = [
+    '{"tool_call":{"name":"mastra_workspace_execute_command","arguments":{"command":"uname -m"}}}',
+    '{"tool_call":{"name":"mastra_workspace_write_file","arguments":{"path":"/TIER.md","content":"mastra tier reached the guest\\n"}}}',
+    '{"final":"Checked arch and wrote TIER.md."}',
+  ];
+  const llmClient = {
+    modelName: 'integration-stub',
+    async status() { return { modelName: 'integration-stub', webgpu: true, loading: false }; },
+    async chat() {
+      const content = replies[turn++] ?? '{"final":"done"}';
+      return { choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }] };
+    },
+  };
+
+  const controller = new VmAgentController({
+    createAgent: async () => { throw new Error('deep agents tier must not be used by `mastra`'); },
+    createMastraAgent: async (options) => {
+      harnessOptions = Object.keys(options).sort();
+      const { createMastraVMAgent } = await import('../../agent/dist/mastra-agent.js');
+      return createMastraVMAgent({ ...options, enableVmTools: true, enablePlanning: true });
+    },
+    getLlmClient: () => llmClient,
+    getGuest: () => guest,
+    getBrowserClient: () => null,
+    approveAction: async () => true,
+    onActivity: (event) => activity.push(event?.tool ?? 'event'),
+    onOutput: async (output) => { outputs.push(String(output)); log(`controller output: ${String(output).slice(0, 120)}`); },
+    onBusy: (value) => busy.push(value),
+  });
+
+  hostBridge.setAgentHandler((command, value) => {
+    if (command === 'mastra') sawMastraCommand = true;
+    return controller.handle(command, value);
+  });
+  setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
+  controllerReady = true;
+  log('real VmAgentController wired, agent handler installed');
+}
+
+emulator.add_listener('serial0-output-byte', (byte) => {
+  serial = (serial + String.fromCharCode(byte)).slice(-120000);
+  document.querySelector('#serial').textContent = serial.slice(-3000);
+
+  if (!seeded && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    seeded = true;
+    log('shell ready — seeding /root/project');
+    emulator.serial0_send(
+      'mkdir -p /root/project && cd /root/project && ' +
+      "printf 'tier check\\n' > README.md && echo TIER_SEEDED\n",
+    );
+  }
+
+  if (seeded && !dispatched && /\r?\nTIER_SEEDED\r?\n/.test(serial)) {
+    dispatched = true;
+    wireController()
+      .then(() => {
+        // The actual thing under test: invoke the tier from the guest shell.
+        log("running: mastra 'check arch and write TIER.md'");
+        emulator.serial0_send("mastra 'check arch and write TIER.md'\n");
+        waitForCompletion().catch((error) => report({ ok: false, error: String(error?.stack || error) }));
+      })
+      .catch((error) => report({ ok: false, error: String(error?.stack || error) }));
+  }
+});
+
+async function waitForCompletion() {
+  const startedAt = performance.now();
+  // Wait for the controller to finish a run (busy true -> false).
+  while (performance.now() - startedAt < 180_000) {
+    if (busy.length >= 2 && busy[busy.length - 1] === false) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  const elapsedMs = Math.round(performance.now() - startedAt);
+
+  const tier = await guest.read('TIER.md').catch((error) => `ERROR: ${error.message}`);
+  const finalOutput = outputs[outputs.length - 1] ?? '';
+
+  const checks = {
+    // The guest command reached the browser as an AGENT_MASTRA RPC.
+    guestCommandDispatched: sawMastraCommand,
+    // The guest itself acknowledged the submission.
+    guestAcknowledged: /\[mastra\] submitted to the ready browser agent\./.test(serial),
+    // The controller built the harness with the expected wiring.
+    harnessBuiltWithGuestAndLlm:
+      Array.isArray(harnessOptions) &&
+      harnessOptions.includes('guest') &&
+      harnessOptions.includes('llmClient') &&
+      harnessOptions.includes('approveAction'),
+    // The agent's tools actually mutated the guest — the only real evidence.
+    toolsReachedGuest: tier === 'mastra tier reached the guest\n',
+    // The answer came back out to the terminal, not swallowed.
+    outputReturnedToTerminal: /Checked arch and wrote TIER\.md\./.test(finalOutput),
+    busyCycled: busy.length >= 2 && busy[0] === true && busy[busy.length - 1] === false,
+  };
+  const ok = Object.values(checks).every(Boolean);
+
+  log(`checks: ${JSON.stringify(checks)}`);
+  await guest.delete('TIER.md').catch(() => {});
+  await report({ ok, checks, elapsedMs, outputs, activity });
+}
+</script>
