@@ -65,6 +65,46 @@ The wins land exactly where expected: **interrupt- and syscall-heavy work**
 (shells, TUIs, agents — i.e. everything interactive) is ~1.5–2× faster, while
 pure-CPU code is unchanged (v86 emulates the same instructions either way).
 
+## vmbench: the i686 reference row
+
+`vmbench` ships in the guest at `/usr/local/bin/vmbench` and re-runs these
+workloads in a form that is portable to other backends (x86_64/QEMU-Wasm,
+riscv64/TinyEMU), so a future port can be compared against this row rather
+than against prose. Reproduce with:
+
+```sh
+PAGE=vmbench-e2e.html CHROME_BIN=... node network/test/mastra-runner.mjs
+```
+
+Median of 3, 2 MB hash blob, headless Chrome, warm (one discarded pass):
+
+| Benchmark | vmbench | perf.md Phase 2 |
+|---|--:|--:|
+| 100k 1-byte syscalls | 1.06 s | 0.65–0.79 s |
+| 200× fork/exec | 1.77 s | 1.25–1.52 s |
+| 20k pure-CPU shell loop | 2.44 s | 2.67 s |
+| 16 MB pipe | 0.09 s | 0.08 s |
+| 400-file read | 3.21 s | 2.44 s |
+| sha256, 2 MB (32-bit words) | 0.28 s | — |
+| sha512, 2 MB (64-bit words) | 0.55 s | — |
+| 5k 64-bit int ops | 1.00 s | — |
+
+`arch=i686 kernel=6.6.0`. Pure-CPU and pipe match the Phase 2 column; the
+syscall-heavy rows run slower under headless Chrome on a different host, which
+is why only the *ratio* below should be carried across machines.
+
+**Word-size probe — sha512/sha256 = ~1.7–2.0×.** Both hashes are the same
+algorithm shape; sha512 uses 64-bit words, so on a 32-bit guest every operation
+becomes a multi-instruction sequence. This ratio is the direct read on what
+running 32-bit costs, independent of emulator speed. A 64-bit guest running the
+same busybox build should come in markedly lower; that comparison is the point
+of `64bit-port-decision.md`.
+
+Two caveats worth carrying: `termio` is excluded because it writes 100 KB to
+the same serial console the harness scrapes, and busybox `date` here has no
+`%N`, so `vmbench` times from `/proc/uptime` at 10 ms resolution — treat
+sub-100 ms figures as approximate.
+
 ## Terminal throughput: it's guest CPU, not the UART
 
 An earlier read of this said serial output was UART-bound and recommended a v86
