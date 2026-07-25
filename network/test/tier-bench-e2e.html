@@ -1,0 +1,233 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>agent tier comparison — vmagent vs rig vs mastra</title>
+<pre id="serial"></pre>
+<pre id="log"></pre>
+<div id="screen_container"><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+// Runs the SAME logical task through every agent tier against the SAME real
+// guest, and counts what actually costs time.
+//
+// The model is scripted per tier and returns instantly. That is deliberate:
+// with a real model, run-to-run variance swamps the difference between tiers,
+// and each tier speaks a different protocol anyway (rig wants native
+// tool_calls, vmagent wants {"tool":...}, mastra wants {"tool_call":...}), so
+// "same model" is not achievable in the first place. Holding model cost at
+// zero isolates what the TIER costs: guest round-trips and framework overhead.
+//
+// Guest round-trips are the headline number. On an emulated i686 each one is a
+// real serial round-trip, and the vmbench baseline shows the guest is slow
+// enough that round-trip count dominates everything else.
+import { V86HostBridge } from '../browser/v86-host-bridge.js';
+import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+
+const logEl = document.querySelector('#log');
+const steps = [];
+const log = (m) => { steps.push(m); logEl.textContent = steps.join('\n'); };
+
+let serial = '';
+let seeded = false;
+let submitted = false;
+const report = (payload) => {
+  if (submitted) return;
+  submitted = true;
+  return fetch('/__result', { method: 'POST', body: JSON.stringify({ ...payload, steps, serial: serial.slice(-3000) }) });
+};
+setTimeout(() => report({ ok: false, error: 'timed out after 300s' }), 300_000);
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 512 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet loglevel=4',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+
+const hostBridge = new V86HostBridge(emulator);
+hostBridge.setAgentHandler(async () => {});
+setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
+const rawGuest = new V86GuestAgentClient(emulator, hostBridge);
+
+// Count every RPC that crosses into the VM.
+let rpc = [];
+const guest = new Proxy(rawGuest, {
+  get(target, prop) {
+    const value = target[prop];
+    if (typeof value !== 'function') return value;
+    if (!['read', 'write', 'list', 'execute', 'grep', 'glob', 'delete', 'test'].includes(prop)) {
+      return value.bind(target);
+    }
+    return async (...args) => {
+      rpc.push(`${String(prop)}:${String(args[0] ?? '').slice(0, 40)}`);
+      return value.apply(target, args);
+    };
+  },
+});
+
+// Same logical task for every tier: read a file, check the arch, write a note.
+const TASK = 'Read README.md, check the architecture, and write NOTES.md.';
+
+// Each tier speaks its own protocol; the DECISIONS are identical.
+function vmagentClient() {
+  const replies = [
+    '{"tool":"read_file","args":{"file_path":"/README.md"}}',
+    '{"tool":"execute","args":{"command":"uname -m"}}',
+    '{"tool":"write_file","args":{"file_path":"/NOTES.md","content":"arch checked\\n"}}',
+    '{"final":"done"}',
+  ];
+  let i = 0;
+  return { modelName: 'bench', async chat() { return { choices: [{ message: { content: replies[i++] ?? '{"final":"done"}' } }] }; } };
+}
+function rigClient() {
+  // rig consumes native OpenAI tool_calls.
+  const calls = [
+    { name: 'read_file', arguments: '{"path":"README.md"}' },
+    { name: 'shell', arguments: '{"command":"uname -m"}' },
+    { name: 'write_file', arguments: '{"path":"NOTES.md","content":"arch checked\\n"}' },
+  ];
+  let i = 0;
+  return {
+    modelName: 'bench',
+    async chat() {
+      if (i < calls.length) {
+        const c = calls[i++];
+        return { choices: [{ message: { role: 'assistant', tool_calls: [{ id: `c${i}`, type: 'function', function: c }] } }] };
+      }
+      return { choices: [{ message: { role: 'assistant', content: 'done' } }] };
+    },
+  };
+}
+function codeactClient() {
+  // One model call; the whole task becomes one shell script.
+  return {
+    modelName: 'bench',
+    async chat() {
+      return { choices: [{ message: { content: "cat README.md >/dev/null; uname -m > NOTES.md" } }] };
+    },
+  };
+}
+function mastraClient() {
+  const replies = [
+    '{"tool_call":{"name":"mastra_workspace_read_file","arguments":{"path":"/README.md"}}}',
+    '{"tool_call":{"name":"mastra_workspace_execute_command","arguments":{"command":"uname -m"}}}',
+    '{"tool_call":{"name":"mastra_workspace_write_file","arguments":{"path":"/NOTES.md","content":"arch checked\\n"}}}',
+    '{"final":"done"}',
+  ];
+  let i = 0;
+  return {
+    modelName: 'bench',
+    async status() { return { modelName: 'bench', webgpu: true }; },
+    async chat() { return { choices: [{ message: { content: replies[i++] ?? '{"final":"done"}' } }] }; },
+  };
+}
+
+// Wrap a client so model calls are counted.
+function counted(client, box) {
+  const real = client.chat.bind(client);
+  client.chat = async (body) => { box.modelCalls += 1; return real(body); };
+  return client;
+}
+
+async function measure(name, run) {
+  rpc = [];
+  const box = { modelCalls: 0 };
+  await guest.execute('rm -f /root/project/NOTES.md').catch(() => {});
+  rpc = [];
+  const startedAt = performance.now();
+  let output = '';
+  let error = null;
+  try { output = String((await run(box)) ?? ''); }
+  catch (e) { error = String(e?.message || e); }
+  const wallMs = Math.round(performance.now() - startedAt);
+  const wrote = await rawGuest.read('NOTES.md').then(() => true).catch(() => false);
+  const row = { tier: name, wallMs, guestRpc: rpc.length, modelCalls: box.modelCalls, wroteFile: wrote, error, rpcTrace: rpc.slice(0, 12) };
+  log(`${name.padEnd(22)} ${String(wallMs).padStart(6)} ms  rpc=${String(row.guestRpc).padStart(2)}  model=${row.modelCalls}  wrote=${wrote}${error ? '  ERROR: ' + error : ''}`);
+  return row;
+}
+
+emulator.add_listener('serial0-output-byte', (byte) => {
+  serial = (serial + String.fromCharCode(byte)).slice(-100000);
+  document.querySelector('#serial').textContent = serial.slice(-2000);
+  if (!seeded && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    seeded = true;
+    emulator.serial0_send(
+      "mkdir -p /root/project && cd /root/project && printf 'herdr-v86: linux in a browser tab\\n' > README.md && echo BENCH_SEEDED\n",
+    );
+  }
+  if (seeded && /\r?\nBENCH_SEEDED\r?\n/.test(serial) && !window.__started) {
+    window.__started = true;
+    run().catch((e) => report({ ok: false, error: String(e?.stack || e) }));
+  }
+});
+
+async function run() {
+  log('shell ready — benchmarking tiers (model latency held at 0)');
+  log('');
+  log('tier                     wall   rpc  model  wrote');
+  const rows = [];
+
+  // --- vmagent (Deep Agents) ---
+  const { createVMAgent } = await import('../../agent/dist/agent.js');
+  rows.push(await measure('vmagent (deepagents)', async (box) => {
+    const harness = createVMAgent({
+      llmClient: counted(vmagentClient(), box), guest,
+      browserClient: null, approveAction: async () => true, onActivity: () => {},
+    });
+    return (await harness.run(TASK)).output;
+  }));
+
+  // --- rig and rig --codeact, through the real controller ---
+  const { VmAgentController } = await import('../browser/vmagent-controller.js');
+  for (const [label, command, makeClient] of [
+    ['rig', 'rig', rigClient],
+    ['rig --codeact', 'codeact', codeactClient],
+  ]) {
+    rows.push(await measure(label, async (box) => {
+      let out = '';
+      const controller = new VmAgentController({
+        createAgent: async () => ({ run: async () => ({ output: '' }) }),
+        getLlmClient: () => counted(makeClient(), box),
+        getGuest: () => guest,
+        approveAction: async () => true,
+        onOutput: (o) => { out = String(o); },
+      });
+      await controller.handle(command, TASK);
+      return out;
+    }));
+  }
+
+  // --- mastra, lean and full-parity ---
+  const { createMastraVMAgent } = await import('../../agent/dist/mastra-agent.js');
+  for (const [label, opts] of [
+    ['mastra (8 tools)', {}],
+    ['mastra (19 tools)', { enableVmTools: true, enablePlanning: true, browserClient: { async command() { return {}; } } }],
+  ]) {
+    rows.push(await measure(label, async (box) => {
+      const vm = createMastraVMAgent({ guest, llmClient: counted(mastraClient(), box), yolo: true, ...opts });
+      return await vm.run(TASK);
+    }));
+  }
+
+  // --- structural: what each tier costs before it does any work ---
+  const lean = createMastraVMAgent({ guest, llmClient: mastraClient(), yolo: true });
+  const full = createMastraVMAgent({ guest, llmClient: mastraClient(), yolo: true, enableVmTools: true, enablePlanning: true, browserClient: { async command() { return {}; } } });
+  const structural = {
+    mastraLean: await lean.systemPromptCost(),
+    mastraFull: await full.systemPromptCost(),
+    rigToolCount: 4,
+  };
+
+  log('');
+  log(`structural: mastra 8 tools ~${structural.mastraLean.approxTokens} tok, 19 tools ~${structural.mastraFull.approxTokens} tok, rig 4 tools`);
+
+  const ok = rows.every((r) => !r.error);
+  await report({ ok, checks: { rows, structural }, error: ok ? undefined : 'a tier errored' });
+}
+</script>
