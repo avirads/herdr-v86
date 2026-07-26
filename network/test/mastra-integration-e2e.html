@@ -60,6 +60,7 @@ const busy = [];
 const activity = [];
 let controllerReady = false;
 let sawMastraCommand = false;
+const cliCommands = [];
 let harnessOptions = null;
 
 async function wireController() {
@@ -88,7 +89,9 @@ async function wireController() {
     createMastraAgent: async (options) => {
       harnessOptions = Object.keys(options).sort();
       const { createMastraVMAgent } = await import('../../agent/dist/mastra-agent.js');
-      return createMastraVMAgent({ ...options, enableVmTools: true, enablePlanning: true });
+      // Mirror index.html so `mastra tools lean|full` is genuinely exercised.
+      const { fullTools = true, ...rest } = options;
+      return createMastraVMAgent({ ...rest, enableVmTools: fullTools, enablePlanning: fullTools });
     },
     getLlmClient: () => llmClient,
     getGuest: () => guest,
@@ -101,6 +104,7 @@ async function wireController() {
 
   hostBridge.setAgentHandler((command, value) => {
     if (command === 'mastra') sawMastraCommand = true;
+    if (command.startsWith('mastra')) cliCommands.push(command);
     return controller.handle(command, value);
   });
   setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
@@ -126,8 +130,19 @@ emulator.add_listener('serial0-output-byte', (byte) => {
     wireController()
       .then(() => {
         // The actual thing under test: invoke the tier from the guest shell.
-        log("running: mastra 'check arch and write TIER.md'");
-        emulator.serial0_send("mastra 'check arch and write TIER.md'\n");
+        // Exercise the whole CLI surface from the guest shell, then the task.
+        // Each subcommand is a distinct AGENT_MASTRA_* RPC, so this proves the
+        // routing as well as the handlers.
+        log('running the mastra CLI subcommands from the guest shell');
+        emulator.serial0_send('mastra status\n');
+        setTimeout(() => emulator.serial0_send('mastra tools lean\n'), 700);
+        setTimeout(() => emulator.serial0_send('mastra yolo off\n'), 1400);
+        setTimeout(() => emulator.serial0_send('mastra yolo on\n'), 2100);
+        setTimeout(() => emulator.serial0_send('mastra reset\n'), 2800);
+        setTimeout(() => {
+          log("running: mastra 'check arch and write TIER.md'");
+          emulator.serial0_send("mastra 'check arch and write TIER.md'\n");
+        }, 3500);
         waitForCompletion().catch((error) => report({ ok: false, error: String(error?.stack || error) }));
       })
       .catch((error) => report({ ok: false, error: String(error?.stack || error) }));
@@ -149,6 +164,10 @@ async function waitForCompletion() {
   const checks = {
     // The guest command reached the browser as an AGENT_MASTRA RPC.
     guestCommandDispatched: sawMastraCommand,
+    // Every CLI subcommand routed as its own AGENT_MASTRA_* operation.
+    cliSubcommandsRouted: ['mastra_status', 'mastra_tools', 'mastra_yolo', 'mastra_reset']
+      .every((name) => cliCommands.includes(name)),
+    cliCommandsSeen: cliCommands,
     // The guest itself acknowledged the submission.
     guestAcknowledged: /\[mastra\] submitted to the ready browser agent\./.test(serial),
     // The controller built the harness with the expected wiring.
@@ -163,7 +182,11 @@ async function waitForCompletion() {
     outputReturnedToTerminal: /Checked arch and wrote TIER\.md\./.test(finalOutput),
     busyCycled: busy.length >= 2 && busy[0] === true && busy[busy.length - 1] === false,
   };
-  const ok = Object.values(checks).every(Boolean);
+  // cliCommandsSeen is diagnostic (an empty array is truthy), so assert only
+  // on the boolean checks.
+  const ok = Object.entries(checks)
+    .filter(([key]) => key !== 'cliCommandsSeen')
+    .every(([, value]) => Boolean(value));
 
   log(`checks: ${JSON.stringify(checks)}`);
   await guest.delete('TIER.md').catch(() => {});

@@ -163,3 +163,97 @@ test('mastra reports a missing model rather than failing silently, and is option
   await absent.handle('mastra', 'hi');
   assert.match(outputs.at(-1), /not available in this build/i);
 });
+
+function mastraController({ model = { modelName: 'm' }, onOutput } = {}) {
+  const outputs = [];
+  let built = 0;
+  let lastOptions = null;
+  const controller = new VmAgentController({
+    createAgent: async () => ({ run: async () => ({ output: 'deepagents' }) }),
+    createMastraAgent: async options => {
+      built += 1;
+      lastOptions = options;
+      return {
+        run: async task => `ran: ${task}`,
+        setYolo() {},
+        listTools: async () => (options.fullTools ? ['a', 'b', 'c'] : ['a']),
+        systemPromptCost: async () => ({ approxTokens: options.fullTools ? 5749 : 2832, chars: 100, toolCount: options.fullTools ? 19 : 8 }),
+      };
+    },
+    getLlmClient: () => ({ status: async () => model }),
+    getGuest: () => ({}),
+    approveAction: async () => true,
+    onOutput: onOutput || (o => outputs.push(o)),
+  });
+  return { controller, outputs, built: () => built, lastOptions: () => lastOptions };
+}
+
+test('mastra CLI exposes status, tools, cost, yolo, reset and stop', async () => {
+  const { controller, outputs } = mastraController();
+
+  await controller.handle('mastra_status');
+  assert.match(outputs.at(-1), /idle/);
+  assert.match(outputs.at(-1), /model:\s+m/);
+  assert.match(outputs.at(-1), /profile: full/);
+  assert.match(outputs.at(-1), /session: not built/);
+
+  await controller.handle('mastra_tools');
+  assert.match(outputs.at(-1), /3 tools active/);
+
+  await controller.handle('mastra_cost');
+  assert.match(outputs.at(-1), /~5749 tokens/);
+  assert.match(outputs.at(-1), /35% of a 16k window/);
+
+  await controller.handle('mastra_yolo', 'off');
+  assert.equal(controller.yolo, false);
+  assert.match(outputs.at(-1), /YOLO off/);
+
+  await controller.handle('mastra_reset');
+  assert.equal(controller.mastraHarness, null);
+  assert.match(outputs.at(-1), /session reset/);
+
+  await controller.handle('mastra_stop');
+  assert.match(outputs.at(-1), /no task is running/);
+});
+
+test('mastra tools lean|full switches profile and rebuilds the harness', async () => {
+  const { controller, outputs, built, lastOptions } = mastraController();
+
+  await controller.handle('mastra', 'first');
+  assert.equal(built(), 1);
+  assert.equal(lastOptions().fullTools, true, 'defaults to the full surface');
+
+  await controller.handle('mastra_tools', 'lean');
+  assert.match(outputs.at(-1), /lean \(8 workspace tools\)/);
+  assert.equal(controller.mastraHarness, null, 'profile change must discard the harness');
+
+  await controller.handle('mastra', 'second');
+  assert.equal(built(), 2, 'harness rebuilt with the new profile');
+  assert.equal(lastOptions().fullTools, false);
+  assert.equal((await controller.handle('mastra_cost'), outputs.at(-1)).includes('~2832 tokens'), true);
+
+  // Asking for the profile already active must not throw the session away.
+  await controller.handle('mastra_tools', 'lean');
+  assert.notEqual(controller.mastraHarness, null);
+});
+
+test('mastra status and reset work before any model is loaded', async () => {
+  // status must be able to explain WHY the tier is not ready, so it cannot
+  // itself require a model.
+  const { controller, outputs } = mastraController({ model: { modelName: '' } });
+
+  await controller.handle('mastra_status');
+  assert.match(outputs.at(-1), /not configured/);
+
+  await controller.handle('mastra_reset');
+  assert.match(outputs.at(-1), /session reset/);
+
+  await controller.handle('mastra_yolo', 'off');
+  assert.match(outputs.at(-1), /YOLO off/);
+
+  // Commands that genuinely need the model still refuse clearly.
+  await controller.handle('mastra', 'do a thing');
+  assert.match(outputs.at(-1), /no model loaded/i);
+  await controller.handle('mastra_tools');
+  assert.match(outputs.at(-1), /no model loaded/i);
+});

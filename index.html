@@ -397,7 +397,7 @@ function failBoot(message) {
   bootMessage.textContent = message;
 }
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "vm-shell-34-vmbench";
+const DISK_VERSION = "vm-shell-35-mastra-cli";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -672,7 +672,10 @@ import("./network/browser/v86-host-bridge.js").then(module => {
         // 16k window, which is a real cost on the 2B on-device model.
         createMastraAgent: async options => {
           const { createMastraVMAgent } = await import("./agent/dist/mastra-agent.js");
-          return createMastraVMAgent({ ...options, enableVmTools: true, enablePlanning: true });
+          // fullTools is owned by the controller so `mastra tools lean|full`
+          // can switch profiles at runtime; default is the full 19-tool set.
+          const { fullTools = true, ...rest } = options;
+          return createMastraVMAgent({ ...rest, enableVmTools: fullTools, enablePlanning: fullTools });
         },
         getLlmClient: () => webGpuLlmClient,
         getGuest: () => guestReadonlyClient,

@@ -59,6 +59,9 @@ clipboard, file-transfer, GitHub, or AI operations.
     against the same guest bridge. One task per invocation, like `rig`; it
     shares `vmagent`'s YOLO/approval setting and exposes the same `vm*` and
     AutoBro tools as Deep Agents. Its bundle loads lazily on first use.
+    Lifecycle commands are `mastra status|stop|reset|cost|yolo on|yolo off`
+    and `mastra tools [lean|full]`, which switches between the 8 workspace
+    tools and all 19. Run `mastra --help` in the guest for the full usage.
 17. `rig 'TASK'` is the low-latency browser-orchestrated coding agent with
     project-local read, list, write, and shell tools. Its model stays in the
     browser; only selected tool operations cross into the VM. `rig --codeact
