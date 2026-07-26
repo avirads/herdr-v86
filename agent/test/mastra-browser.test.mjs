@@ -116,6 +116,98 @@ test('sandbox timeout stays under the guest RPC timeout', async () => {
   assert.ok(vm.workspace.sandbox.defaultTimeout < 30_000);
 });
 
+test('batch mode does the whole task in one model call and one round-trip', async () => {
+  // The point of the mode. rig --codeact finishes the tier benchmark in 950ms
+  // against the tool loop's 2667ms purely by collapsing round-trips, so if
+  // this ever costs more than one of each, the mode has no reason to exist.
+  const guest = guestFake();
+  const llm = scripted(['cat README.md > NOTES.md']);
+  const vm = createMastraVMAgent({ guest, llmClient: llm, yolo: true });
+  const result = await vm.runBatch('copy the readme');
+
+  assert.equal(result.ok, true);
+  assert.equal(llm.turns, 1, 'one model call');
+  assert.equal(guest.log.length, 1, 'one guest round-trip');
+  assert.match(guest.log[0], /set -e/, 'set -e must be prepended');
+  assert.match(guest.log[0], /cat README\.md > NOTES\.md/);
+});
+
+test('batch mode strips a markdown fence the model wrapped the script in', async () => {
+  const guest = guestFake();
+  const vm = createMastraVMAgent({
+    guest, yolo: true, llmClient: scripted(['```sh\nuname -m\n```']),
+  });
+  await vm.runBatch('check arch');
+  assert.doesNotMatch(guest.log[0], /```/, 'fence leaked into the guest');
+  assert.match(guest.log[0], /uname -m/);
+});
+
+test('a script that fails halfway is reported as failure, not partial success', async () => {
+  // This is what separates the mode from rig --codeact, which returns whatever
+  // the script printed regardless of how it exited. Without a trustworthy exit
+  // code there is nothing safe to branch on, and batchFirst could not fall
+  // back.
+  const guest = guestFake();
+  guest.execute = async (cmd) => {
+    guest.log.push(cmd);
+    return `__V86AGENT_EXIT__1\nsed: no such file\n`;
+  };
+  const vm = createMastraVMAgent({
+    guest, yolo: true, llmClient: scripted(['sed -i s/a/b/ missing.txt']),
+  });
+  const result = await vm.runBatch('edit it');
+  assert.equal(result.ok, false);
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.reason, 'exit 1');
+});
+
+test('batchFirst falls back to the tool loop when the script does not exit clean', async () => {
+  const guest = guestFake();
+  let calls = 0;
+  guest.execute = async (cmd) => {
+    guest.log.push(cmd);
+    calls += 1;
+    // Fail only the batch attempt; let the tool loop's commands succeed.
+    return calls === 1 ? '__V86AGENT_EXIT__1\nboom\n' : '__V86AGENT_EXIT__0\nok\n';
+  };
+  const events = [];
+  const vm = createMastraVMAgent({
+    guest,
+    yolo: true,
+    onActivity: e => events.push(e),
+    llmClient: scripted([
+      'false',
+      '{"tool_call":{"name":"mastra_workspace_execute_command","arguments":{"command":"uname -m"}}}',
+      '{"final":"done"}',
+    ]),
+  });
+  await vm.run('do the thing', { batchFirst: true });
+  assert.ok(events.some(e => e.batchFallback === 'exit 1'), 'no fallback event');
+  assert.ok(guest.log.length > 1, 'tool loop never ran after the failed batch');
+});
+
+test('batchFirst returns the batch output directly when the script exits clean', async () => {
+  const llm = scripted(['echo hi']);
+  const vm = createMastraVMAgent({ guest: guestFake(), llmClient: llm, yolo: true });
+  const out = await vm.run('say hi', { batchFirst: true });
+  assert.match(out, /echo hi/);
+  assert.equal(llm.turns, 1, 'the tool loop must not run after a clean batch');
+});
+
+test('batch mode honours a rejected approval instead of running the script', async () => {
+  const guest = guestFake();
+  const vm = createMastraVMAgent({
+    guest,
+    yolo: false,
+    approveAction: async () => false,
+    llmClient: scripted(['rm -rf /']),
+  });
+  const result = await vm.runBatch('clean up');
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'rejected');
+  assert.equal(guest.log.length, 0, 'a rejected script must never reach the guest');
+});
+
 test('sandboxOptions reach the sandbox without clobbering the timeout', async () => {
   // index.html ships { captureStderr: false } through here; that flag is worth
   // ~900ms per command, so a spread that silently dropped it would cost the

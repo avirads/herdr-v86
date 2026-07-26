@@ -113,12 +113,14 @@ export class VmAgentController {
       } catch (error) { return await this.onOutput(`Mastra error: ${error.message}`); }
     }
 
-    // Default: run a task.
+    // Default: run a task. `mastra batch` tries a one-shot script first and
+    // falls back to the tool loop if it does not exit clean — codeact's speed
+    // without codeact's habit of reporting a half-finished script as success.
     if (this.abortController) return await this.onOutput('[mastra] another agent task is running.');
     this.abortController = new AbortController();
     await this.onBusy(true);
     try {
-      const output = await (await harness()).run(value);
+      const output = await (await harness()).run(value, { batchFirst: command === 'mastra_batch' });
       await this.onOutput(String(output || '').trim() || '[mastra] the agent returned no output.');
     } catch (error) {
       await this.onOutput(`Mastra error: ${error.message}`);

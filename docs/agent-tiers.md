@@ -84,13 +84,15 @@ model (`PAGE=tier-bench-e2e.html`):
 
 | Tier | Wall | Round-trips | Model calls |
 |---|--:|--:|--:|
-| `rig --codeact` | **950 ms** | **1** | **1** |
-| `rig` | 1764 ms | 3 | 4 |
-| `mastra` (as shipped) | **2667 ms** | 5 | 4 |
-| `vmagent` (Deep Agents) | 3140 ms | 5 | 4 |
-| `mastra` (stderr split on) | 3869 ms | 5 | 4 |
+| `mastra batch` | **725 ms** | **1** | **1** |
+| `rig --codeact` | 973 ms | 1 | 1 |
+| `rig` | 1776 ms | 3 | 4 |
+| `mastra` (as shipped) | 2537 ms | 5 | 4 |
+| `mastra batch`, script failed → fell back | 2778 ms | 5 | 4 |
+| `vmagent` (Deep Agents) | 3041 ms | 5 | 4 |
+| `mastra` (stderr split on) | 3923 ms | 5 | 4 |
 
-**As shipped, Mastra is now faster than the Deep Agents tier** — the same five
+**Mastra's tool loop is now faster than the Deep Agents tier** — the same five
 round-trips and ~15% less wall clock, where it was 1.68× slower before. Two
 changes did it, and only one of them was about trip count:
 
@@ -98,10 +100,29 @@ changes did it, and only one of them was about trip count:
    `vmagent`.
 2. Dropping the stderr wrapper took ~900 ms out of each command.
 
-`rig --codeact` still collapses the whole task into one shell script and one
-round-trip, which is why it wins by a wide margin — when the model can write a
-correct script. `vmagent`'s 5 trips include two at startup, reading
-`/AGENTS.md` and listing `skills/`.
+`vmagent`'s 5 trips include two at startup, reading `/AGENTS.md` and listing
+`skills/`.
+
+### Batch mode is the larger win, and it is bounded
+
+Everything above is a tool loop paying one round-trip per operation. `mastra
+batch` and `rig --codeact` instead spend one model call on a single shell
+script and one round-trip running it — **3.5× faster than the tool loop**,
+which is far more than anything left to win inside the loop.
+
+The reason batch mode is not the default is the row that says *script failed*.
+A 2B model writes a correct script often enough to be worth trying and not
+often enough to trust. So `mastra batch` differs from `rig --codeact` in one
+respect that matters: it prepends `set -e`, so a script that dies halfway exits
+non-zero instead of returning its partial output as if it had succeeded. That
+makes the exit code worth branching on, and the mode falls back to the full
+tool loop when it is not clean.
+
+The trade is priced: **~240 ms lost** on a failed attempt (2778 ms against the
+tool loop's 2537 ms), against **~1800 ms saved** when the script works. It wins
+outright unless the model fails more than about seven times in eight.
+`rig --codeact` has no such fallback — a bad script there returns whatever it
+printed.
 
 Enabling Mastra's full 19-tool surface changed round-trips not at all and wall
 clock within noise: **extra tools cost prompt tokens, not latency.** With a
@@ -130,8 +151,13 @@ on every turn:
 
 ## Choosing
 
-- **`rig --codeact`** — fastest by a large margin for anything expressible as
-  one shell script. Needs the model to write a correct script in one shot.
+- **`mastra batch`** — fastest of everything here, and the safe way to take
+  that speed: a bad script costs ~240 ms and falls back to the tool loop
+  instead of returning a half-finished result. Start here for anything
+  expressible as one shell script.
+- **`rig --codeact`** — the same one-script shape without the bundle or the
+  fallback. Needs the model to write a correct script in one shot, and gives
+  you no signal when it did not.
 - **`rig`** — lowest per-operation overhead, four tools, no bundle. The default
   for simple file-and-shell work.
 - **`vmagent`** — one round-trip per operation *and* the widest tool set,

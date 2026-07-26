@@ -5,6 +5,8 @@ usage() {
   cat >&2 <<'EOF'
 usage: mastra TASK...              run a task with the Mastra agent tier
        mastra run TASK...
+       mastra batch TASK...        one script, one round-trip; falls back to
+                                   the tool loop if the script exits non-zero
        mastra status               model, approvals, tool profile, prompt cost
        mastra tools                list the tools currently active
        mastra tools lean|full      8 workspace tools, or all 19
@@ -43,10 +45,12 @@ case "${1:-}" in
     operation=MASTRA_YOLO
     shift
     case "${1:-}" in on|off) payload=$1; shift ;; *) usage 2 ;; esac ;;
+  batch)  operation=MASTRA_BATCH;  shift ;;
   run) shift ;;
 esac
 
-if [ "$operation" = MASTRA ]; then
+# Both of these carry a task string; every other subcommand is a bare verb.
+if [ "$operation" = MASTRA ] || [ "$operation" = MASTRA_BATCH ]; then
   [ "$#" -gt 0 ] || usage 2
   payload=$*
   # Consume the positional parameters before the trailing check below. Without
@@ -60,6 +64,6 @@ fi
 printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > /dev/ttyS0
 
 case "$operation" in
-  MASTRA) echo '[mastra] submitted to the ready browser agent.' ;;
-  *)      echo "[mastra] ${operation#MASTRA_} requested." ;;
+  MASTRA|MASTRA_BATCH) echo '[mastra] submitted to the ready browser agent.' ;;
+  *)                   echo "[mastra] ${operation#MASTRA_} requested." ;;
 esac

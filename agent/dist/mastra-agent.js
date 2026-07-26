@@ -257169,6 +257169,35 @@ function createMastraVMAgent({
     await workspace.init();
     return [...Object.keys(await createWorkspaceTools(workspace)), ...Object.keys(extraTools)];
   };
+  const runBatch = async (task) => {
+    const completion = await llmClient.chat({
+      model: llmClient.modelName || "webgpu",
+      temperature: 0,
+      max_tokens: 1e3,
+      chat_template_kwargs: { enable_thinking: false },
+      messages: [
+        { role: "system", content: BATCH_PROMPT },
+        { role: "user", content: String(task) }
+      ]
+    });
+    const script = stripFence(completion?.choices?.[0]?.message?.content);
+    if (!script) return { ok: false, script: "", output: "", exitCode: null, reason: "no script" };
+    onActivity({ tool: "batch", input: { script } });
+    if (!yolo && !await approveAction("execute", { script })) {
+      return { ok: false, script, output: "", exitCode: null, reason: "rejected" };
+    }
+    await workspace.init();
+    const result = await workspace.sandbox.executeCommand(`set -e
+${script}`);
+    onActivity({ tool: "batch", done: true, error: result.success ? void 0 : result.exitCode });
+    return {
+      ok: result.success,
+      script,
+      output: [result.stdout, result.stderr].filter(Boolean).join("\n").trim(),
+      exitCode: result.exitCode,
+      reason: result.success ? "ok" : `exit ${result.exitCode}`
+    };
+  };
   return {
     agent,
     workspace,
@@ -257196,12 +257225,35 @@ function createMastraVMAgent({
       ].join("").length;
       return { toolCount: tools.length, chars, approxTokens: Math.ceil(chars / 4) };
     },
-    async run(task) {
+    runBatch,
+    // batchFirst tries the one-shot script and falls back to the tool loop if
+    // it does not exit clean. The fallback is the point: a 2B model writes a
+    // correct script often enough to be worth trying and not often enough to
+    // trust, so this buys codeact's speed without codeact's failure mode.
+    async run(task, { batchFirst = false } = {}) {
       extraTools.resetTurn?.();
+      if (batchFirst) {
+        const batch = await runBatch(task);
+        if (batch.ok) return batch.output;
+        if (batch.reason === "rejected") return "Operation rejected.";
+        onActivity({ batchFallback: batch.reason });
+        extraTools.resetTurn?.();
+      }
       const result = await agent.generate(task);
       return result.text ?? result?.response?.text ?? "";
     }
   };
+}
+var BATCH_PROMPT = [
+  "You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.",
+  "Accomplish the task by writing ONE POSIX sh script using BusyBox-available tools (cat, ls, grep, sed, awk, printf, test, mkdir, etc.).",
+  "Paths are relative to the project directory, which is already the working directory.",
+  "Output ONLY the script body \u2014 no explanation, no markdown fences."
+].join("\n");
+function stripFence(content3) {
+  const text10 = String(content3 ?? "").trim();
+  const fenced = text10.match(/^```(?:sh|bash)?\s*([\s\S]*?)\s*```$/i);
+  return (fenced ? fenced[1] : text10).trim();
 }
 var GUEST_RPC_TIMEOUT_MS_EXPORTED = GUEST_RPC_TIMEOUT_MS;
 export {

@@ -17,15 +17,27 @@ Three tiers share this guest. Measured per-operation cost (`docs/agent-tiers.md`
 
 | Want | Use | Why |
 |---|---|---|
-| Anything expressible as one shell script | `rig --codeact 'TASK'` | 1 round-trip, ~950 ms — 4× faster than anything else |
+| Anything expressible as one shell script | `mastra batch 'TASK'` | 1 round-trip, ~725 ms — fastest here, and falls back if the script fails |
+| The same, without loading the 9.7 MB bundle | `rig --codeact 'TASK'` | 1 round-trip, ~973 ms, but no fallback |
 | Simple file + shell work | `rig 'TASK'` | 1 round-trip per operation, 4 tools |
 | Broadest tool set, or a follow-up conversation | `vmagent 'TASK'` | 1 round-trip per operation, 18 tools, persistent session |
-| Mastra's workspace/planning specifically | `mastra 'TASK'` | 2–3 round-trips per file operation; slowest |
+| Mastra's workspace/planning specifically | `mastra 'TASK'` | 5 round-trips on the benchmark task, ~15% faster than `vmagent` |
 
-**Prefer another tier unless you specifically want Mastra.** It is the slowest
-per operation: it reads a file in ~1.7 s against rig's ~0.4 s, because
-`read_file` issues `stat`, `read`, then `stat` again. It is faster than Deep
-Agents only at `edit_file`, and it uniquely offers `file_stat` and `mkdir`.
+**Reach for `mastra batch` first.** One model call writes one shell script and
+one round-trip runs it, which is ~3.5× faster than any tool loop. It prepends
+`set -e`, so a script that dies partway exits non-zero and the run falls back
+to the full tool loop automatically — you get the speed without the risk of a
+half-finished script reported as success. A failed attempt costs ~240 ms.
+
+Batch mode is not always right: it cannot ask a follow-up question, and a task
+that genuinely needs to look at a file before deciding what to do next is
+better served by the tool loop. Use plain `mastra` for those.
+
+Mastra's tool loop is no longer the slow tier — it beats Deep Agents on the
+benchmark task. A **cold** single file read still costs ~1.9 s against rig's
+~0.5 s because `read_file` issues `stat`, `read`, then `stat` again, but a
+repeat inside the cache TTL costs nothing. Mastra uniquely offers `file_stat`
+and `mkdir`, and is faster than Deep Agents at `edit_file`.
 
 ## Preflight — always, before the first task
 
@@ -40,6 +52,8 @@ it needs no model and will not build the session.
 
     mastra TASK...              run a task
     mastra run TASK...
+    mastra batch TASK...        one script, one round-trip; falls back to the
+                                tool loop if the script exits non-zero
     mastra status               model, approvals, tool profile, prompt cost
     mastra tools                list the tools currently active
     mastra tools lean|full      8 workspace tools, or all 19
@@ -103,9 +117,16 @@ require a model, so it is always safe.
     mastra status                      # gate: is a model loaded?
     mastra yolo on                     # no human to approve mutations
     mastra tools                       # know what is available
-    mastra 'read /README.md and write a one-line summary to /SUMMARY.md'
+    mastra batch 'read /README.md and write a one-line summary to /SUMMARY.md'
     cat /root/project/SUMMARY.md       # verify by side effect, not by the answer
 
-If `SUMMARY.md` is missing: `mastra tools lean`, then retry the same task once.
-If it fails again, fall back to `rig --codeact` — it is faster and has fewer
-moving parts.
+Use `batch` as the default verb in a loop like this. It is the fastest path and
+it already retries through the tool loop on its own when the script fails, so
+you do not have to code that retry yourself — but it still cannot tell you the
+*result* was right, only that nothing exited non-zero. The `cat` is not
+optional.
+
+If `SUMMARY.md` is missing: `mastra tools lean`, then retry the same task once
+with plain `mastra` (the tool loop can inspect state between steps in a way one
+script cannot). If it fails again, fall back to `rig --codeact` — fewer moving
+parts, no bundle to load.
