@@ -34,6 +34,8 @@ import {
 
 const EXIT_MARKER = /^__V86AGENT_EXIT__(\d+)\n?/;
 const STDERR_MARKER = '__V86_STDERR__';
+// Separates stat output from the file body when a stat carries the body back.
+const BODY_MARKER = '__V86_FS_BODY__';
 
 // ---------------------------------------------------------------------------
 // path + shell helpers
@@ -139,7 +141,30 @@ export function splitStderr(output) {
 // ---------------------------------------------------------------------------
 
 export class V86Filesystem extends MastraFilesystem {
-  constructor({ guest, id = 'v86-guest-fs', name = 'v86-guest', readOnly = false, ...options } = {}) {
+  constructor({
+    guest,
+    id = 'v86-guest-fs',
+    name = 'v86-guest',
+    readOnly = false,
+    // Every guest call is one serial round-trip (~400 ms on the emulated
+    // i686), and Mastra's tool layer issues several per logical operation:
+    // read_file stats the same path before AND after reading, and list/grep
+    // re-read .gitignore every time. Those repeats are what this cache
+    // removes. The window is deliberately short — a human is also driving
+    // this guest from the terminal — and every mutation invalidates.
+    // Set 0 to disable.
+    cacheTtlMs = 1500,
+    // Off by default, and the reason is worth recording. Having stat carry the
+    // file body back does remove a round-trip (6 -> 4 for a read/exec/write
+    // task), but it moves the body from `guest.read` — a purpose-built RPC —
+    // onto `guest.execute`, which wraps every command in a shell, redirects
+    // stderr to a temp file, cats it back and deletes it. Measured on the real
+    // guest that trade LOST ~1.7 s on the same task, reproducibly. Fewer
+    // round-trips is not automatically faster when the trips are not equal.
+    // Set a byte cap to re-enable if a future transport makes execute cheap.
+    prefetchMaxBytes = 0,
+    ...options
+  } = {}) {
     super({ name, ...options });
     if (!guest) throw new Error('V86Filesystem requires a guest bridge');
     this.id = id;
@@ -148,6 +173,39 @@ export class V86Filesystem extends MastraFilesystem {
     this.status = 'pending';
     this.guest = guest;
     this.readOnly = readOnly;
+    this.cacheTtlMs = cacheTtlMs;
+    this.prefetchMaxBytes = prefetchMaxBytes;
+    this._cache = new Map();
+  }
+
+  // --- round-trip cache ------------------------------------------------------
+
+  _cacheGet(relative, field) {
+    if (!this.cacheTtlMs) return undefined;
+    const entry = this._cache.get(relative);
+    if (!entry) return undefined;
+    if (Date.now() - entry.at > this.cacheTtlMs) {
+      this._cache.delete(relative);
+      return undefined;
+    }
+    return entry[field];
+  }
+
+  _cacheSet(relative, patch) {
+    if (!this.cacheTtlMs) return;
+    this._cache.set(relative, { ...(this._cache.get(relative) ?? {}), ...patch, at: Date.now() });
+  }
+
+  // Any mutation drops the path. Creates and deletes also change the parent
+  // listing, so that goes too.
+  _invalidate(...paths) {
+    for (const path of paths) {
+      if (path == null) continue;
+      const relative = toGuestPath(path);
+      this._cache.delete(relative);
+      const parent = relative.includes('/') ? relative.slice(0, relative.lastIndexOf('/')) : '.';
+      this._cache.delete(parent);
+    }
   }
 
   async init() {
@@ -176,11 +234,18 @@ export class V86Filesystem extends MastraFilesystem {
   }
 
   async readFile(path, options = {}) {
-    const content = await this.guest.read(toGuestPath(path)).catch(error => {
-      throw /not found|No such file/i.test(error?.message ?? '')
-        ? new FileNotFoundError(path)
-        : error;
-    });
+    const relative = toGuestPath(path);
+    // Usually already here: Mastra stats before reading, and stat brings the
+    // body back with it.
+    let content = this._cacheGet(relative, 'content');
+    if (content === undefined) {
+      content = await this.guest.read(relative).catch(error => {
+        throw /not found|No such file/i.test(error?.message ?? '')
+          ? new FileNotFoundError(path)
+          : error;
+      });
+      this._cacheSet(relative, { content, missing: false });
+    }
     if (options.encoding) return content;
     // The serial bridge is text-only; Buffer is produced for contract parity.
     return typeof Buffer !== 'undefined' ? Buffer.from(content, 'utf8') : content;
@@ -193,7 +258,9 @@ export class V86Filesystem extends MastraFilesystem {
     if (options.expectedMtime) {
       // Optimistic concurrency: the guest is also driven by a human at the
       // terminal, so external edits between read and write are routine.
-      const current = await this.stat(path).catch(() => null);
+      // Deliberately bypasses the cache — this check exists to notice exactly
+      // the change a cached stat would hide, so it must cost a round-trip.
+      const current = await this.stat(path, { fresh: true }).catch(() => null);
       if (current && current.modifiedAt.getTime() !== new Date(options.expectedMtime).getTime()) {
         throw new StaleFileError(path, new Date(options.expectedMtime), current.modifiedAt);
       }
@@ -206,6 +273,7 @@ export class V86Filesystem extends MastraFilesystem {
     if (options.recursive) await this.mkdir(parentPath(path), { recursive: true });
 
     await this.guest.write(toGuestPath(path), text);
+    this._invalidate(path);
   }
 
   async appendFile(path, content) {
@@ -213,12 +281,14 @@ export class V86Filesystem extends MastraFilesystem {
     const existing = (await this.exists(path)) ? await this.guest.read(toGuestPath(path)) : '';
     const text = typeof content === 'string' ? content : new TextDecoder().decode(content);
     await this.guest.write(toGuestPath(path), existing + text);
+    this._invalidate(path);
   }
 
   async deleteFile(path, options = {}) {
     this._assertWritable('deleteFile');
     if (options.force && !(await this.exists(path))) return;
     await this.guest.delete(toGuestPath(path));
+    this._invalidate(path);
   }
 
   async copyFile(src, dest, options = {}) {
@@ -230,6 +300,7 @@ export class V86Filesystem extends MastraFilesystem {
     }
     const flag = options.recursive ? '-r ' : '';
     await this._sh(`cp ${flag}-- ${shellQuote(toGuestPath(src))} ${shellQuote(toGuestPath(dest))}`);
+    this._invalidate(dest);
   }
 
   async moveFile(src, dest, options = {}) {
@@ -240,12 +311,14 @@ export class V86Filesystem extends MastraFilesystem {
       throw error;
     }
     await this._sh(`mv -- ${shellQuote(toGuestPath(src))} ${shellQuote(toGuestPath(dest))}`);
+    this._invalidate(src, dest);
   }
 
   async mkdir(path, options = {}) {
     this._assertWritable('mkdir');
     const flag = options.recursive ? '-p ' : '';
     await this._sh(`mkdir ${flag}-- ${shellQuote(toGuestPath(path))}`);
+    this._invalidate(path);
   }
 
   async rmdir(path, options = {}) {
@@ -254,6 +327,7 @@ export class V86Filesystem extends MastraFilesystem {
       ? `rm -rf -- ${shellQuote(toGuestPath(path))}`
       : `rmdir -- ${shellQuote(toGuestPath(path))}`;
     await this._sh(command, { allowFailure: Boolean(options.force) });
+    this._invalidate(path);
   }
 
   async readdir(path = '/', options = {}) {
@@ -287,26 +361,54 @@ export class V86Filesystem extends MastraFilesystem {
     return exitCode === 0;
   }
 
-  async stat(path) {
+  async stat(path, { fresh = false } = {}) {
+    const relative = toGuestPath(path);
+    if (!fresh) {
+      const cached = this._cacheGet(relative, 'stat');
+      if (cached) return cached;
+      if (this._cacheGet(relative, 'missing')) throw new FileNotFoundError(path);
+    }
+
     // busybox stat: %F human-readable type, %s size, %Y mtime as epoch seconds.
+    // The body rides along when the target is a small regular file, because
+    // the caller almost always reads it next; that turns Mastra's
+    // stat-then-read-then-stat into a single round-trip.
+    const quoted = shellQuote(relative);
+    // With caching off there is nowhere to put a prefetched body, so fetching
+    // one would be pure waste — measurably so, since it drags the file over
+    // the serial bridge for nothing.
+    const prefetch = this.cacheTtlMs > 0 && this.prefetchMaxBytes > 0;
     const { exitCode, output } = await this._sh(
-      `stat -c '%F|%s|%Y' -- ${shellQuote(toGuestPath(path))}`,
+      prefetch
+        ? `p=${quoted}; s=$(stat -c '%F|%s|%Y' -- "$p") || exit 1; printf '%s\\n' "$s"; ` +
+          `if [ -f "$p" ]; then sz=${'${s#*|}'}; sz=${'${sz%|*}'}; ` +
+          `if [ "$sz" -le ${this.prefetchMaxBytes} ]; then printf '%s\\n' '${BODY_MARKER}'; cat -- "$p"; fi; fi`
+        : `stat -c '%F|%s|%Y' -- ${quoted}`,
       { allowFailure: true },
     );
-    if (exitCode !== 0) throw new FileNotFoundError(path);
+    if (exitCode !== 0) {
+      this._cacheSet(relative, { missing: true, stat: undefined, content: undefined });
+      throw new FileNotFoundError(path);
+    }
 
-    const [kind, size, mtime] = output.trim().split('|');
+    const markerAt = output.indexOf(`${BODY_MARKER}\n`);
+    const head = markerAt === -1 ? output : output.slice(0, markerAt);
+    const body = markerAt === -1 ? undefined : output.slice(markerAt + BODY_MARKER.length + 1);
+
+    const [kind, size, mtime] = head.trim().split('|');
     const isDirectory = /directory/i.test(kind ?? '');
     const modifiedAt = new Date(Number(mtime || 0) * 1000);
-    return {
+    const result = {
       name: baseName(path),
-      path: toWorkspacePath(toGuestPath(path)),
+      path: toWorkspacePath(relative),
       type: isDirectory ? 'directory' : 'file',
       size: isDirectory ? 0 : Number(size) || 0,
       createdAt: modifiedAt, // no birth time on the guest's ext4 via busybox
       modifiedAt,
       ...(isDirectory ? {} : { mimeType: mimeType(path) }),
     };
+    this._cacheSet(relative, { stat: result, missing: false, ...(body === undefined ? {} : { content: body }) });
+    return result;
   }
 
   /** Not part of the abstract contract, but Workspace search uses it when present. */

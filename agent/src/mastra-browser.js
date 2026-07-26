@@ -51,6 +51,16 @@ export function createMastraVMAgent({
   enableVmTools = false,
   // Mastra's own planning tools, the equivalent of Deep Agents' write_todos.
   enablePlanning = false,
+  // Passed to V86Filesystem: cacheTtlMs and prefetchMaxBytes. The defaults are
+  // what bring per-operation round-trips down to the Deep Agents tier's; set
+  // { cacheTtlMs: 0 } to measure or restore the uncached behaviour.
+  filesystemOptions = {},
+  // Passed to V86Sandbox. The one that matters for speed is
+  // { captureStderr: false }: separating stderr costs a temp file plus two
+  // extra process spawns inside the guest, measured at ~900 ms per command
+  // against ~400 ms unwrapped. Deep Agents does not separate stderr at all,
+  // which is most of why its execute looks faster.
+  sandboxOptions = {},
 } = {}) {
   if (!guest) throw new Error('createMastraVMAgent requires the guest bridge');
   if (!llmClient?.chat) throw new Error('createMastraVMAgent requires an LLM client with chat()');
@@ -62,8 +72,8 @@ export function createMastraVMAgent({
   };
 
   const workspace = new Workspace({
-    filesystem: new V86Filesystem({ guest }),
-    sandbox: new V86Sandbox({ guest, defaultTimeout: SANDBOX_TIMEOUT_MS }),
+    filesystem: new V86Filesystem({ guest, ...filesystemOptions }),
+    sandbox: new V86Sandbox({ guest, defaultTimeout: SANDBOX_TIMEOUT_MS, ...sandboxOptions }),
     tools: {
       hooks: {
         beforeToolCall: ({ toolName, input }) => onActivity({ tool: toolName, input }),

@@ -92,6 +92,18 @@ function fakeGuest(initial = {}) {
         if (!files.has(p)) return exit(1, 'stat: No such file or directory\n');
         return exit(0, `regular file|${files.get(p).length}|${mtimes.get(p)}\n`);
       }
+      // stat() coalesces the body into the same round-trip for small regular
+      // files; emulate that shape so the cache path is exercised, not bypassed.
+      if ((m = inner.match(/^p=(.+?); s=\$\(stat -c '%F\|%s\|%Y' -- "\$p"\)/))) {
+        const p = unquote(m[1]);
+        if (dirs.has(p)) return exit(0, `directory|0|${mtimes.get(p) ?? 1_700_000_000}\n`);
+        if (!files.has(p)) return exit(1, 'stat: No such file or directory\n');
+        const body = files.get(p);
+        const capMatch = inner.match(/-le (\d+)/);
+        const cap = capMatch ? Number(capMatch[1]) : 32768;
+        const head = `regular file|${body.length}|${mtimes.get(p)}\n`;
+        return exit(0, body.length <= cap ? `${head}__V86_FS_BODY__\n${body}` : head);
+      }
       if ((m = inner.match(/^mkdir (-p )?-- (.+)$/))) {
         dirs.add(unquote(m[2]));
         return exit(0);
@@ -132,7 +144,22 @@ function fakeGuest(initial = {}) {
   return guest;
 }
 
-const fsFor = (init, options = {}) => new V86Filesystem({ guest: fakeGuest(init), ...options });
+// `log` records only shell commands, which several tests assert on. Round-trip
+// counting needs every call, so wrap the guest and tally separately.
+function countingGuest(initial) {
+  const guest = fakeGuest(initial);
+  guest.calls = [];
+  for (const method of ['read', 'write', 'list', 'glob', 'delete', 'grep', 'execute']) {
+    const original = guest[method].bind(guest);
+    guest[method] = async (...args) => {
+      guest.calls.push(method);
+      return original(...args);
+    };
+  }
+  return guest;
+}
+
+const fsFor = (init, options = {}) => new V86Filesystem({ guest: countingGuest(init), ...options });
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -317,6 +344,22 @@ test('stdout and stderr arrive separated', async () => {
   assert.equal(chunks.err.length, 1);
 });
 
+test('captureStderr:false sends the bare command, with no temp-file wrapper', async () => {
+  // This is the shipped configuration's fast path. Separating stderr needs a
+  // temp file plus two extra spawns in the guest; on the emulated i686 that
+  // measured ~900 ms per command against ~400 ms unwrapped, which is the
+  // difference between trailing the Deep Agents tier and beating it. Nothing
+  // is lost: vmagent-rpc already folds stderr into the output with 2>&1, so
+  // the model still reads the error text — it just is not split out.
+  const guest = fakeGuest();
+  const sandbox = new V86Sandbox({ guest, captureStderr: false });
+  await sandbox.executeCommand('uname -m');
+  const [command] = guest.log;
+  assert.doesNotMatch(command, /v86sbx/, 'no temp file');
+  assert.doesNotMatch(command, /2>/, 'no stderr redirect');
+  assert.equal(guest.log.length, 1);
+});
+
 test('cwd and env are applied in one round-trip', async () => {
   const guest = fakeGuest();
   const sandbox = new V86Sandbox({ guest, workingDirectory: '/project', env: { BASE: '1' } });
@@ -417,4 +460,86 @@ test('toGuestPath resolves relative paths against the workspace root, still refu
   // Safety is unchanged.
   assert.throws(() => toGuestPath('../etc/passwd'), /cannot contain \.\./);
   assert.throws(() => toGuestPath('/a/../../b'), /cannot contain \.\./);
+});
+
+// --- round-trip cache -------------------------------------------------------
+// Mastra's tool layer stats the same path either side of a read and re-reads
+// .gitignore on every list/grep. Each repeat is a ~400 ms serial round-trip on
+// the emulated guest, so these are the difference between matching the Deep
+// Agents tier and being 3x slower than it.
+
+test('prefetch is off by default: the body stays on the cheap read RPC', async () => {
+  // Opt-in only. Coalescing the body into stat removes a round-trip but moves
+  // the payload onto guest.execute (shell wrapper + stderr temp file), which
+  // measured ~1.7 s SLOWER on the real guest. Fewer trips is not automatically
+  // faster when the trips cost different amounts.
+  const filesystem = fsFor({ 'a.txt': 'hello\n' });
+  assert.equal(filesystem.prefetchMaxBytes, 0);
+  await filesystem.stat('/a.txt');
+  const afterStat = filesystem.guest.calls.length;
+  assert.equal(await filesystem.readFile('/a.txt', { encoding: 'utf8' }), 'hello\n');
+  assert.ok(filesystem.guest.calls.length > afterStat, 'body must come over the dedicated read RPC');
+});
+
+test('with prefetch enabled, stat carries the body and a following readFile is free', async () => {
+  const filesystem = fsFor({ 'a.txt': 'hello\n' }, { prefetchMaxBytes: 32768 });
+  const before = filesystem.guest.calls.length;
+
+  const stat = await filesystem.stat('/a.txt');
+  assert.equal(stat.size, 6);
+  const afterStat = filesystem.guest.calls.length;
+  assert.equal(afterStat - before, 1, 'stat is one round-trip');
+
+  assert.equal(await filesystem.readFile('/a.txt', { encoding: 'utf8' }), 'hello\n');
+  assert.equal(filesystem.guest.calls.length, afterStat, 'read served from the stat that already fetched it');
+
+  // ...and the repeat stat Mastra issues afterwards is free too.
+  await filesystem.stat('/a.txt');
+  assert.equal(filesystem.guest.calls.length, afterStat, 'repeat stat served from cache');
+});
+
+test('a body larger than prefetchMaxBytes is not dragged over the serial bridge', async () => {
+  const big = 'x'.repeat(200);
+  const filesystem = fsFor({ 'big.txt': big }, { prefetchMaxBytes: 100 });
+  await filesystem.stat('/big.txt');
+  const afterStat = filesystem.guest.calls.length;
+  assert.equal(await filesystem.readFile('/big.txt', { encoding: 'utf8' }), big);
+  assert.ok(filesystem.guest.calls.length > afterStat, 'oversized body must be fetched separately, not prefetched');
+});
+
+test('every mutation invalidates, so a cached read can never go stale behind a write', async () => {
+  const filesystem = fsFor({ 'a.txt': 'one\n' });
+  assert.equal(await filesystem.readFile('/a.txt', { encoding: 'utf8' }), 'one\n');
+  await filesystem.writeFile('/a.txt', 'two\n');
+  assert.equal(await filesystem.readFile('/a.txt', { encoding: 'utf8' }), 'two\n', 'write must drop the cached body');
+
+  await filesystem.appendFile('/a.txt', 'three\n');
+  assert.equal(await filesystem.readFile('/a.txt', { encoding: 'utf8' }), 'two\nthree\n');
+
+  await filesystem.deleteFile('/a.txt');
+  await assert.rejects(filesystem.readFile('/a.txt'), /not found|No such file/i);
+});
+
+test('the expectedMtime guard bypasses the cache — it exists to catch what a cache would hide', async () => {
+  const filesystem = fsFor({ 'a.txt': 'one\n' });
+  const stat = await filesystem.stat('/a.txt');
+  const roundTripsBefore = filesystem.guest.calls.length;
+
+  // A concurrent edit by the human at the terminal: mtime moves underneath us.
+  filesystem.guest.mtimes.set('a.txt', Math.floor(stat.modifiedAt.getTime() / 1000) + 60);
+
+  await assert.rejects(
+    filesystem.writeFile('/a.txt', 'two\n', { expectedMtime: stat.modifiedAt }),
+    (error) => error.constructor.name === 'StaleFileError',
+    'a cached stat would have missed the external edit',
+  );
+  assert.ok(filesystem.guest.calls.length > roundTripsBefore, 'the guard must spend a round-trip');
+});
+
+test('cacheTtlMs: 0 disables caching entirely', async () => {
+  const filesystem = fsFor({ 'a.txt': 'hello\n' }, { cacheTtlMs: 0 });
+  await filesystem.stat('/a.txt');
+  const afterStat = filesystem.guest.calls.length;
+  await filesystem.readFile('/a.txt', { encoding: 'utf8' });
+  assert.ok(filesystem.guest.calls.length > afterStat, 'no caching when disabled');
 });

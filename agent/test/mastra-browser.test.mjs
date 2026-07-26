@@ -115,3 +115,16 @@ test('sandbox timeout stays under the guest RPC timeout', async () => {
   const vm = createMastraVMAgent({ guest: guestFake(), llmClient: scripted([]) });
   assert.ok(vm.workspace.sandbox.defaultTimeout < 30_000);
 });
+
+test('sandboxOptions reach the sandbox without clobbering the timeout', async () => {
+  // index.html ships { captureStderr: false } through here; that flag is worth
+  // ~900ms per command, so a spread that silently dropped it would cost the
+  // tier its performance lead with every test still green.
+  const vm = createMastraVMAgent({
+    guest: guestFake(),
+    llmClient: scripted([]),
+    sandboxOptions: { captureStderr: false },
+  });
+  assert.equal(vm.workspace.sandbox.captureStderr, false);
+  assert.ok(vm.workspace.sandbox.defaultTimeout < 30_000, 'timeout still applied');
+});

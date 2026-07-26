@@ -58,7 +58,10 @@ const guest = new Proxy(rawGuest, {
     const value = target[prop];
     if (typeof value !== 'function') return value;
     if (!['read', 'write', 'list', 'execute', 'grep', 'glob', 'delete', 'test'].includes(prop)) return value.bind(target);
-    return async (...args) => { rpc.push(String(prop)); return value.apply(target, args); };
+    return async (...args) => {
+      rpc.push(`${String(prop)}(${String(args[0] ?? '').slice(0, 60)})`);
+      return value.apply(target, args);
+    };
   },
 });
 
@@ -129,9 +132,24 @@ async function run() {
     async status() { return { modelName: 'bench' }; },
     async chat() { return { choices: [{ message: { content: '{"final":"x"}' } }] }; },
   };
-  const mastraVm = createMastraVMAgent({ guest, llmClient: stubModel, yolo: true });
+  // Two Mastra harnesses. The cache persists across benchmark reps, so a
+  // single harness would report a warm cache as if it were the cost of the
+  // operation — measure both honestly instead.
+  //   cold = cache off, the true cost of one tool call from scratch
+  //   warm = cache on, what a repeat within the TTL actually costs
+  const mastraVm = createMastraVMAgent({
+    guest, llmClient: stubModel, yolo: true, filesystemOptions: { cacheTtlMs: 0 },
+    // Match what index.html ships, so this table describes the real tier.
+    sandboxOptions: { captureStderr: false },
+  });
   const mtools = await mastraVm.toolMap();
   const callTool = (name, args) => mtools[name].execute(args, {});
+
+  const warmVm = createMastraVMAgent({
+    guest, llmClient: stubModel, yolo: true, sandboxOptions: { captureStderr: false },
+  });
+  const warmTools = await warmVm.toolMap();
+  const callWarm = (name, args) => warmTools[name].execute(args, {});
 
   // --- the features, and how each tier performs them ------------------------
   const features = [
@@ -139,21 +157,25 @@ async function run() {
       vmagent: () => vmagent.read('/README.md'),
       rig: () => rig.read('README.md'),
       mastra: () => callTool('mastra_workspace_read_file', { path: '/README.md' }),
+      mastraWarm: () => callWarm('mastra_workspace_read_file', { path: '/README.md' }),
     }],
     ['list directory', {
       vmagent: () => vmagent.ls('/'),
       rig: () => rig.ls('.'),
       mastra: () => callTool('mastra_workspace_list_files', { path: '/' }),
+      mastraWarm: () => callWarm('mastra_workspace_list_files', { path: '/' }),
     }],
     ['write file', {
       vmagent: (r) => vmagent.write(`/w-vm-${r}.txt`, 'hello\n'),
       rig: (r) => rig.write(`w-rig-${r}.txt`, 'hello\n'),
       mastra: (r) => callTool('mastra_workspace_write_file', { path: `/w-ma-${r}.txt`, content: 'hello\n' }),
+      mastraWarm: (r) => callWarm('mastra_workspace_write_file', { path: `/wW-ma-${r}.txt`, content: 'hello\n' }),
     }],
     ['run command', {
       vmagent: () => vmagent.execute('uname -m'),
       rig: () => rig.execute('uname -m'),
       mastra: () => callTool('mastra_workspace_execute_command', { command: 'uname -m' }),
+      mastraWarm: () => callWarm('mastra_workspace_execute_command', { command: 'uname -m' }),
     }],
     // Each rep edits a freshly seeded file, so the second rep is not editing
     // a string the first one already replaced.
@@ -162,22 +184,26 @@ async function run() {
       vmagentSetup: (r) => rawGuest.write(`e-vm-${r}.txt`, 'BEFORE\n'),
       rig: null, // unsupported — rig has no edit tool
       mastra: (r) => callTool('mastra_workspace_edit_file', { path: `/e-ma-${r}.txt`, oldString: 'BEFORE', newString: 'AFTER' }),
+      mastraWarm: (r) => callWarm('mastra_workspace_edit_file', { path: `/eW-ma-${r}.txt`, oldString: 'BEFORE', newString: 'AFTER' }),
       mastraSetup: (r) => rawGuest.write(`e-ma-${r}.txt`, 'BEFORE\n'),
     }],
     ['grep', {
       vmagent: () => vmagent.grep('linux', '/'),
       rig: null, // unsupported
       mastra: () => callTool('mastra_workspace_grep', { pattern: 'linux', path: '/' }),
+      mastraWarm: () => callWarm('mastra_workspace_grep', { pattern: 'linux', path: '/' }),
     }],
     ['file stat', {
       vmagent: null, // no dedicated stat tool
       rig: null,
       mastra: () => callTool('mastra_workspace_file_stat', { path: '/README.md' }),
+      mastraWarm: () => callWarm('mastra_workspace_file_stat', { path: '/README.md' }),
     }],
     ['mkdir', {
       vmagent: null, // would go through execute
       rig: null,
       mastra: (r) => callTool('mastra_workspace_mkdir', { path: `/d-ma-${r}` }),
+      mastraWarm: (r) => callWarm('mastra_workspace_mkdir', { path: `/dW-ma-${r}` }),
     }],
     ['glob', {
       vmagent: () => vmagent.glob('*.md', '/'),
@@ -189,12 +215,12 @@ async function run() {
   const table = [];
   for (const [feature, impls] of features) {
     const row = { feature };
-    for (const tier of ['vmagent', 'rig', 'mastra']) {
+    for (const tier of ['vmagent', 'rig', 'mastra', 'mastraWarm']) {
       row[tier] = impls[tier] ? await time(impls[tier], impls[`${tier}Setup`]) : { unsupported: true };
     }
     table.push(row);
-    const fmt = (r) => (r.unsupported ? '     —' : `${String(r.ms).padStart(4)}ms/${r.rpc}${r.error ? '!' : ''}`);
-    log(`${feature.padEnd(16)} vmagent ${fmt(row.vmagent)}   rig ${fmt(row.rig)}   mastra ${fmt(row.mastra)}`);
+    const fmt = (r) => (r.unsupported ? "    —" : `${String(r.ms).padStart(4)}ms/${r.rpc}${r.error ? "!" : ""}`);
+    log(`${feature.padEnd(15)} vmagent ${fmt(row.vmagent)}  rig ${fmt(row.rig)}  mastra ${fmt(row.mastra)}  warm ${fmt(row.mastraWarm)}`);
   }
 
   // Tool-surface + prompt cost, which is a per-turn cost rather than per-call.
@@ -207,7 +233,7 @@ async function run() {
     vmagentTools: 18,
   };
 
-  await guest.execute('rm -rf /root/project/w-*.txt /root/project/e-*.txt /root/project/d-ma-*').catch(() => {});
+  await guest.execute('rm -rf /root/project/w-*.txt /root/project/e-*.txt /root/project/d-ma-* /root/project/dW-ma-* /root/project/wW-ma-*.txt /root/project/eW-ma-*.txt').catch(() => {});
   const ok = table.every((r) => ['vmagent', 'rig', 'mastra'].every((t) => r[t].unsupported || !r[t].error));
   log(ok ? 'all supported features succeeded' : 'some feature errored — see table');
   await report({ ok, checks: { table, surface } });

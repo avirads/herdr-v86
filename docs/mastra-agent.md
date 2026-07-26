@@ -122,6 +122,22 @@ throw. Raise one, raise both.
 queue. `writeFile` with `expectedMtime` costs two. On an emulated CPU this
 dominates latency — prefer few batched commands.
 
+**Two options decide this tier's speed**, both measured in
+[agent-tiers.md](agent-tiers.md):
+
+- `filesystemOptions.cacheTtlMs` (default 1500) — a short-TTL cache over `stat`
+  and `read`. Mastra's tool layer stats the same path two or three times per
+  operation; this collapses the duplicates. Every mutation invalidates the path
+  *and its parent*, and the `expectedMtime` guard deliberately bypasses the
+  cache with `stat(path, { fresh: true })` — a stale mtime there would defeat
+  the check it exists to perform. Set `0` to disable.
+- `sandboxOptions.captureStderr` (library default `true`, but **`index.html`
+  ships `false`**) — separating stderr costs a temp file and two extra spawns
+  in the guest, ~900 ms per command. With it off the bare command is sent;
+  `vmagent-rpc` still folds stderr into the output via `2>&1`, so the model
+  reads the error text either way, and only the `{stdout, stderr}` split is
+  lost. Programmatic callers that read `.stderr` should keep the default.
+
 **Pin `@mastra/core`.** Verified against 1.52.1. A release can add a builtin
 import to a shared chunk (breaks the build, loud) or a *call* to an
 already-stubbed one (breaks at runtime, quiet).
