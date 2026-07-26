@@ -62,6 +62,10 @@ install -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/b
 install -D -m 0755 "$PROJECT_DIR/network/guest/rig-vm" "$MOUNT_DIR/usr/local/bin/rig"
 install -D -m 0755 "$PROJECT_DIR/network/guest/mastra-vm" "$MOUNT_DIR/usr/local/bin/mastra"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bin/vmbench"
+# Agent-facing operating manual for the Mastra tier. A system path rather than
+# /root/project/skills/, so the user's workspace is left untouched; the file
+# itself explains the one-line copy that makes Deep Agents auto-discover it.
+install -D -m 0644 "$PROJECT_DIR/network/guest/skills/mastra/SKILL.md" "$MOUNT_DIR/usr/local/share/mastra/SKILL.md"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-proxy" "$MOUNT_DIR/usr/local/libexec/vm-openai-proxy"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-request" "$MOUNT_DIR/usr/local/libexec/vm-openai-request"
 # The source image predates the shell-only guest. Do not carry its legacy app

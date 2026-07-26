@@ -3,6 +3,9 @@ export class VmAgentController {
     Object.assign(this, { createAgent, createMastraAgent, getLlmClient, getGuest, getBrowserClient, approveAction, onOutput, onActivity, onBusy });
     this.harness = null;
     this.mastraHarness = null;
+    // Matches what index.html asks for, and switchable at runtime with
+    // `mastra tools lean|full`.
+    this.mastraFullTools = true;
     this.abortController = null;
     this.yolo = true;
     this.conversationActive = false;
@@ -10,6 +13,120 @@ export class VmAgentController {
   }
 
   resetHarness() { this.harness = null; this.mastraHarness = null; this.completedRuns.clear(); }
+
+  // Everything the Mastra harness can do, reachable from `mastra` in the guest
+  // shell. Subcommands arrive as separate AGENT_MASTRA_* operations, matching
+  // how vmagent's status/stop/reset/yolo are routed.
+  async handleMastra(command, value) {
+    if (!this.createMastraAgent) return await this.onOutput('[mastra] tier is not available in this build.');
+
+    // Cheap, harness-free commands first — these must work before a model is
+    // loaded, otherwise `mastra status` cannot tell you why it is not ready.
+    if (command === 'mastra_stop') {
+      if (!this.abortController) return await this.onOutput('[mastra] no task is running.');
+      this.abortController.abort();
+      return await this.onOutput('[mastra] stop requested.');
+    }
+    if (command === 'mastra_reset') {
+      this.mastraHarness = null;
+      return await this.onOutput('[mastra] session reset; the next run rebuilds it.');
+    }
+    if (command === 'mastra_yolo') {
+      if (value === 'on' && !this.yolo) {
+        this.yolo = await this.approveAction('enable_yolo', {
+          scope: 'current browser page session',
+          warning: 'The agent may overwrite/delete guest files and run arbitrary shell commands without further approval.',
+        });
+      }
+      if (value === 'off') this.yolo = false;
+      this.mastraHarness?.setYolo?.(this.yolo);
+      return await this.onOutput(`[mastra] YOLO ${this.yolo ? 'on' : 'off'} (shared with vmagent).`);
+    }
+    if (command === 'mastra_tools' && (value === 'lean' || value === 'full')) {
+      const wanted = value === 'full';
+      if (wanted !== this.mastraFullTools) {
+        this.mastraFullTools = wanted;
+        // The tool set is fixed when the agent is constructed, so switching
+        // profiles has to discard the harness rather than mutate it.
+        this.mastraHarness = null;
+      }
+      return await this.onOutput(`[mastra] tool profile: ${value}${wanted ? ' (19 tools)' : ' (8 workspace tools)'}.`);
+    }
+
+    const guest = this.getGuest();
+    if (!guest) return await this.onOutput('[mastra] guest bridge is still initializing.');
+    const llmClient = this.getLlmClient();
+    const model = llmClient && typeof llmClient.status === 'function'
+      ? await llmClient.status().catch(() => null)
+      : null;
+
+    if (command === 'mastra_status') {
+      const lines = [
+        `[mastra] ${this.abortController ? 'running' : 'idle'}`,
+        `  model:   ${model?.modelName || 'not configured — use Configure LLM in the header'}`,
+        `  YOLO:    ${this.yolo ? 'on' : 'off'} (shared with vmagent)`,
+        `  profile: ${this.mastraFullTools ? 'full (19 tools)' : 'lean (8 workspace tools)'}`,
+        `  session: ${this.mastraHarness ? 'built' : 'not built — starts on first run'}`,
+      ];
+      // Only report the prompt budget if the harness is already up; building
+      // it just to answer `status` would import 9.7 MB as a side effect.
+      if (this.mastraHarness?.systemPromptCost) {
+        const cost = await this.mastraHarness.systemPromptCost().catch(() => null);
+        if (cost) lines.push(`  prompt:  ~${cost.approxTokens} tokens across ${cost.toolCount} tools (${Math.round((cost.approxTokens / 16384) * 100)}% of a 16k window)`);
+      }
+      return await this.onOutput(lines.join('\n'));
+    }
+
+    // Remaining commands need the harness, which needs a model.
+    if (!llmClient) return await this.onOutput('[mastra] WebGPU LLM is not ready; use Configure LLM in the browser header.');
+    if (model && !model.modelName) {
+      return await this.onOutput('[mastra] no model loaded; click "Configure LLM" in the header, load a .litertlm model, then run mastra again.');
+    }
+
+    const harness = async () => {
+      this.mastraHarness ||= await this.createMastraAgent({
+        guest,
+        llmClient,
+        browserClient: this.getBrowserClient(),
+        yolo: this.yolo,
+        fullTools: this.mastraFullTools,
+        approveAction: (operation, detail) => this.approveAction(operation, detail),
+        onActivity: event => this.onActivity(event),
+      });
+      this.mastraHarness.setYolo?.(this.yolo);
+      return this.mastraHarness;
+    };
+
+    if (command === 'mastra_tools') {
+      try {
+        const names = await (await harness()).listTools();
+        return await this.onOutput([`[mastra] ${names.length} tools active:`, ...names.map(name => `  ${name}`)].join('\n'));
+      } catch (error) { return await this.onOutput(`Mastra error: ${error.message}`); }
+    }
+    if (command === 'mastra_cost') {
+      try {
+        const cost = await (await harness()).systemPromptCost();
+        return await this.onOutput(
+          `[mastra] system prompt ~${cost.approxTokens} tokens (${cost.chars} chars) across ${cost.toolCount} tools — ` +
+          `${Math.round((cost.approxTokens / 16384) * 100)}% of a 16k window.`,
+        );
+      } catch (error) { return await this.onOutput(`Mastra error: ${error.message}`); }
+    }
+
+    // Default: run a task.
+    if (this.abortController) return await this.onOutput('[mastra] another agent task is running.');
+    this.abortController = new AbortController();
+    await this.onBusy(true);
+    try {
+      const output = await (await harness()).run(value);
+      await this.onOutput(String(output || '').trim() || '[mastra] the agent returned no output.');
+    } catch (error) {
+      await this.onOutput(`Mastra error: ${error.message}`);
+    } finally {
+      this.abortController = null;
+      await this.onBusy(false);
+    }
+  }
   closeConversation() { this.conversationActive = false; }
 
   async runRig(prompt) {
@@ -103,39 +220,7 @@ export class VmAgentController {
     // Third tier, beside rig and vmagent. Same lifecycle as rig: one task per
     // invocation, no persistent conversation. The harness is built lazily and
     // reused so the 9.5 MB bundle is only imported if someone actually runs it.
-    if (command === 'mastra') {
-      if (!this.createMastraAgent) return await this.onOutput('[mastra] tier is not available in this build.');
-      if (this.abortController) return await this.onOutput('[mastra] another agent task is running.');
-      const llmClient = this.getLlmClient();
-      const guest = this.getGuest();
-      if (!guest) return await this.onOutput('[mastra] guest bridge is still initializing.');
-      if (!llmClient) return await this.onOutput('[mastra] WebGPU LLM is not ready; use Configure LLM in the browser header.');
-      const model = typeof llmClient.status === 'function' ? await llmClient.status().catch(() => null) : null;
-      if (model && !model.modelName) {
-        return await this.onOutput('[mastra] no model loaded; click "Configure LLM" in the header, load a .litertlm model, then run mastra again.');
-      }
-      this.abortController = new AbortController();
-      await this.onBusy(true);
-      try {
-        this.mastraHarness ||= await this.createMastraAgent({
-          guest,
-          llmClient,
-          browserClient: this.getBrowserClient(),
-          yolo: this.yolo,
-          approveAction: (operation, detail) => this.approveAction(operation, detail),
-          onActivity: event => this.onActivity(event),
-        });
-        this.mastraHarness.setYolo?.(this.yolo);
-        const output = await this.mastraHarness.run(value);
-        await this.onOutput(String(output || '').trim() || '[mastra] the agent returned no output.');
-      } catch (error) {
-        await this.onOutput(`Mastra error: ${error.message}`);
-      } finally {
-        this.abortController = null;
-        await this.onBusy(false);
-      }
-      return;
-    }
+    if (command.startsWith('mastra')) return await this.handleMastra(command, value);
     if (command === 'rig' || command === 'codeact') {
       if (this.abortController) return await this.onOutput('[rig] another agent task is running.');
       this.abortController = new AbortController();

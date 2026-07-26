@@ -4,11 +4,31 @@ A third agent tier beside `rig` and `vmagent`, running
 [Mastra](https://mastra.ai) entirely in the page — no server. Neither existing
 tier is modified.
 
-    mastra 'TASK'
+    mastra TASK...              run a task
+    mastra run TASK...
+    mastra status               model, approvals, tool profile, prompt cost
+    mastra tools                list the tools currently active
+    mastra tools lean|full      8 workspace tools, or all 19
+    mastra cost                 system-prompt budget for the active profile
+    mastra yolo on|off          approvals for mutations and shell commands
+    mastra reset                drop the session and rebuild on next run
+    mastra stop                 abort the task in flight
 
 Like `rig`, one task per invocation; there is no persistent conversation and no
-separate panel. Lifecycle and approvals are shared with `vmagent`:
-`vmagent yolo on|off` governs this tier too.
+separate panel. Approvals are shared with `vmagent` — `mastra yolo` and
+`vmagent yolo` set the same flag.
+
+Each subcommand is its own `AGENT_MASTRA_*` RPC. `status`, `reset`, `yolo` and
+`tools lean|full` deliberately work **before** a model is loaded: `status` has
+to be able to explain why the tier is not ready, so it cannot itself require
+the thing that is missing. `status` also declines to build the harness just to
+answer, since that would import the ~9.7 MB bundle as a side effect — the
+prompt-cost line appears once a session exists, or immediately from
+`mastra cost`.
+
+`mastra tools lean|full` discards the session, because the tool set is fixed
+when the agent is constructed. Switching to the profile already active is a
+no-op and keeps the session.
 
 ## How it is put together
 

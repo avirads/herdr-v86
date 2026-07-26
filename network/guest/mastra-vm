@@ -1,6 +1,65 @@
 #!/bin/sh
 set -eu
-[ "$#" -gt 0 ] || { echo 'usage: mastra TASK...' >&2; exit 2; }
+
+usage() {
+  cat >&2 <<'EOF'
+usage: mastra TASK...              run a task with the Mastra agent tier
+       mastra run TASK...
+       mastra status               model, approvals, tool profile, prompt cost
+       mastra tools                list the tools currently active
+       mastra tools lean|full      8 workspace tools, or all 19
+       mastra cost                 system-prompt budget for the active profile
+       mastra yolo on|off          approvals for mutations and shell commands
+       mastra reset                drop the session and rebuild on next run
+       mastra stop                 abort the task in flight
+
+Runs @mastra/core in the browser page against this guest. One task per
+invocation; there is no follow-up prompt. Configure a model with "Configure
+LLM" in the browser header first. Shares the YOLO setting with vmagent.
+EOF
+  exit "${1:-2}"
+}
+
 b64() { printf %s "$1" | base64 | tr -d '\n'; }
-printf '__V86RPC__\tAGENT_MASTRA\t%s\t%s\n' "$$-$(date +%s)" "$(b64 "$*")" > /dev/ttyS0
-echo '[mastra] submitted to the ready browser agent.'
+
+operation=MASTRA
+payload=''
+
+case "${1:-}" in
+  -h|--help|help) usage 0 ;;
+  status) operation=MASTRA_STATUS; shift ;;
+  cost)   operation=MASTRA_COST;   shift ;;
+  reset)  operation=MASTRA_RESET;  shift ;;
+  stop)   operation=MASTRA_STOP;   shift ;;
+  tools)
+    operation=MASTRA_TOOLS
+    shift
+    case "${1:-}" in
+      '')          ;;
+      lean|full)   payload=$1; shift ;;
+      *)           usage 2 ;;
+    esac ;;
+  yolo)
+    operation=MASTRA_YOLO
+    shift
+    case "${1:-}" in on|off) payload=$1; shift ;; *) usage 2 ;; esac ;;
+  run) shift ;;
+esac
+
+if [ "$operation" = MASTRA ]; then
+  [ "$#" -gt 0 ] || usage 2
+  payload=$*
+  # Consume the positional parameters before the trailing check below. Without
+  # this, `mastra 'do a thing'` falls through to usage — the exact bug that
+  # made `vmagent "hi"` unusable from the day it shipped.
+  set --
+fi
+
+[ "$#" -eq 0 ] || usage 2
+
+printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > /dev/ttyS0
+
+case "$operation" in
+  MASTRA) echo '[mastra] submitted to the ready browser agent.' ;;
+  *)      echo "[mastra] ${operation#MASTRA_} requested." ;;
+esac
