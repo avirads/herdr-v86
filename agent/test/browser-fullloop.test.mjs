@@ -44,7 +44,14 @@ test('full agent loop runs with no node globals present', () => {
 
   // ...and, critically, the tools actually reached the guest. Without this the
   // suite passes while every tool call silently fails.
-  assert.equal(result.guestCommands, 4, 'tools never reached the guest bridge');
+  //
+  // The count is exact on purpose: it is both the negative control (a broken
+  // polyfill drives it to 0) and a round-trip budget. It dropped 4 -> 3 when
+  // V86Filesystem.stat began carrying small file bodies back with it, so
+  // read_file no longer needs its own trip. Raising this number again means
+  // something reintroduced a round-trip.
+  assert.ok(result.guestCommands > 0, 'tools never reached the guest bridge');
+  assert.equal(result.guestCommands, 3, 'round-trip budget for this loop changed');
   assert.equal(result.sawUname, true, 'execute_command never ran in the guest');
   assert.equal(result.notesWritten, 'arch is i686\n', 'write_file never landed in the guest');
 

@@ -675,7 +675,18 @@ import("./network/browser/v86-host-bridge.js").then(module => {
           // fullTools is owned by the controller so `mastra tools lean|full`
           // can switch profiles at runtime; default is the full 19-tool set.
           const { fullTools = true, ...rest } = options;
-          return createMastraVMAgent({ ...rest, enableVmTools: fullTools, enablePlanning: fullTools });
+          return createMastraVMAgent({
+            ...rest,
+            enableVmTools: fullTools,
+            enablePlanning: fullTools,
+            // Separating stderr costs a temp file and two extra process spawns
+            // per command — ~900 ms each on the emulated guest. The consumer
+            // here is an LLM reading text, and vmagent-rpc already folds stderr
+            // into the output with 2>&1, so nothing is lost but the structural
+            // split. This is what makes the tier beat Deep Agents rather than
+            // trail it. The library default stays contract-faithful.
+            sandboxOptions: { captureStderr: false },
+          });
         },
         getLlmClient: () => webGpuLlmClient,
         getGuest: () => guestReadonlyClient,

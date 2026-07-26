@@ -208,6 +208,9 @@ async function run() {
   for (const [label, opts] of [
     ['mastra (8 tools)', {}],
     ['mastra (19 tools)', { enableVmTools: true, enablePlanning: true, browserClient: { async command() { return {}; } } }],
+    // Same tier with stderr separation off — Deep Agents does not separate
+    // stderr either, so this is the like-for-like comparison.
+    ['mastra (no stderr split)', { sandboxOptions: { captureStderr: false } }],
   ]) {
     rows.push(await measure(label, async (box) => {
       const vm = createMastraVMAgent({ guest, llmClient: counted(mastraClient(), box), yolo: true, ...opts });

@@ -256283,6 +256283,7 @@ function createLiteRt({ client, provider = "litert-lm", maxOutputTokens = 1400 }
 init_globals();
 var EXIT_MARKER = /^__V86AGENT_EXIT__(\d+)\n?/;
 var STDERR_MARKER = "__V86_STDERR__";
+var BODY_MARKER = "__V86_FS_BODY__";
 function toGuestPath(path5) {
   const value = String(path5 ?? "/").replace(/\\/g, "/");
   const rooted = value.startsWith("/") ? value : `/${value.replace(/^\.\/+/, "")}`;
@@ -256356,7 +256357,30 @@ ${STDERR_MARKER}
   };
 }
 var V86Filesystem = class extends MastraFilesystem {
-  constructor({ guest, id = "v86-guest-fs", name: name30 = "v86-guest", readOnly = false, ...options2 } = {}) {
+  constructor({
+    guest,
+    id = "v86-guest-fs",
+    name: name30 = "v86-guest",
+    readOnly = false,
+    // Every guest call is one serial round-trip (~400 ms on the emulated
+    // i686), and Mastra's tool layer issues several per logical operation:
+    // read_file stats the same path before AND after reading, and list/grep
+    // re-read .gitignore every time. Those repeats are what this cache
+    // removes. The window is deliberately short — a human is also driving
+    // this guest from the terminal — and every mutation invalidates.
+    // Set 0 to disable.
+    cacheTtlMs = 1500,
+    // Off by default, and the reason is worth recording. Having stat carry the
+    // file body back does remove a round-trip (6 -> 4 for a read/exec/write
+    // task), but it moves the body from `guest.read` — a purpose-built RPC —
+    // onto `guest.execute`, which wraps every command in a shell, redirects
+    // stderr to a temp file, cats it back and deletes it. Measured on the real
+    // guest that trade LOST ~1.7 s on the same task, reproducibly. Fewer
+    // round-trips is not automatically faster when the trips are not equal.
+    // Set a byte cap to re-enable if a future transport makes execute cheap.
+    prefetchMaxBytes = 0,
+    ...options2
+  } = {}) {
     super({ name: name30, ...options2 });
     if (!guest) throw new Error("V86Filesystem requires a guest bridge");
     this.id = id;
@@ -256365,6 +256389,35 @@ var V86Filesystem = class extends MastraFilesystem {
     this.status = "pending";
     this.guest = guest;
     this.readOnly = readOnly;
+    this.cacheTtlMs = cacheTtlMs;
+    this.prefetchMaxBytes = prefetchMaxBytes;
+    this._cache = /* @__PURE__ */ new Map();
+  }
+  // --- round-trip cache ------------------------------------------------------
+  _cacheGet(relative4, field) {
+    if (!this.cacheTtlMs) return void 0;
+    const entry = this._cache.get(relative4);
+    if (!entry) return void 0;
+    if (Date.now() - entry.at > this.cacheTtlMs) {
+      this._cache.delete(relative4);
+      return void 0;
+    }
+    return entry[field];
+  }
+  _cacheSet(relative4, patch) {
+    if (!this.cacheTtlMs) return;
+    this._cache.set(relative4, { ...this._cache.get(relative4) ?? {}, ...patch, at: Date.now() });
+  }
+  // Any mutation drops the path. Creates and deletes also change the parent
+  // listing, so that goes too.
+  _invalidate(...paths) {
+    for (const path5 of paths) {
+      if (path5 == null) continue;
+      const relative4 = toGuestPath(path5);
+      this._cache.delete(relative4);
+      const parent = relative4.includes("/") ? relative4.slice(0, relative4.lastIndexOf("/")) : ".";
+      this._cache.delete(parent);
+    }
   }
   async init() {
     this.status = "ready";
@@ -256388,9 +256441,14 @@ var V86Filesystem = class extends MastraFilesystem {
     return { exitCode, output };
   }
   async readFile(path5, options2 = {}) {
-    const content3 = await this.guest.read(toGuestPath(path5)).catch((error51) => {
-      throw /not found|No such file/i.test(error51?.message ?? "") ? new FileNotFoundError(path5) : error51;
-    });
+    const relative4 = toGuestPath(path5);
+    let content3 = this._cacheGet(relative4, "content");
+    if (content3 === void 0) {
+      content3 = await this.guest.read(relative4).catch((error51) => {
+        throw /not found|No such file/i.test(error51?.message ?? "") ? new FileNotFoundError(path5) : error51;
+      });
+      this._cacheSet(relative4, { content: content3, missing: false });
+    }
     if (options2.encoding) return content3;
     return typeof import_buffer.Buffer !== "undefined" ? import_buffer.Buffer.from(content3, "utf8") : content3;
   }
@@ -256398,7 +256456,7 @@ var V86Filesystem = class extends MastraFilesystem {
     this._assertWritable("writeFile");
     const text10 = typeof content3 === "string" ? content3 : new TextDecoder().decode(content3);
     if (options2.expectedMtime) {
-      const current = await this.stat(path5).catch(() => null);
+      const current = await this.stat(path5, { fresh: true }).catch(() => null);
       if (current && current.modifiedAt.getTime() !== new Date(options2.expectedMtime).getTime()) {
         throw new StaleFileError(path5, new Date(options2.expectedMtime), current.modifiedAt);
       }
@@ -256410,17 +256468,20 @@ var V86Filesystem = class extends MastraFilesystem {
     }
     if (options2.recursive) await this.mkdir(parentPath(path5), { recursive: true });
     await this.guest.write(toGuestPath(path5), text10);
+    this._invalidate(path5);
   }
   async appendFile(path5, content3) {
     this._assertWritable("appendFile");
     const existing = await this.exists(path5) ? await this.guest.read(toGuestPath(path5)) : "";
     const text10 = typeof content3 === "string" ? content3 : new TextDecoder().decode(content3);
     await this.guest.write(toGuestPath(path5), existing + text10);
+    this._invalidate(path5);
   }
   async deleteFile(path5, options2 = {}) {
     this._assertWritable("deleteFile");
     if (options2.force && !await this.exists(path5)) return;
     await this.guest.delete(toGuestPath(path5));
+    this._invalidate(path5);
   }
   async copyFile(src, dest, options2 = {}) {
     this._assertWritable("copyFile");
@@ -256431,6 +256492,7 @@ var V86Filesystem = class extends MastraFilesystem {
     }
     const flag = options2.recursive ? "-r " : "";
     await this._sh(`cp ${flag}-- ${shellQuote2(toGuestPath(src))} ${shellQuote2(toGuestPath(dest))}`);
+    this._invalidate(dest);
   }
   async moveFile(src, dest, options2 = {}) {
     this._assertWritable("moveFile");
@@ -256440,16 +256502,19 @@ var V86Filesystem = class extends MastraFilesystem {
       throw error51;
     }
     await this._sh(`mv -- ${shellQuote2(toGuestPath(src))} ${shellQuote2(toGuestPath(dest))}`);
+    this._invalidate(src, dest);
   }
   async mkdir(path5, options2 = {}) {
     this._assertWritable("mkdir");
     const flag = options2.recursive ? "-p " : "";
     await this._sh(`mkdir ${flag}-- ${shellQuote2(toGuestPath(path5))}`);
+    this._invalidate(path5);
   }
   async rmdir(path5, options2 = {}) {
     this._assertWritable("rmdir");
     const command = options2.recursive ? `rm -rf -- ${shellQuote2(toGuestPath(path5))}` : `rmdir -- ${shellQuote2(toGuestPath(path5))}`;
     await this._sh(command, { allowFailure: Boolean(options2.force) });
+    this._invalidate(path5);
   }
   async readdir(path5 = "/", options2 = {}) {
     const relative4 = toGuestPath(path5);
@@ -256477,18 +256542,33 @@ var V86Filesystem = class extends MastraFilesystem {
     });
     return exitCode === 0;
   }
-  async stat(path5) {
+  async stat(path5, { fresh = false } = {}) {
+    const relative4 = toGuestPath(path5);
+    if (!fresh) {
+      const cached3 = this._cacheGet(relative4, "stat");
+      if (cached3) return cached3;
+      if (this._cacheGet(relative4, "missing")) throw new FileNotFoundError(path5);
+    }
+    const quoted = shellQuote2(relative4);
+    const prefetch = this.cacheTtlMs > 0 && this.prefetchMaxBytes > 0;
     const { exitCode, output } = await this._sh(
-      `stat -c '%F|%s|%Y' -- ${shellQuote2(toGuestPath(path5))}`,
+      prefetch ? `p=${quoted}; s=$(stat -c '%F|%s|%Y' -- "$p") || exit 1; printf '%s\\n' "$s"; if [ -f "$p" ]; then sz=${"${s#*|}"}; sz=${"${sz%|*}"}; if [ "$sz" -le ${this.prefetchMaxBytes} ]; then printf '%s\\n' '${BODY_MARKER}'; cat -- "$p"; fi; fi` : `stat -c '%F|%s|%Y' -- ${quoted}`,
       { allowFailure: true }
     );
-    if (exitCode !== 0) throw new FileNotFoundError(path5);
-    const [kind, size, mtime] = output.trim().split("|");
+    if (exitCode !== 0) {
+      this._cacheSet(relative4, { missing: true, stat: void 0, content: void 0 });
+      throw new FileNotFoundError(path5);
+    }
+    const markerAt = output.indexOf(`${BODY_MARKER}
+`);
+    const head = markerAt === -1 ? output : output.slice(0, markerAt);
+    const body = markerAt === -1 ? void 0 : output.slice(markerAt + BODY_MARKER.length + 1);
+    const [kind, size, mtime] = head.trim().split("|");
     const isDirectory2 = /directory/i.test(kind ?? "");
     const modifiedAt = new Date(Number(mtime || 0) * 1e3);
-    return {
+    const result = {
       name: baseName(path5),
-      path: toWorkspacePath(toGuestPath(path5)),
+      path: toWorkspacePath(relative4),
       type: isDirectory2 ? "directory" : "file",
       size: isDirectory2 ? 0 : Number(size) || 0,
       createdAt: modifiedAt,
@@ -256496,6 +256576,8 @@ var V86Filesystem = class extends MastraFilesystem {
       modifiedAt,
       ...isDirectory2 ? {} : { mimeType: mimeType(path5) }
     };
+    this._cacheSet(relative4, { stat: result, missing: false, ...body === void 0 ? {} : { content: body } });
+    return result;
   }
   /** Not part of the abstract contract, but Workspace search uses it when present. */
   async grep(pattern, path5 = "/") {
@@ -257030,7 +257112,17 @@ function createMastraVMAgent({
   // listTools()/systemPromptCost() before enabling on a 16k-window model.
   enableVmTools = false,
   // Mastra's own planning tools, the equivalent of Deep Agents' write_todos.
-  enablePlanning = false
+  enablePlanning = false,
+  // Passed to V86Filesystem: cacheTtlMs and prefetchMaxBytes. The defaults are
+  // what bring per-operation round-trips down to the Deep Agents tier's; set
+  // { cacheTtlMs: 0 } to measure or restore the uncached behaviour.
+  filesystemOptions = {},
+  // Passed to V86Sandbox. The one that matters for speed is
+  // { captureStderr: false }: separating stderr costs a temp file plus two
+  // extra process spawns inside the guest, measured at ~900 ms per command
+  // against ~400 ms unwrapped. Deep Agents does not separate stderr at all,
+  // which is most of why its execute looks faster.
+  sandboxOptions = {}
 } = {}) {
   if (!guest) throw new Error("createMastraVMAgent requires the guest bridge");
   if (!llmClient?.chat) throw new Error("createMastraVMAgent requires an LLM client with chat()");
@@ -257040,8 +257132,8 @@ function createMastraVMAgent({
     return !await approveAction("workspace", args ?? {});
   };
   const workspace = new Workspace({
-    filesystem: new V86Filesystem({ guest }),
-    sandbox: new V86Sandbox({ guest, defaultTimeout: SANDBOX_TIMEOUT_MS }),
+    filesystem: new V86Filesystem({ guest, ...filesystemOptions }),
+    sandbox: new V86Sandbox({ guest, defaultTimeout: SANDBOX_TIMEOUT_MS, ...sandboxOptions }),
     tools: {
       hooks: {
         beforeToolCall: ({ toolName, input }) => onActivity({ tool: toolName, input }),
