@@ -115,6 +115,48 @@ export function createMastraVMAgent({
     return [...Object.keys(await createWorkspaceTools(workspace)), ...Object.keys(extraTools)];
   };
 
+  // One model call, one script, one round-trip — the shape `rig --codeact`
+  // uses to finish the tier benchmark in 950 ms where the tool loop needs
+  // 2667 ms. That 2.8x is far larger than anything left to win inside the tool
+  // loop, and it comes from collapsing round-trips rather than making them
+  // cheaper.
+  //
+  // The difference from `rig --codeact`, which runs the script and returns
+  // whatever it printed: `set -e` is prepended, so a command failing halfway
+  // exits non-zero instead of reporting partial output as success. That turns
+  // the exit code into a signal worth branching on, which is what lets
+  // run({ batchFirst: true }) fall back safely.
+  const runBatch = async (task) => {
+    const completion = await llmClient.chat({
+      model: llmClient.modelName || 'webgpu',
+      temperature: 0,
+      max_tokens: 1000,
+      chat_template_kwargs: { enable_thinking: false },
+      messages: [
+        { role: 'system', content: BATCH_PROMPT },
+        { role: 'user', content: String(task) },
+      ],
+    });
+    const script = stripFence(completion?.choices?.[0]?.message?.content);
+    if (!script) return { ok: false, script: '', output: '', exitCode: null, reason: 'no script' };
+
+    onActivity({ tool: 'batch', input: { script } });
+    if (!yolo && !(await approveAction('execute', { script }))) {
+      return { ok: false, script, output: '', exitCode: null, reason: 'rejected' };
+    }
+
+    await workspace.init();
+    const result = await workspace.sandbox.executeCommand(`set -e\n${script}`);
+    onActivity({ tool: 'batch', done: true, error: result.success ? undefined : result.exitCode });
+    return {
+      ok: result.success,
+      script,
+      output: [result.stdout, result.stderr].filter(Boolean).join('\n').trim(),
+      exitCode: result.exitCode,
+      reason: result.success ? 'ok' : `exit ${result.exitCode}`,
+    };
+  };
+
   return {
     agent,
     workspace,
@@ -142,12 +184,38 @@ export function createMastraVMAgent({
       ].join('').length;
       return { toolCount: tools.length, chars, approxTokens: Math.ceil(chars / 4) };
     },
-    async run(task) {
+    runBatch,
+    // batchFirst tries the one-shot script and falls back to the tool loop if
+    // it does not exit clean. The fallback is the point: a 2B model writes a
+    // correct script often enough to be worth trying and not often enough to
+    // trust, so this buys codeact's speed without codeact's failure mode.
+    async run(task, { batchFirst = false } = {}) {
       extraTools.resetTurn?.();
+      if (batchFirst) {
+        const batch = await runBatch(task);
+        if (batch.ok) return batch.output;
+        if (batch.reason === 'rejected') return 'Operation rejected.';
+        onActivity({ batchFallback: batch.reason });
+        extraTools.resetTurn?.();
+      }
       const result = await agent.generate(task);
       return result.text ?? result?.response?.text ?? '';
     },
   };
+}
+
+const BATCH_PROMPT = [
+  'You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.',
+  'Accomplish the task by writing ONE POSIX sh script using BusyBox-available tools (cat, ls, grep, sed, awk, printf, test, mkdir, etc.).',
+  'Paths are relative to the project directory, which is already the working directory.',
+  'Output ONLY the script body — no explanation, no markdown fences.',
+].join('\n');
+
+/** Models wrap scripts in ```sh fences about half the time; unwrap if so. */
+function stripFence(content) {
+  const text = String(content ?? '').trim();
+  const fenced = text.match(/^```(?:sh|bash)?\s*([\s\S]*?)\s*```$/i);
+  return (fenced ? fenced[1] : text).trim();
 }
 
 export const GUEST_RPC_TIMEOUT_MS_EXPORTED = GUEST_RPC_TIMEOUT_MS;

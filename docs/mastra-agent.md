@@ -122,7 +122,17 @@ throw. Raise one, raise both.
 queue. `writeFile` with `expectedMtime` costs two. On an emulated CPU this
 dominates latency — prefer few batched commands.
 
-**Two options decide this tier's speed**, both measured in
+**Batch mode is the biggest lever.** `runBatch(task)` — or
+`run(task, { batchFirst: true })`, which the `mastra batch` CLI verb uses —
+spends one model call on a single shell script and one round-trip running it:
+~725 ms against the tool loop's ~2537 ms. It prepends `set -e` so a script that
+dies halfway exits non-zero rather than returning partial output as success,
+and `batchFirst` falls back to the tool loop on any non-clean exit. A failed
+attempt costs ~240 ms. `runBatch` returns
+`{ ok, script, output, exitCode, reason }` if you want to make that decision
+yourself.
+
+**Two more options decide the tool loop's speed**, both measured in
 [agent-tiers.md](agent-tiers.md):
 
 - `filesystemOptions.cacheTtlMs` (default 1500) — a short-TTL cache over `stat`

@@ -110,7 +110,11 @@ async function run() {
       'for t in vmagent rig mastra vmbench; do command -v $t >/dev/null && echo "$t=ok" || echo "$t=MISSING"; done; ' +
       // The agent-facing operating manual has to survive an image rebuild too;
       // it is the only thing telling an autonomous agent how to verify a run.
-      'test -r /usr/local/share/mastra/SKILL.md && echo skill=ok || echo skill=MISSING',
+      'test -r /usr/local/share/mastra/SKILL.md && echo skill=ok || echo skill=MISSING; ' +
+      // The CLI lives in the ext4 image, patched in with debugfs, so it can
+      // silently lag the repo whenever someone forgets that step. Prove the
+      // booted guest has the batch subcommand rather than trusting the patch.
+      'mastra --help 2>&1 | grep -q "mastra batch" && echo batch=ok || echo batch=MISSING',
     )
     .catch((error) => `ERROR: ${error.message}`);
 
@@ -124,6 +128,7 @@ async function run() {
       /vmagent=ok/.test(tierCommands) && /rig=ok/.test(tierCommands) &&
       /mastra=ok/.test(tierCommands) && /vmbench=ok/.test(tierCommands),
     agentSkillInstalled: /skill=ok/.test(tierCommands),
+    batchSubcommandInstalled: /batch=ok/.test(tierCommands),
   };
   const ok =
     checks.toolsGenerated &&
@@ -131,7 +136,8 @@ async function run() {
     checks.modelTurnsUsed === 4 &&
     checks.guestStillResponsive &&
     checks.allTiersInstalled &&
-    checks.agentSkillInstalled;
+    checks.agentSkillInstalled &&
+    checks.batchSubcommandInstalled;
 
   log(`checks: ${JSON.stringify(checks)}`);
   await guest.delete('NOTES.md').catch(() => {});

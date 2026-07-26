@@ -166,6 +166,7 @@ test('mastra reports a missing model rather than failing silently, and is option
 
 function mastraController({ model = { modelName: 'm' }, onOutput } = {}) {
   const outputs = [];
+  const runs = [];
   let built = 0;
   let lastOptions = null;
   const controller = new VmAgentController({
@@ -174,7 +175,7 @@ function mastraController({ model = { modelName: 'm' }, onOutput } = {}) {
       built += 1;
       lastOptions = options;
       return {
-        run: async task => `ran: ${task}`,
+        run: async (task, runOptions = {}) => { runs.push({ task, ...runOptions }); return `ran: ${task}`; },
         setYolo() {},
         listTools: async () => (options.fullTools ? ['a', 'b', 'c'] : ['a']),
         systemPromptCost: async () => ({ approxTokens: options.fullTools ? 5749 : 2832, chars: 100, toolCount: options.fullTools ? 19 : 8 }),
@@ -185,8 +186,18 @@ function mastraController({ model = { modelName: 'm' }, onOutput } = {}) {
     approveAction: async () => true,
     onOutput: onOutput || (o => outputs.push(o)),
   });
-  return { controller, outputs, built: () => built, lastOptions: () => lastOptions };
+  return { controller, outputs, runs, built: () => built, lastOptions: () => lastOptions };
 }
+
+test('mastra batch asks for the one-shot path, and plain mastra does not', async () => {
+  const { controller, runs } = mastraController();
+
+  await controller.handle('mastra_batch', 'count the files');
+  assert.deepEqual(runs.at(-1), { task: 'count the files', batchFirst: true });
+
+  await controller.handle('mastra', 'count the files');
+  assert.equal(runs.at(-1).batchFirst, false, 'plain run must stay on the tool loop');
+});
 
 test('mastra CLI exposes status, tools, cost, yolo, reset and stop', async () => {
   const { controller, outputs } = mastraController();

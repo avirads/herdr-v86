@@ -167,6 +167,16 @@ emulator.add_listener('serial0-output-byte', (byte) => {
   }
 });
 
+function mastraBatchClient() {
+  return {
+    modelName: 'bench',
+    async status() { return { modelName: 'bench', webgpu: true }; },
+    async chat() {
+      return { choices: [{ message: { content: "cat README.md >/dev/null; uname -m > NOTES.md" } }] };
+    },
+  };
+}
+
 async function run() {
   log('shell ready — benchmarking tiers (model latency held at 0)');
   log('');
@@ -217,6 +227,38 @@ async function run() {
       return await vm.run(TASK);
     }));
   }
+
+  // --- mastra batch: one model call, one script, one round-trip ---
+  rows.push(await measure('mastra --batch', async (box) => {
+    const vm = createMastraVMAgent({
+      guest, llmClient: counted(mastraBatchClient(), box), yolo: true,
+      sandboxOptions: { captureStderr: false },
+    });
+    return await vm.run(TASK, { batchFirst: true });
+  }));
+
+  // Batch mode is only safe if a bad script degrades instead of lying. Emit a
+  // script that fails partway, then the normal tool-call sequence, and require
+  // that NOTES.md still gets written — on the real guest, not a fake.
+  rows.push(await measure('mastra --batch (bad script)', async (box) => {
+    const replies = [
+      'sed -i s/a/b/ definitely-missing.txt',
+      '{"tool_call":{"name":"mastra_workspace_read_file","arguments":{"path":"/README.md"}}}',
+      '{"tool_call":{"name":"mastra_workspace_write_file","arguments":{"path":"/NOTES.md","content":"recovered\\n"}}}',
+      '{"final":"done"}',
+    ];
+    let i = 0;
+    const client = {
+      modelName: 'bench',
+      async status() { return { modelName: 'bench', webgpu: true }; },
+      async chat() { return { choices: [{ message: { content: replies[i++] ?? '{"final":"done"}' } }] }; },
+    };
+    const vm = createMastraVMAgent({
+      guest, llmClient: counted(client, box), yolo: true,
+      sandboxOptions: { captureStderr: false },
+    });
+    return await vm.run(TASK, { batchFirst: true });
+  }));
 
   // --- structural: what each tier costs before it does any work ---
   const lean = createMastraVMAgent({ guest, llmClient: mastraClient(), yolo: true });
