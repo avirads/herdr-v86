@@ -50,7 +50,7 @@ export class VmAgentController {
         // profiles has to discard the harness rather than mutate it.
         this.mastraHarness = null;
       }
-      return await this.onOutput(`[mastra] tool profile: ${value}${wanted ? ' (19 tools)' : ' (8 workspace tools)'}.`);
+      return await this.onOutput(`[mastra] tool profile: ${value}${wanted ? ' (20 tools)' : ' (9 workspace tools)'}.`);
     }
 
     const guest = this.getGuest();
@@ -65,7 +65,7 @@ export class VmAgentController {
         `[mastra] ${this.abortController ? 'running' : 'idle'}`,
         `  model:   ${model?.modelName || 'not configured — use Configure LLM in the header'}`,
         `  YOLO:    ${this.yolo ? 'on' : 'off'} (shared with vmagent)`,
-        `  profile: ${this.mastraFullTools ? 'full (19 tools)' : 'lean (8 workspace tools)'}`,
+        `  profile: ${this.mastraFullTools ? 'full (20 tools)' : 'lean (9 workspace tools)'}`,
         `  session: ${this.mastraHarness ? 'built' : 'not built — starts on first run'}`,
       ];
       // Only report the prompt budget if the harness is already up; building

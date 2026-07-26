@@ -8,7 +8,7 @@ tier is modified.
     mastra run TASK...
     mastra status               model, approvals, tool profile, prompt cost
     mastra tools                list the tools currently active
-    mastra tools lean|full      8 workspace tools, or all 19
+    mastra tools lean|full      9 tools, or all 20
     mastra cost                 system-prompt budget for the active profile
     mastra yolo on|off          approvals for mutations and shell commands
     mastra reset                drop the session and rebuild on next run
@@ -131,6 +131,16 @@ and `batchFirst` falls back to the tool loop on any non-clean exit. A failed
 attempt costs ~240 ms. `runBatch` returns
 `{ ok, script, output, exitCode, reason }` if you want to make that decision
 yourself.
+
+**`glob` and `grep` deliberately bypass Mastra.** Both exist in
+`@mastra/core/workspace`, and both are pathologically expensive against a
+guest where a round-trip is ~450 ms: `list_files`+`pattern` answers "which
+.md files are in this tree" in 4738 ms / 11 trips against `glob`'s 494 ms / 1,
+and Mastra's grep reads every file over the bridge to search it — 6576 ms / 34
+trips against 506 ms / 1. `fastGrep` (default true) *replaces* the workspace
+grep rather than adding a second tool with the same name; the cost is that
+ours is `grep -R -n -F`, so fixed-string with no context lines. Set
+`{ fastGrep: false }` or `{ enableGlob: false }` to opt out.
 
 **Two more options decide the tool loop's speed**, both measured in
 [agent-tiers.md](agent-tiers.md):

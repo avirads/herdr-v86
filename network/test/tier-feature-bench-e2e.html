@@ -97,9 +97,14 @@ emulator.add_listener('serial0-output-byte', (byte) => {
   if (!seeded && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
     seeded = true;
     emulator.serial0_send(
-      'mkdir -p /root/project/sub && cd /root/project && ' +
+      // A few nested directories, not one: list_files walks the tree with a
+      // readdir per directory, so a flat project would hide the cost that the
+      // glob-vs-list rows exist to measure.
+      'mkdir -p /root/project/sub/deep /root/project/docs && cd /root/project && ' +
       "printf 'herdr-v86: linux in a browser tab\\nsecond line\\n' > README.md && " +
-      "printf 'x\\n' > sub/a.txt && echo FEAT_SEEDED\n",
+      "printf 'x\\n' > sub/a.txt && printf 'x\\n' > sub/n.md && " +
+      "printf 'x\\n' > sub/deep/d.md && printf 'x\\n' > docs/g.md && " +
+      'echo FEAT_SEEDED\n',
     );
   }
   if (seeded && /\r?\nFEAT_SEEDED\r?\n/.test(serial) && !window.__started) {
@@ -190,8 +195,8 @@ async function run() {
     ['grep', {
       vmagent: () => vmagent.grep('linux', '/'),
       rig: null, // unsupported
-      mastra: () => callTool('mastra_workspace_grep', { pattern: 'linux', path: '/' }),
-      mastraWarm: () => callWarm('mastra_workspace_grep', { pattern: 'linux', path: '/' }),
+      mastra: () => callTool('grep', { pattern: 'linux', path: '/' }),
+      mastraWarm: () => callWarm('grep', { pattern: 'linux', path: '/' }),
     }],
     ['file stat', {
       vmagent: null, // no dedicated stat tool
@@ -208,9 +213,31 @@ async function run() {
     ['glob', {
       vmagent: () => vmagent.glob('*.md', '/'),
       rig: null,
-      mastra: null, // not in the generated workspace tool set
+      mastra: () => callTool('glob', { pattern: '*.md' }),
+      mastraWarm: () => callWarm('glob', { pattern: '*.md' }),
+    }],
+    // The two rows below answer the SAME question — "which .md files are in
+    // this tree" — and justify shipping glob at all. Compare them in the
+    // mastra column: list_files can filter by the same pattern, but walks the
+    // tree one readdir per directory.
+    ['glob **/*.md', {
+      vmagent: null, rig: null,
+      mastra: () => callTool('glob', { pattern: '**/*.md' }),
+      mastraWarm: () => callWarm('glob', { pattern: '**/*.md' }),
+    }],
+    ['list+pattern (same answer)', {
+      vmagent: null, rig: null,
+      mastra: () => callTool('mastra_workspace_list_files', { path: '/', recursive: true, pattern: '**/*.md' }),
+      mastraWarm: () => callWarm('mastra_workspace_list_files', { path: '/', recursive: true, pattern: '**/*.md' }),
     }],
   ];
+
+  // Not a timing: capture what the two approaches actually RETURN, so the
+  // claim about completeness is evidence rather than assertion.
+  const globAnswer = {
+    glob: String(await callTool('glob', { pattern: '*.md' })),
+    listPattern: String(await callTool('mastra_workspace_list_files', { path: '/', recursive: true, pattern: '**/*.md' })),
+  };
 
   const table = [];
   for (const [feature, impls] of features) {
@@ -236,6 +263,6 @@ async function run() {
   await guest.execute('rm -rf /root/project/w-*.txt /root/project/e-*.txt /root/project/d-ma-* /root/project/dW-ma-* /root/project/wW-ma-*.txt /root/project/eW-ma-*.txt').catch(() => {});
   const ok = table.every((r) => ['vmagent', 'rig', 'mastra'].every((t) => r[t].unsupported || !r[t].error));
   log(ok ? 'all supported features succeeded' : 'some feature errored — see table');
-  await report({ ok, checks: { table, surface } });
+  await report({ ok, checks: { table, globAnswer, surface } });
 }
 </script>

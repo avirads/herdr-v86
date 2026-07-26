@@ -7,7 +7,7 @@ and **capability**.
 | | `vmagent` | `rig` | `mastra` |
 |---|---|---|---|
 | Framework | Deep Agents (LangChain) | hand-rolled loop | `@mastra/core` |
-| Tools | 18 | 4 | 8, or 19 with `enableVmTools`/`enablePlanning` |
+| Tools | 18 | 4 | 9, or 20 with `enableVmTools`/`enablePlanning` |
 | Conversation | persistent (`vmagent>`) | one task per run | one task per run |
 | Bundle | `agent/dist/agent.js` | none (in the controller) | `agent/dist/mastra-agent.js`, ~9.7 MB, lazy |
 
@@ -41,40 +41,66 @@ single number would have let a warm cache masquerade as the cost of the work.
 
 | Feature | `vmagent` | `rig` | `mastra` cold | `mastra` warm |
 |---|--:|--:|--:|--:|
-| read file | 561 ms / 1 | 560 ms / 1 | 1940 ms / 3 | **0 ms / 0** |
-| list directory | 550 ms / 1 | **471 ms / 1** | 820 ms / 2 | 853 ms / 2 |
-| write file | 515 ms / 1 | **488 ms / 1** | 1107 ms / 2 | 1106 ms / 2 |
-| run command | **405 ms / 1** | 418 ms / 1 | 429 ms / 1 | 479 ms / 1 |
-| edit file | 888 ms / 2 | — | **618 ms / 1** | 605 ms / 1 |
-| grep | **422 ms / 1** | — | 1454 ms / 3 | 1441 ms / 3 |
-| file stat | — | — | 575 ms / 1 | **0 ms / 0** |
-| mkdir | — | — | **492 ms / 1** | 489 ms / 1 |
-| glob | **490 ms / 1** | — | — | — |
+| read file | 492 ms / 1 | 478 ms / 1 | 1861 ms / 3 | **0 ms / 0** |
+| list directory (recursive) | **465 ms / 1** | 480 ms / 1 | 2077 ms / 5 | 2036 ms / 5 |
+| write file | 516 ms / 1 | **503 ms / 1** | 1153 ms / 2 | 1125 ms / 2 |
+| run command | **435 ms / 1** | 468 ms / 1 | 442 ms / 1 | 427 ms / 1 |
+| edit file | 963 ms / 2 | — | **625 ms / 1** | 621 ms / 1 |
+| grep | **460 ms / 1** | — | 506 ms / 1 | 459 ms / 1 |
+| glob | 512 ms / 1 | — | **488 ms / 1** | 489 ms / 1 |
+| file stat | — | — | 647 ms / 1 | **0 ms / 0** |
+| mkdir | — | — | **526 ms / 1** | 513 ms / 1 |
 
 **`rig` and `vmagent` are one round-trip per operation.** Their tools map
 straight onto a guest RPC, so they sit at the floor — roughly the cost of the
 serial exchange itself.
 
-**Mastra pays 2–3 round-trips on a cold file operation.** `read_file` issues
-`stat`, `read`, then `stat` again; `write_file` and `list_files` stat first;
-`grep` costs three. That is the workspace abstraction earning its generality.
-The short-TTL cache in `V86Filesystem` is what removes the duplicates — a
-re-read or a repeat `stat` inside the window costs no trip at all, which is why
-the whole-task count below is now equal to `vmagent`'s.
+**Mastra now matches that floor everywhere except reading and listing.**
+`read_file` still issues `stat`, `read`, then `stat` again, and `list_files`
+walks the tree with a `readdir` per directory. The short-TTL cache in
+`V86Filesystem` removes the duplicates on a repeat, which is why the
+whole-task count below equals `vmagent`'s.
 
-**`run command` used to cost 3× the others at the same single round-trip.**
-Mastra's sandbox wrapped every command to separate stderr —
-`{ cmd; } 2>/tmp/…; printf …; cat …; rm …` — so one RPC carried several extra
-process spawns into a guest where fork/exec is expensive. `index.html` now
-ships `sandboxOptions: { captureStderr: false }`, which sends the bare command.
-Nothing is lost: `vmagent-rpc` already folds stderr into the output with
-`2>&1`, so the model still reads the error text; only the structural
-`{stdout, stderr}` split goes away — and Deep Agents never offered that split
-in the first place. The library default stays `true` for programmatic callers.
+`grep` and `glob` reach the floor because they bypass Mastra's own
+implementations and call the guest directly — see below. `run command` reaches
+it because `index.html` ships `sandboxOptions: { captureStderr: false }`;
+separating stderr wrapped every command in a temp file plus two extra spawns,
+which cost ~900 ms. Nothing is lost: `vmagent-rpc` already folds stderr into
+the output with `2>&1`, so the model still reads the error text; only the
+structural `{stdout, stderr}` split goes away, and Deep Agents never offered
+that split at all. The library default stays `true` for programmatic callers.
 
 **Mastra wins where its abstraction is doing real work.** `edit_file` is one
-operation to Mastra and a read-then-write to Deep Agents, so Mastra is faster
-there. `file_stat` and `mkdir` are Mastra-only; `glob` is Deep-Agents-only.
+operation to Mastra and a read-then-write to Deep Agents. `file_stat` and
+`mkdir` are Mastra-only.
+
+### Why `glob` and `grep` bypass Mastra
+
+Both exist in `@mastra/core/workspace` already. Both were replaced because
+their generic implementations are pathologically expensive against a guest
+where every round-trip is ~450 ms:
+
+| Question | Mastra's own way | Ours |
+|---|--:|--:|
+| which `.md` files are in this tree | `list_files` + `pattern`: 4738 ms / 11 | `glob`: 494 ms / **1** |
+| which files contain this string | reads every file to search it: 6576 ms / 34 | `grep`: 506 ms / **1** |
+
+`list_files` also truncates its tree at depth 2, so a file three directories
+down is not in the answer at all; `glob` returns flat paths at any depth. The
+grep figure is worse than it looks — it scales with the number of files, so 34
+round-trips on a six-file project becomes hundreds on a real one.
+
+`fastGrep` **replaces** the workspace grep rather than sitting beside it; two
+tools named `grep` would just make the model guess. The trade is that ours is
+the guest's `grep -R -n -F`: fixed-string, no context lines, no regex. Set
+`{ fastGrep: false }` to get Mastra's back at the price above. Both tools
+together made the lean prompt *cheaper* — 2621 tokens against 2832 before —
+because their descriptions are shorter than the one they displaced.
+
+One caveat worth knowing: the guest matches with `find -path`, where `*`
+crosses `/`. So `*.md` is the **recursive** form here and `**/*.md` silently
+skips top-level files — backwards from ordinary glob. The tool description
+says so explicitly, because a model will otherwise reach for `**/*.md`.
 
 ## Whole-task cost
 
@@ -145,9 +171,9 @@ on every turn:
 | Tier | Tools | System prompt | Share of 16k |
 |---|--:|--:|--:|
 | `rig` | 4 | small | — |
-| `mastra` lean | 8 | ~2,832 tok | 17% |
+| `mastra` lean | 9 | ~2,621 tok | 16% |
 | `vmagent` | 18 | — | — |
-| `mastra` full | 19 | ~5,749 tok | **35%** |
+| `mastra` full | 20 | ~5,537 tok | **34%** |
 
 ## Choosing
 

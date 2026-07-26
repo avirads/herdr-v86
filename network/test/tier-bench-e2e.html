@@ -216,8 +216,8 @@ async function run() {
   // --- mastra, lean and full-parity ---
   const { createMastraVMAgent } = await import('../../agent/dist/mastra-agent.js');
   for (const [label, opts] of [
-    ['mastra (8 tools)', {}],
-    ['mastra (19 tools)', { enableVmTools: true, enablePlanning: true, browserClient: { async command() { return {}; } } }],
+    ['mastra (9 tools)', {}],
+    ['mastra (20 tools)', { enableVmTools: true, enablePlanning: true, browserClient: { async command() { return {}; } } }],
     // Same tier with stderr separation off — Deep Agents does not separate
     // stderr either, so this is the like-for-like comparison.
     ['mastra (no stderr split)', { sandboxOptions: { captureStderr: false } }],
@@ -270,7 +270,7 @@ async function run() {
   };
 
   log('');
-  log(`structural: mastra 8 tools ~${structural.mastraLean.approxTokens} tok, 19 tools ~${structural.mastraFull.approxTokens} tok, rig 4 tools`);
+  log(`structural: mastra 9 tools ~${structural.mastraLean.approxTokens} tok, 20 tools ~${structural.mastraFull.approxTokens} tok, rig 4 tools`);
 
   const ok = rows.every((r) => !r.error);
   await report({ ok, checks: { rows, structural }, error: ok ? undefined : 'a tier errored' });

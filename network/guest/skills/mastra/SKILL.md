@@ -34,10 +34,16 @@ that genuinely needs to look at a file before deciding what to do next is
 better served by the tool loop. Use plain `mastra` for those.
 
 Mastra's tool loop is no longer the slow tier — it beats Deep Agents on the
-benchmark task. A **cold** single file read still costs ~1.9 s against rig's
-~0.5 s because `read_file` issues `stat`, `read`, then `stat` again, but a
-repeat inside the cache TTL costs nothing. Mastra uniquely offers `file_stat`
-and `mkdir`, and is faster than Deep Agents at `edit_file`.
+benchmark task, and `grep`, `glob`, `mkdir`, `file_stat`, `edit_file` and
+`execute_command` all cost a single round-trip. A **cold** single file read
+still costs ~1.9 s against rig's ~0.5 s because `read_file` issues `stat`,
+`read`, then `stat` again, but a repeat inside the cache TTL costs nothing.
+
+**Use `glob`, not a recursive `list_files`.** Asking "which .md files are in
+this tree" costs 494 ms with `glob` and 4738 ms with `list_files` — and
+`list_files` truncates at depth 2, so it will quietly omit anything deeper.
+The matcher is the guest's `find -path`, where `*` crosses `/`: write
+`*.md` to search recursively. `**/*.md` skips files in the top directory.
 
 ## Preflight — always, before the first task
 
@@ -56,7 +62,7 @@ it needs no model and will not build the session.
                                 tool loop if the script exits non-zero
     mastra status               model, approvals, tool profile, prompt cost
     mastra tools                list the tools currently active
-    mastra tools lean|full      8 workspace tools, or all 19
+    mastra tools lean|full      9 workspace tools, or all 20
     mastra cost                 system-prompt budget for the active profile
     mastra yolo on|off          approvals for mutations and shell commands
     mastra reset                drop the session and rebuild on next run

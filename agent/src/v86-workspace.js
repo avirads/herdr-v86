@@ -101,12 +101,20 @@ export function mimeType(path) {
   return MIME_BY_EXTENSION[String(path).split('.').pop()?.toLowerCase()] || 'text/plain';
 }
 
+// The guest formats entries with `stat -c '%F\t%n\t%s'`, and BusyBox stat does
+// NOT interpret that \t — it emits the two characters backslash-t, not a tab.
+// Splitting on a real tab therefore matched nothing and every field but the
+// first came back undefined, so `list_files` rendered a directory as a column
+// of "undefined". Accept both forms: the literal sequence the guest actually
+// sends, and a real tab in case the guest is ever fixed at the source.
+const FIELD_SEPARATOR = /\\t|\t/;
+
 export function parseFileEntries(output) {
   return String(output ?? '')
     .split('\n')
     .filter(Boolean)
     .map(line => {
-      const [type, path, size] = line.split('\t');
+      const [type, path, size] = line.split(FIELD_SEPARATOR);
       return {
         name: baseName(path),
         path: toWorkspacePath(path),
@@ -333,7 +341,7 @@ export class V86Filesystem extends MastraFilesystem {
   async readdir(path = '/', options = {}) {
     const relative = toGuestPath(path);
     const raw = options.recursive
-      ? await this.guest.glob('**/*', relative)
+      ? await this.guest.glob(options.pattern || '**/*', relative)
       : await this.guest.list(relative);
     let entries = parseFileEntries(raw);
 
