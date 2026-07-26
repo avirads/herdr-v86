@@ -62,6 +62,10 @@ clipboard, file-transfer, GitHub, or AI operations.
     Lifecycle commands are `mastra status|stop|reset|cost|yolo on|yolo off`
     and `mastra tools [lean|full]`, which switches between the 8 workspace
     tools and all 19. Run `mastra --help` in the guest for the full usage.
+    Before driving it autonomously, read
+    `/usr/local/share/mastra/SKILL.md` — it covers the preflight check, the
+    failure modes, and why a Mastra run must be verified by its effect on the
+    guest rather than by the answer it returns.
 17. `rig 'TASK'` is the low-latency browser-orchestrated coding agent with
     project-local read, list, write, and shell tools. Its model stays in the
     browser; only selected tool operations cross into the VM. `rig --codeact
