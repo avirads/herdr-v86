@@ -11,9 +11,15 @@ function absolutePath(path) {
   return relative ? `/${relative}` : '/';
 }
 
+// BusyBox stat does not interpret the \t in the guest's `-c '%F\t%n\t%s'`, so
+// it sends the two characters backslash-t rather than a tab. Splitting on a
+// real tab left every field after the first undefined, which is why `ls` and
+// `glob` returned entries with no path. Accept both forms.
+const FIELD_SEPARATOR = /\\t|\t/;
+
 function parseFileInfos(output) {
   return String(output).split('\n').filter(Boolean).map(line => {
-    const [type, path, size] = line.split('\t');
+    const [type, path, size] = line.split(FIELD_SEPARATOR);
     return { path: absolutePath(path), is_dir: type === 'directory', size: Number(size) || 0 };
   });
 }

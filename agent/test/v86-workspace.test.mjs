@@ -190,6 +190,24 @@ test('list output parses into FileEntry shape', () => {
   assert.deepEqual(file, { name: 'main.rs', path: '/src/main.rs', type: 'file', size: 42 });
 });
 
+test('parses what the guest ACTUALLY sends: literal backslash-t, not tabs', () => {
+  // Captured verbatim from a booted guest. BusyBox stat does not interpret the
+  // \t in `stat -c '%F\t%n\t%s'`, so the separator on the wire is the two
+  // characters backslash and t. Every fake in this suite used real tabs, which
+  // is why splitting on '\t' passed every test while `list_files` rendered a
+  // real directory as a column of "undefined".
+  const fromGuest =
+    'directory\\tdocs\\t4096\n' +
+    'regular file\\tdocs/g.md\\t2\n' +
+    'regular file\\tREADME.md\\t2\n';
+  const entries = parseFileEntries(fromGuest);
+  assert.equal(entries.length, 3);
+  assert.deepEqual(entries[0], { name: 'docs', path: '/docs', type: 'directory', size: 4096 });
+  assert.deepEqual(entries[1], { name: 'g.md', path: '/docs/g.md', type: 'file', size: 2 });
+  assert.deepEqual(entries[2], { name: 'README.md', path: '/README.md', type: 'file', size: 2 });
+  assert.ok(entries.every(e => e.name && e.path !== '/undefined'), 'no undefined fields');
+});
+
 // ---------------------------------------------------------------------------
 // Filesystem contract
 // ---------------------------------------------------------------------------

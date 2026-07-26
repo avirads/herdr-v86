@@ -11,7 +11,7 @@ import { Workspace, WORKSPACE_TOOLS, createWorkspaceTools } from '@mastra/core/w
 import { taskWriteTool, taskUpdateTool } from '@mastra/core/tools';
 import { createLiteRt } from './litert-provider.js';
 import { V86Filesystem, V86Sandbox } from './v86-workspace.js';
-import { createVmTools } from './vm-tools.js';
+import { createVmTools, createGlobTool, createGrepTool } from './vm-tools.js';
 
 // V86GuestAgentClient defaults to a 30 s per-RPC timeout and serializes every
 // call through one queue. Time out just under that so a slow command surfaces
@@ -41,7 +41,7 @@ export function createMastraVMAgent({
   yolo = true,
   onActivity = () => {},
   // Trimmed by default: every enabled tool costs system-prompt tokens, and the
-  // on-device model has a 16k window. Measured ~2.9k tokens with all ten.
+  // on-device model has a 16k window. Measured ~3.0k tokens with all eleven.
   enableLsp = false,
   enableDelete = false,
   // Parity with the Deep Agents tier: the browser-backed vm* commands and the
@@ -51,6 +51,18 @@ export function createMastraVMAgent({
   enableVmTools = false,
   // Mastra's own planning tools, the equivalent of Deep Agents' write_todos.
   enablePlanning = false,
+  // On by default, unlike the two above. list_files can already filter by
+  // pattern, but it walks the tree with one round-trip per directory and
+  // truncates at depth 2; glob answers the same question in one trip and
+  // misses nothing. The cheapest tool here in prompt tokens.
+  enableGlob = true,
+  // Also on by default, and it REPLACES Mastra's workspace grep rather than
+  // adding to it — two tools called "grep" would just make the model guess.
+  // Mastra's own grep reads every file over the bridge to search it here:
+  // measured at 34 round-trips and 6576 ms against 468 ms and one round-trip
+  // for the guest's grep, same results. Set false to get Mastra's back, which
+  // buys context lines and regex at that price.
+  fastGrep = true,
   // Passed to V86Filesystem: cacheTtlMs and prefetchMaxBytes. The defaults are
   // what bring per-operation round-trips down to the Deep Agents tier's; set
   // { cacheTtlMs: 0 } to measure or restore the uncached behaviour.
@@ -83,11 +95,16 @@ export function createMastraVMAgent({
       [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireApproval, requireReadBeforeWrite: false },
       [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireApproval },
       [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: { enabled: enableDelete, requireApproval },
+      [WORKSPACE_TOOLS.FILESYSTEM.GREP]: { enabled: !fastGrep },
       [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: { enabled: enableLsp },
     },
   });
 
   const extraTools = {
+    // Always on: one round-trip for a pattern match, against list_files'
+    // one-per-directory walk.
+    ...(enableGlob ? createGlobTool({ guest }) : {}),
+    ...(fastGrep ? createGrepTool({ guest }) : {}),
     ...(enableVmTools
       ? createVmTools({
           guest,

@@ -1,0 +1,133 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>glob probe — what patterns the guest actually matches</title>
+<pre id="serial"></pre>
+<pre id="log"></pre>
+<div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+// The guest resolves globs with `find -path "$target/$pattern"`, which is NOT
+// the same matcher as a shell or as picomatch: in `-path`, `*` crosses `/`.
+// Rather than reason about it, ask the guest.
+import { V86HostBridge } from '../browser/v86-host-bridge.js';
+import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+
+const logEl = document.querySelector('#log');
+const steps = [];
+const log = (m) => { steps.push(m); logEl.textContent = steps.join('\n'); };
+
+let serial = '';
+let seeded = false;
+let submitted = false;
+const report = (payload) => {
+  if (submitted) return;
+  submitted = true;
+  return fetch('/__result', { method: 'POST', body: JSON.stringify({ ...payload, steps }) });
+};
+setTimeout(() => report({ ok: false, error: 'timed out' }), 240_000);
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 512 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet loglevel=4',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+
+const hostBridge = new V86HostBridge(emulator);
+hostBridge.setAgentHandler(async () => {});
+setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
+const guest = new V86GuestAgentClient(emulator, hostBridge);
+
+emulator.add_listener('serial0-output-byte', (byte) => {
+  serial = (serial + String.fromCharCode(byte)).slice(-60000);
+  document.querySelector('#serial').textContent = serial.slice(-1200);
+  if (!seeded && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    seeded = true;
+    emulator.serial0_send(
+      'mkdir -p /root/project/sub/deep /root/project/docs && cd /root/project && ' +
+      "printf 'x\\n' > README.md && printf 'x\\n' > sub/n.md && " +
+      "printf 'x\\n' > sub/deep/d.md && printf 'x\\n' > docs/g.md && echo PROBE_SEEDED\n",
+    );
+  }
+  if (seeded && /\r?\nPROBE_SEEDED\r?\n/.test(serial) && !window.__started) {
+    window.__started = true;
+    run().catch((e) => report({ ok: false, error: String(e?.stack || e) }));
+  }
+});
+
+async function run() {
+  // Ground truth straight from the shell, so a broken RPC is distinguishable
+  // from a pattern that genuinely matches nothing.
+  for (const probe of [
+    'cd /root/project && find . -mindepth 1 -maxdepth 12 -path "./*.md"',
+    'cd /root/project && find /root/project -mindepth 1 -maxdepth 12 -path "/root/project/*.md"',
+    'cd /root/project && find /root/project -mindepth 1 -maxdepth 12 -path "/root/project/./*.md"',
+  ]) {
+    const out = await guest.execute(probe).catch(e => `ERROR: ${e.message}`);
+    log(`shell: ${probe.replace('cd /root/project && ', '')}`);
+    log(`   -> ${String(out).replace(/__V86AGENT_EXIT__\d+\n?/, '').trim().split('\n').join(' ') || '(none)'}`);
+  }
+  log('');
+
+  const rawSample = await guest.glob('*.md', '.');
+  log(`RAW glob: ${JSON.stringify(String(rawSample))}`);
+  const rawList = await guest.list('.');
+  log(`RAW list: ${JSON.stringify(String(rawList).slice(0, 200))}`);
+
+  // What the shipped tier actually shows an agent asking "what is in here".
+  const { createMastraVMAgent } = await import('../../agent/dist/mastra-agent.js');
+  const vm = createMastraVMAgent({
+    guest, yolo: true,
+    llmClient: { modelName: 'probe', async status() { return { modelName: 'probe' }; }, async chat() { return { choices: [{ message: { content: '{"final":"x"}' } }] }; } },
+  });
+  const probeTools = await vm.toolMap();
+  const listed = await probeTools.mastra_workspace_list_files.execute({ path: '/' }, {});
+  log(`list_files tool: ${JSON.stringify(String(listed))}`);
+
+  // Mastra's grep walks the tree and reads every file rather than using the
+  // guest's grep RPC. Confirm it at least returns correct results now that
+  // listing works — before the parser fix it searched an empty file list.
+  const grepStart = performance.now();
+  const grepped = await probeTools.mastra_workspace_grep
+    .execute({ pattern: 'x', path: '/' }, {}).catch(e => `ERROR: ${e.message}`);
+  log(`grep tool (${Math.round(performance.now() - grepStart)}ms): ${JSON.stringify(String(grepped).slice(0, 300))}`);
+
+  // The guest's own grep, for comparison: one round-trip.
+  const nativeStart = performance.now();
+  const native = await guest.grep('x', '.').catch(e => `ERROR: ${e.message}`);
+  log(`guest.grep (${Math.round(performance.now() - nativeStart)}ms): ${JSON.stringify(String(native).slice(0, 300))}`);
+  log('');
+
+  const patterns = ['*.md', '**/*.md', '*/*.md', '**.md', '*', '**/*'];
+  const results = {};
+  for (const pattern of patterns) {
+    for (const base of ['.', '', '/']) {
+      const probe = await guest.glob(pattern, base).catch(e => `ERR:${e.message}`);
+      const n = String(probe).split('\n').filter(Boolean).length;
+      log(`  glob(${JSON.stringify(pattern)}, ${JSON.stringify(base)}) -> ${n} entries`);
+    }
+    const raw = await guest.glob(pattern, '.').catch(e => `ERROR: ${e.message}`);
+    const files = String(raw).split('\n').filter(Boolean)
+      .map(line => line.split(/\\t|\t/))
+      .filter(([type]) => type !== 'directory')
+      .map(([, p]) => p);
+    results[pattern] = files;
+    log(`${pattern.padEnd(9)} -> ${files.length ? files.join(' ') : '(none)'}`);
+  }
+  // Every .md in the tree, as ground truth.
+  const all = ['README.md', 'sub/n.md', 'sub/deep/d.md', 'docs/g.md'];
+  const complete = Object.entries(results)
+    .filter(([, files]) => all.every(f => files.includes(f)))
+    .map(([pattern]) => pattern);
+  log('');
+  log(`patterns that find ALL four .md files: ${complete.join(', ') || 'NONE'}`);
+  await report({ ok: true, results, complete });
+}
+</script>

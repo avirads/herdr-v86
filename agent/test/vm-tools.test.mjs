@@ -178,7 +178,8 @@ test('parity tools are opt-in, and the prompt cost of enabling them is measurabl
   const browserClient = { async command() { return { ok: true }; } };
 
   const base = createMastraVMAgent({ guest, llmClient });
-  assert.equal((await base.listTools()).length, 8, 'default stays lean for a 16k window');
+  assert.equal((await base.listTools()).length, 9, 'default stays lean for a 16k window');
+  assert.ok((await base.listTools()).includes('glob'), 'glob is a default, not a parity extra');
 
   const full = createMastraVMAgent({
     guest, llmClient, browserClient, enableVmTools: true, enablePlanning: true,
@@ -188,7 +189,7 @@ test('parity tools are opt-in, and the prompt cost of enabling them is measurabl
     'browser_search', 'autobro_command', 'autobro_automate', 'taskWrite', 'taskUpdate']) {
     assert.ok(names.includes(expected), `missing ${expected}`);
   }
-  assert.equal(names.length, 19, 'full parity surface (Deep Agents exposes 18)');
+  assert.equal(names.length, 20, 'full parity surface (Deep Agents exposes 18)');
 
   const baseCost = await base.systemPromptCost();
   const fullCost = await full.systemPromptCost();

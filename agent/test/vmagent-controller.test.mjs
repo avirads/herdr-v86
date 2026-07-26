@@ -178,7 +178,7 @@ function mastraController({ model = { modelName: 'm' }, onOutput } = {}) {
         run: async (task, runOptions = {}) => { runs.push({ task, ...runOptions }); return `ran: ${task}`; },
         setYolo() {},
         listTools: async () => (options.fullTools ? ['a', 'b', 'c'] : ['a']),
-        systemPromptCost: async () => ({ approxTokens: options.fullTools ? 5749 : 2832, chars: 100, toolCount: options.fullTools ? 19 : 8 }),
+        systemPromptCost: async () => ({ approxTokens: options.fullTools ? 5537 : 2621, chars: 100, toolCount: options.fullTools ? 20 : 9 }),
       };
     },
     getLlmClient: () => ({ status: async () => model }),
@@ -212,8 +212,8 @@ test('mastra CLI exposes status, tools, cost, yolo, reset and stop', async () =>
   assert.match(outputs.at(-1), /3 tools active/);
 
   await controller.handle('mastra_cost');
-  assert.match(outputs.at(-1), /~5749 tokens/);
-  assert.match(outputs.at(-1), /35% of a 16k window/);
+  assert.match(outputs.at(-1), /~5537 tokens/);
+  assert.match(outputs.at(-1), /34% of a 16k window/);
 
   await controller.handle('mastra_yolo', 'off');
   assert.equal(controller.yolo, false);
@@ -235,13 +235,13 @@ test('mastra tools lean|full switches profile and rebuilds the harness', async (
   assert.equal(lastOptions().fullTools, true, 'defaults to the full surface');
 
   await controller.handle('mastra_tools', 'lean');
-  assert.match(outputs.at(-1), /lean \(8 workspace tools\)/);
+  assert.match(outputs.at(-1), /lean \(9 workspace tools\)/);
   assert.equal(controller.mastraHarness, null, 'profile change must discard the harness');
 
   await controller.handle('mastra', 'second');
   assert.equal(built(), 2, 'harness rebuilt with the new profile');
   assert.equal(lastOptions().fullTools, false);
-  assert.equal((await controller.handle('mastra_cost'), outputs.at(-1)).includes('~2832 tokens'), true);
+  assert.equal((await controller.handle('mastra_cost'), outputs.at(-1)).includes('~2621 tokens'), true);
 
   // Asking for the profile already active must not throw the session away.
   await controller.handle('mastra_tools', 'lean');

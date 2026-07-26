@@ -323,3 +323,94 @@ export function createVmTools({
 
   return tools;
 }
+
+/**
+ * Match paths by pattern in a single guest round-trip.
+ *
+ * `list_files` already accepts a glob `pattern`, so this is not a missing
+ * capability — it is a missing *correct* one. Measured against the real guest,
+ * list_files costs 2 round-trips to this tool's 1 (it reads .gitignore first),
+ * and it renders a tree truncated at depth 2, so a file three directories down
+ * simply is not in the answer. This returns flat paths at any depth.
+ *
+ * Note the matcher is the guest's `find -path`, not picomatch: `*` crosses `/`
+ * there. So "*.md" is the recursive form and "**\/*.md" is the narrower one,
+ * which is backwards from what a model expects — hence the blunt warning in
+ * the tool description.
+ *
+ * Unlike the tools above, this is on by default — see enableGlob.
+ */
+export function createGlobTool({ guest } = {}) {
+  if (!guest) throw new Error('createGlobTool requires the guest bridge');
+  return {
+    glob: createTool({
+      id: 'glob',
+      description:
+        'Find files by path pattern, e.g. "*.md" or "src/*.js". ' +
+        'IMPORTANT: "*" matches across directories here, so "*.md" finds every .md ' +
+        'file at any depth. Do NOT write "**/*.md" — the leading "**/" requires a ' +
+        'slash and so skips files in the top directory. ' +
+        'Returns matching paths relative to the project directory.',
+      inputSchema: z.object({
+        pattern: z.string(),
+        path: z.string().default('/'),
+      }),
+      execute: async ({ pattern, path = '/' }) => {
+        const relative = String(path).replace(/^\/+/, '') || '.';
+        const raw = await guest.glob(pattern, relative);
+        const paths = String(raw ?? '')
+          .split('\n')
+          .filter(Boolean)
+          // The guest emits "type<sep>path<sep>size", where the separator is
+          // the literal two characters backslash-t, not a tab — BusyBox stat
+          // does not interpret the \t in its format string. Keep files, drop
+          // directories, and report the path alone: type and size are noise
+          // here and the model pays for every token of it.
+          .map(line => line.split(/\\t|\t/))
+          .filter(([type]) => type !== 'directory')
+          .map(([, entryPath]) => entryPath)
+          .filter(Boolean);
+        if (!paths.length) return `No files match ${pattern}`;
+        return `${paths.length} match${paths.length === 1 ? '' : 'es'}:\n${paths.join('\n')}`;
+      },
+    }),
+  };
+}
+
+/**
+ * Replace Mastra's grep with the guest's own.
+ *
+ * Mastra's workspace grep walks the tree and reads every file over the bridge
+ * to search it client-side. Measured against a booted guest on a six-file
+ * project: 34 round-trips and 6576 ms, against 468 ms and one round-trip for
+ * `guest.grep`, for identical results. The gap scales with the file count, so
+ * on a real project it is far worse than 14x.
+ *
+ * The trade is option richness — Mastra's grep offers context lines and its
+ * own glob filtering, this is the guest's `grep -R -n -F`. Fixed-string, no
+ * context. On a guest where every file read is ~450 ms, that is the right
+ * side of the trade, and it is the same shape the Deep Agents tier uses.
+ */
+export function createGrepTool({ guest } = {}) {
+  if (!guest) throw new Error('createGrepTool requires the guest bridge');
+  return {
+    grep: createTool({
+      id: 'grep',
+      description:
+        'Search file contents for a literal string across the project, e.g. "TODO". ' +
+        'Matches are plain text, not regular expressions. ' +
+        'Returns "path:line:text" for each match.',
+      inputSchema: z.object({
+        pattern: z.string(),
+        path: z.string().default('/'),
+      }),
+      execute: async ({ pattern, path = '/' }) => {
+        const relative = String(path).replace(/^\/+/, '') || '.';
+        const raw = await guest.grep(pattern, relative);
+        const lines = String(raw ?? '').split('\n').filter(Boolean);
+        if (!lines.length) return `No matches for ${pattern}`;
+        return `${lines.length} match${lines.length === 1 ? '' : 'es'}:\n${lines.join('\n')}`;
+      },
+    }),
+  };
+}

@@ -256327,9 +256327,10 @@ var MIME_BY_EXTENSION = {
 function mimeType(path5) {
   return MIME_BY_EXTENSION[String(path5).split(".").pop()?.toLowerCase()] || "text/plain";
 }
+var FIELD_SEPARATOR = /\\t|\t/;
 function parseFileEntries(output) {
   return String(output ?? "").split("\n").filter(Boolean).map((line) => {
-    const [type, path5, size] = line.split("	");
+    const [type, path5, size] = line.split(FIELD_SEPARATOR);
     return {
       name: baseName(path5),
       path: toWorkspacePath(path5),
@@ -256518,7 +256519,7 @@ var V86Filesystem = class extends MastraFilesystem {
   }
   async readdir(path5 = "/", options2 = {}) {
     const relative4 = toGuestPath(path5);
-    const raw = options2.recursive ? await this.guest.glob("**/*", relative4) : await this.guest.list(relative4);
+    const raw = options2.recursive ? await this.guest.glob(options2.pattern || "**/*", relative4) : await this.guest.list(relative4);
     let entries = parseFileEntries(raw);
     if (options2.maxDepth != null) {
       const base = relative4 === "." ? 0 : relative4.split("/").length;
@@ -257076,6 +257077,48 @@ ${text10}`;
   });
   return tools;
 }
+function createGlobTool({ guest } = {}) {
+  if (!guest) throw new Error("createGlobTool requires the guest bridge");
+  return {
+    glob: createTool({
+      id: "glob",
+      description: 'Find files by path pattern, e.g. "*.md" or "src/*.js". IMPORTANT: "*" matches across directories here, so "*.md" finds every .md file at any depth. Do NOT write "**/*.md" \u2014 the leading "**/" requires a slash and so skips files in the top directory. Returns matching paths relative to the project directory.',
+      inputSchema: external_exports.object({
+        pattern: external_exports.string(),
+        path: external_exports.string().default("/")
+      }),
+      execute: async ({ pattern, path: path5 = "/" }) => {
+        const relative4 = String(path5).replace(/^\/+/, "") || ".";
+        const raw = await guest.glob(pattern, relative4);
+        const paths = String(raw ?? "").split("\n").filter(Boolean).map((line) => line.split(/\\t|\t/)).filter(([type]) => type !== "directory").map(([, entryPath]) => entryPath).filter(Boolean);
+        if (!paths.length) return `No files match ${pattern}`;
+        return `${paths.length} match${paths.length === 1 ? "" : "es"}:
+${paths.join("\n")}`;
+      }
+    })
+  };
+}
+function createGrepTool({ guest } = {}) {
+  if (!guest) throw new Error("createGrepTool requires the guest bridge");
+  return {
+    grep: createTool({
+      id: "grep",
+      description: 'Search file contents for a literal string across the project, e.g. "TODO". Matches are plain text, not regular expressions. Returns "path:line:text" for each match.',
+      inputSchema: external_exports.object({
+        pattern: external_exports.string(),
+        path: external_exports.string().default("/")
+      }),
+      execute: async ({ pattern, path: path5 = "/" }) => {
+        const relative4 = String(path5).replace(/^\/+/, "") || ".";
+        const raw = await guest.grep(pattern, relative4);
+        const lines = String(raw ?? "").split("\n").filter(Boolean);
+        if (!lines.length) return `No matches for ${pattern}`;
+        return `${lines.length} match${lines.length === 1 ? "" : "es"}:
+${lines.join("\n")}`;
+      }
+    })
+  };
+}
 
 // src/mastra-browser.js
 var GUEST_RPC_TIMEOUT_MS = 3e4;
@@ -257103,7 +257146,7 @@ function createMastraVMAgent({
   onActivity = () => {
   },
   // Trimmed by default: every enabled tool costs system-prompt tokens, and the
-  // on-device model has a 16k window. Measured ~2.9k tokens with all ten.
+  // on-device model has a 16k window. Measured ~3.0k tokens with all eleven.
   enableLsp = false,
   enableDelete = false,
   // Parity with the Deep Agents tier: the browser-backed vm* commands and the
@@ -257113,6 +257156,18 @@ function createMastraVMAgent({
   enableVmTools = false,
   // Mastra's own planning tools, the equivalent of Deep Agents' write_todos.
   enablePlanning = false,
+  // On by default, unlike the two above. list_files can already filter by
+  // pattern, but it walks the tree with one round-trip per directory and
+  // truncates at depth 2; glob answers the same question in one trip and
+  // misses nothing. The cheapest tool here in prompt tokens.
+  enableGlob = true,
+  // Also on by default, and it REPLACES Mastra's workspace grep rather than
+  // adding to it — two tools called "grep" would just make the model guess.
+  // Mastra's own grep reads every file over the bridge to search it here:
+  // measured at 34 round-trips and 6576 ms against 468 ms and one round-trip
+  // for the guest's grep, same results. Set false to get Mastra's back, which
+  // buys context lines and regex at that price.
+  fastGrep = true,
   // Passed to V86Filesystem: cacheTtlMs and prefetchMaxBytes. The defaults are
   // what bring per-operation round-trips down to the Deep Agents tier's; set
   // { cacheTtlMs: 0 } to measure or restore the uncached behaviour.
@@ -257143,10 +257198,15 @@ function createMastraVMAgent({
       [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireApproval, requireReadBeforeWrite: false },
       [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireApproval },
       [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: { enabled: enableDelete, requireApproval },
+      [WORKSPACE_TOOLS.FILESYSTEM.GREP]: { enabled: !fastGrep },
       [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: { enabled: enableLsp }
     }
   });
   const extraTools = {
+    // Always on: one round-trip for a pattern match, against list_files'
+    // one-per-directory walk.
+    ...enableGlob ? createGlobTool({ guest }) : {},
+    ...fastGrep ? createGrepTool({ guest }) : {},
     ...enableVmTools ? createVmTools({
       guest,
       browserClient,

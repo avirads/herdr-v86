@@ -116,6 +116,109 @@ test('sandbox timeout stays under the guest RPC timeout', async () => {
   assert.ok(vm.workspace.sandbox.defaultTimeout < 30_000);
 });
 
+test('glob ships by default and costs exactly one round-trip', async () => {
+  // The last capability Deep Agents had that this tier did not. If it ever
+  // stops being on by default, the feature table in docs/agent-tiers.md is
+  // wrong again.
+  const guest = guestFake();
+  const calls = [];
+  guest.glob = async (pattern, path) => {
+    calls.push({ pattern, path });
+    return 'file\tdocs/a.md\t10\ndirectory\tdocs\t0\nfile\tsrc/b.md\t20\n';
+  };
+  const vm = createMastraVMAgent({ guest, llmClient: scripted([]), yolo: true });
+  const tools = await vm.toolMap();
+  assert.ok(tools.glob, 'glob is not in the default tool set');
+
+  const out = await tools.glob.execute({ pattern: '**/*.md' }, {});
+  assert.deepEqual(calls, [{ pattern: '**/*.md', path: '.' }], 'one glob call, path normalised');
+  assert.match(out, /docs\/a\.md/);
+  assert.match(out, /src\/b\.md/);
+  assert.doesNotMatch(out, /^directory/m, 'directories are noise in a file match');
+  assert.match(out, /2 matches/);
+});
+
+test('glob reports no match plainly rather than returning an empty string', async () => {
+  const guest = guestFake();
+  guest.glob = async () => '';
+  const vm = createMastraVMAgent({ guest, llmClient: scripted([]), yolo: true });
+  const out = await (await vm.toolMap()).glob.execute({ pattern: '**/*.rs' }, {});
+  // An empty tool result reads to the model as a broken tool, not as "none".
+  assert.match(out, /No files match \*\*\/\*\.rs/);
+});
+
+test('fastGrep replaces Mastra grep rather than sitting beside it', async () => {
+  // Two tools named grep would just make the model pick one at random. The
+  // workspace one is disabled so there is exactly one, and it is the cheap
+  // one: measured on a real guest at 468 ms / 1 round-trip against Mastra's
+  // 6576 ms / 34, because Mastra reads every file over the bridge to search.
+  const guest = guestFake();
+  const calls = [];
+  guest.grep = async (pattern, path) => {
+    calls.push({ pattern, path });
+    return 'README.md:1:hello\nsub/n.md:3:hello\n';
+  };
+  const tools = await createMastraVMAgent({
+    guest, llmClient: scripted([]), yolo: true,
+  }).toolMap();
+
+  assert.ok(tools.grep, 'no grep tool');
+  assert.equal(tools.mastra_workspace_grep, undefined, 'Mastra grep must be disabled');
+
+  const out = await tools.grep.execute({ pattern: 'hello' }, {});
+  assert.deepEqual(calls, [{ pattern: 'hello', path: '.' }], 'exactly one guest grep');
+  assert.match(out, /2 matches/);
+  assert.match(out, /README\.md:1:hello/);
+});
+
+test('fastGrep:false hands grep back to Mastra', async () => {
+  const tools = await createMastraVMAgent({
+    guest: guestFake(), llmClient: scripted([]), fastGrep: false,
+  }).toolMap();
+  assert.equal(tools.grep, undefined);
+  assert.ok(tools.mastra_workspace_grep, 'workspace grep should return when opted out');
+});
+
+test('glob can be turned off for prompt budget', async () => {
+  const vm = createMastraVMAgent({ guest: guestFake(), llmClient: scripted([]), enableGlob: false });
+  assert.equal((await vm.toolMap()).glob, undefined);
+});
+
+test('glob parses the guest wire format and returns paths at any depth', async () => {
+  // Verbatim shape from a booted guest: literal backslash-t separators, and
+  // "regular file" rather than "file" as the type. The first version of this
+  // tool split on a real tab, got a list of empty strings, and reported "no
+  // files match" against a tree full of matches.
+  const guest = guestFake();
+  guest.glob = async () =>
+    'regular file\tdocs/g.md\t2\n' +
+    'directory\tsub\t4096\n' +
+    'regular file\tsub/deep/d.md\t2\n' +
+    'regular file\tREADME.md\t2\n';
+  const tools = await createMastraVMAgent({ guest, llmClient: scripted([]), yolo: true }).toolMap();
+  const out = await tools.glob.execute({ pattern: '*.md' }, {});
+
+  assert.match(out, /docs\/g\.md/);
+  assert.match(out, /sub\/deep\/d\.md/, 'a file three levels down must appear');
+  assert.match(out, /README\.md/);
+  assert.doesNotMatch(out, /^sub$/m, 'directories are noise in a file match');
+  assert.match(out, /3 matches/);
+});
+
+test('the glob tool description warns that * crosses directories here', async () => {
+  // The guest matches with find -path, where "*" spans "/". That inverts the
+  // usual convention: measured against a real guest, "*.md" found all four .md
+  // files in the tree while "**/*.md" found three, silently missing the one at
+  // the top level. A model trained on ordinary globs reaches for the wrong one
+  // unless the description says this out loud.
+  const tools = await createMastraVMAgent({
+    guest: guestFake(), llmClient: scripted([]), yolo: true,
+  }).toolMap();
+  const description = String(tools.glob.description);
+  assert.match(description, /matches across directories/i);
+  assert.match(description, /\*\*\//, 'must name the pattern that silently under-matches');
+});
+
 test('batch mode does the whole task in one model call and one round-trip', async () => {
   // The point of the mode. rig --codeact finishes the tier benchmark in 950ms
   // against the tool loop's 2667ms purely by collapsing round-trips, so if
