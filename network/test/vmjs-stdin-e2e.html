@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>vmjs piped-stdin check</title>
+<pre id="serial"></pre><div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+let serial = '', started = false, submitted = false;
+async function submit(ok, reason = '') {
+  if (submitted) return;
+  submitted = true;
+  await fetch('/__result', {
+    method: 'POST',
+    body: JSON.stringify({ ok, reason, serial: serial.slice(-4000) }),
+  });
+}
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 256 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
+new V86HostBridge(emulator);
+
+setTimeout(() => submit(false, 'vmjs stdin test timed out'), 120000);
+emulator.add_listener('serial0-output-byte', byte => {
+  serial = (serial + String.fromCharCode(byte)).slice(-200000);
+  document.querySelector('#serial').textContent = serial;
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    started = true;
+    emulator.serial0_send(
+      "printf 'return 720\\n' >/tmp/factorial.js; " +
+      "echo VMJS_TEST_BEGIN; vmjs </tmp/factorial.js; " +
+      "echo; echo VMJS_TEST_END\n",
+    );
+  }
+  if (/\nVMJS_TEST_END\r?\n/.test(serial)) {
+    const result = serial.slice(serial.lastIndexOf('\nVMJS_TEST_BEGIN'))
+      .split('VMJS_TEST_END')[0];
+    submit(/\b720\b/.test(result) && !/stty:|not a tty|SyntaxError/i.test(result),
+      result.trim().slice(-800));
+  }
+});
+</script>

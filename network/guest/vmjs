@@ -15,14 +15,16 @@ case "${1:-}" in
     else
       code=$(cat)
     fi
-    stty -echo; trap 'stty echo' EXIT INT TERM
+    stty -echo < /dev/tty
+    trap 'stty echo < /dev/tty' EXIT INT TERM
     printf '__V86RPC__\tEVAL\t%s\t%s\n' "$id" "$(b64 "$code")" > /dev/tty
     while IFS="$(printf '\t')" read -r prefix response_id kind value; do
       [ "$prefix:$response_id" = "__V86RPC_RESPONSE__:$id" ] || continue
       [ "$kind" = DATA ] && printf %s "$value" | base64 -d
       [ "$kind" = END ] && break
       if [ "$kind" = ERROR ]; then printf %s "$value" | base64 -d >&2; exit 1; fi
-    done
-    stty echo; trap - EXIT INT TERM
+    done < /dev/tty
+    stty echo < /dev/tty
+    trap - EXIT INT TERM
     ;;
 esac
