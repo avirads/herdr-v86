@@ -13,6 +13,9 @@ Every long-lived startup message then includes `[local cache]` for that same
 version or `[remote]` for a new version. The source is not inferred from a
 one-byte Range cache probe because browsers do not reliably expose cached
 partial responses through `only-if-cached`.
+The v86 `download-progress` event is emitted for cached XHR reads too, so disk
+progress is labeled from the selected VM source rather than from that event's
+name.
 
 This is the canonical command reference for gateway-free services in the
 VM guest. These tools communicate with JavaScript in the hosting browser;

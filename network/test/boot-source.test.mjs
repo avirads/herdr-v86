@@ -18,3 +18,12 @@ test('a successfully booted disk version becomes the local source', () => {
   );
   assert.doesNotMatch(html, /cache:\s*"only-if-cached"/);
 });
+
+test('v86 disk progress describes the selected source rather than the event name', () => {
+  assert.match(html, /isVmDiskDownload\(e\.file_name\)/);
+  assert.match(
+    html,
+    /vmImageSource === "local cache" \? "Loading cached VM image" : "Downloading VM image"/,
+  );
+  assert.match(html, /`\$\{action\} \[\$\{vmImageSource\}\]…`/);
+});

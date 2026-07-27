@@ -1269,11 +1269,25 @@ emulator.add_listener("emulator-ready", () => {
     : `Starting VM [${vmImageSource}]…`);
   status(`emulator ready — booting${compatibilityBoot ? " in compatibility mode" : ""}… (first boot ~30-90s)`);
 });
+function isVmDiskDownload(fileName) {
+  try {
+    return new URL(fileName, location.href).pathname.endsWith("/vm-network-ext4.img");
+  } catch {
+    return String(fileName).includes("vm-network-ext4.img");
+  }
+}
 emulator.add_listener("download-progress", (e) => {
   if (e.file_name && e.loaded != null && e.total) {
     const fraction = Math.max(0, Math.min(1, e.loaded / e.total));
-    setBootProgress(10 + fraction * 55, `Downloading ${e.file_name}…`);
-    status("downloading " + e.file_name + " " + Math.round(100*e.loaded/e.total) + "%");
+    const percent = Math.round(100 * fraction);
+    if (isVmDiskDownload(e.file_name)) {
+      const action = vmImageSource === "local cache" ? "Loading cached VM image" : "Downloading VM image";
+      setBootProgress(10 + fraction * 55, `${action} [${vmImageSource}]…`);
+      status(`${action.toLowerCase()} [${vmImageSource}] ${percent}%`);
+    } else {
+      setBootProgress(10 + fraction * 55, `Downloading ${e.file_name}…`);
+      status(`downloading ${e.file_name} ${percent}%`);
+    }
   }
 });
 emulator.add_listener("download-error", (e) => {
