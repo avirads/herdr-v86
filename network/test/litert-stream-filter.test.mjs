@@ -2,18 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { StreamingTextFilter } from '../browser/litert-lm-client.js';
 
-test('stream filter stops and suppresses repeated pad tokens', () => {
+test('stream filter allows startup padding but stops a confirmed pad loop', () => {
   const filter = new StreamingTextFilter();
-  assert.deepEqual(filter.push('Hello '), { text: 'Hello ', stop: false });
-  assert.deepEqual(filter.push('<pad><pad><pad>'), { text: '', stop: true });
+  assert.deepEqual(filter.push('<bos><pad>Hello '), { text: 'Hello ', stop: false });
+  assert.deepEqual(filter.push('<pad><pad><pad>'), { text: '', stop: false });
+  assert.deepEqual(filter.push('<pad><pad><pad><pad><pad>'), { text: '', stop: true });
   assert.deepEqual(filter.push('<pad>'), { text: '', stop: true });
 });
 
 test('stream filter recognizes a terminal token split across chunks', () => {
   const filter = new StreamingTextFilter();
-  assert.deepEqual(filter.push('Answer<pa'), { text: 'Answer', stop: false });
-  assert.deepEqual(filter.push('d>ignored'), { text: '', stop: true });
-  assert.equal(filter.flush(), '');
+  assert.deepEqual(filter.push('<bo'), { text: '', stop: false });
+  assert.deepEqual(filter.push('s>Answer<eo'), { text: 'Answer', stop: false });
+  assert.deepEqual(filter.push('s>ignored'), { text: '', stop: true });
 });
 
 test('stream filter preserves ordinary angle-bracket text', () => {

@@ -115,17 +115,24 @@ export class RemoteLlmPeer extends EventTarget {
     this.activity('prompt submitted to agent LLM', { kind: 'llm', direction: 'in', id, content: prompt });
     const body = { messages: [{ role: 'user', content: prompt }] };
     let streamedContent = '';
-    const completion = client.chatStream
+    let completion = client.chatStream
       ? await client.chatStream(body, delta => {
           streamedContent += delta || '';
           connection.send({ type: 'llm.chunk', id, delta });
         })
       : await client.chat(body);
+    // Some LiteRT/model combinations can terminate a streaming conversation
+    // with padding before producing visible text. Retry through the stable
+    // non-streaming path rather than returning a blank response to the phone.
+    if (client.chatStream && !streamedContent.trim() && client.chat) {
+      this.activity('empty model stream — retrying without streaming', { kind: 'llm', direction: 'in', id });
+      completion = await client.chat(body);
+    }
     const content = streamedContent || completion?.choices?.[0]?.message?.content || '';
     const response = { type: 'llm.result', id, content };
     this.seen.set(id, response);
     if (this.seen.size > 256) this.seen.delete(this.seen.keys().next().value);
-    connection.send(client.chatStream ? { type: 'llm.done', id } : response);
+    connection.send(client.chatStream && streamedContent ? { type: 'llm.done', id } : response);
     this.activity('LLM response sent to phone', { kind: 'traffic', direction: 'out', id, content });
   }
 

@@ -2,41 +2,66 @@
 // no extension, native process, API key, or guest network is involved.
 const LAST_MODEL_KEY = 'vm.litert.lastModel';
 const MAX_CONTEXT_TOKENS = 16384;
-const STREAM_END_TOKENS = ['<pad>', '<eos>', '<bos>', '<end_of_turn>', '<|end_of_text|>', '<|eot_id|>'];
+const STREAM_END_TOKENS = ['<eos>', '<end_of_turn>', '<|end_of_text|>', '<|eot_id|>'];
+const STREAM_SKIP_TOKENS = ['<pad>', '<bos>'];
+const MAX_CONSECUTIVE_PAD_TOKENS = 8;
 const MAX_STREAM_CHARS = 65536;
 
 // LiteRT normally consumes model control tokens internally, but some model /
 // runtime combinations surface them as text and can emit <pad> indefinitely.
 // Retain a possible partial token between chunks so none of it reaches the UI.
 export class StreamingTextFilter {
-  constructor(tokens = STREAM_END_TOKENS) {
-    this.tokens = tokens.map(token => token.toLowerCase());
+  constructor(endTokens = STREAM_END_TOKENS, skipTokens = STREAM_SKIP_TOKENS) {
+    this.endTokens = endTokens.map(token => token.toLowerCase());
+    this.skipTokens = skipTokens.map(token => token.toLowerCase());
+    this.tokens = [...this.endTokens, ...this.skipTokens];
     this.pending = '';
     this.stopped = false;
+    this.consecutivePads = 0;
   }
 
   push(value) {
     if (this.stopped) return { text: '', stop: true };
-    const combined = this.pending + String(value ?? '');
-    const lower = combined.toLowerCase();
-    let terminalAt = -1;
-    for (const token of this.tokens) {
-      const index = lower.indexOf(token);
-      if (index >= 0 && (terminalAt < 0 || index < terminalAt)) terminalAt = index;
-    }
-    if (terminalAt >= 0) {
-      this.pending = '';
-      this.stopped = true;
-      return { text: combined.slice(0, terminalAt), stop: true };
+    let combined = this.pending + String(value ?? '');
+    let output = '';
+    this.pending = '';
+    for (;;) {
+      const lower = combined.toLowerCase();
+      let match = null;
+      for (const token of this.tokens) {
+        const index = lower.indexOf(token);
+        if (index >= 0 && (!match || index < match.index)) match = { token, index };
+      }
+      if (!match) break;
+      const visible = combined.slice(0, match.index);
+      if (visible) {
+        output += visible;
+        this.consecutivePads = 0;
+      }
+      combined = combined.slice(match.index + match.token.length);
+      if (this.endTokens.includes(match.token)) {
+        this.stopped = true;
+        return { text: output, stop: true };
+      }
+      if (match.token === '<pad>') {
+        this.consecutivePads++;
+        if (this.consecutivePads >= MAX_CONSECUTIVE_PAD_TOKENS) {
+          this.stopped = true;
+          return { text: output, stop: true };
+        }
+      }
     }
     let retained = 0;
+    const lower = combined.toLowerCase();
     const max = Math.min(combined.length, Math.max(...this.tokens.map(token => token.length)) - 1);
     for (let length = 1; length <= max; length++) {
       const suffix = lower.slice(-length);
       if (this.tokens.some(token => token.startsWith(suffix))) retained = length;
     }
     this.pending = retained ? combined.slice(-retained) : '';
-    return { text: retained ? combined.slice(0, -retained) : combined, stop: false };
+    const visible = retained ? combined.slice(0, -retained) : combined;
+    if (visible) this.consecutivePads = 0;
+    return { text: output + visible, stop: false };
   }
 
   flush() {
