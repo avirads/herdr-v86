@@ -82,9 +82,6 @@
   .provider-actions { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .provider-actions label { flex: 1 1 180px; margin: 0; }
   .provider-actions button { flex: 0 0 auto; }
-  .about-versions { display: grid; grid-template-columns: max-content 1fr; gap: 5px 12px; margin: 10px 0 0; font-size: 12px; }
-  .about-versions dt { color: #8b949e; }
-  .about-versions dd { margin: 0; color: #c9d1d9; overflow-wrap: anywhere; }
   #diagnostics-status { min-height: 1.4em; margin: 8px 0 0; color: #8b949e; font-size: 12px; }
   #remote-dialog { width: min(560px, calc(100vw - 32px)); }
   #remote-status { display: flex; align-items: center; gap: 8px; }
@@ -304,16 +301,6 @@
     <div><strong>Remote agent</strong><br><small>Run this model as an agent or chat with a paired agent over WebRTC.</small></div>
     <button id="open-remote" type="button">Remote access</button>
   </div>
-  <section class="provider-section" aria-labelledby="about-settings-title">
-    <h3 id="about-settings-title">About</h3>
-    <small>Version information for this browser application and its bundled runtimes.</small>
-    <dl class="about-versions">
-      <dt>App</dt><dd id="about-app-version">—</dd>
-      <dt>VM image</dt><dd id="about-vm-version">—</dd>
-      <dt>MoonshineJS</dt><dd>0.1.29</dd>
-      <dt>ONNX Runtime</dt><dd>1.22.0</dd>
-    </dl>
-  </section>
   <section class="provider-section" aria-labelledby="diagnostics-settings-title">
     <h3 id="diagnostics-settings-title">Diagnostics</h3>
     <small>Local capability and runtime metrics only. Project files, prompts, and pairing credentials are excluded.</small>
@@ -493,11 +480,9 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.7";
+const APP_VERSION = "2026.07.27.8";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
-document.getElementById("about-app-version").textContent = APP_VERSION;
-document.getElementById("about-vm-version").textContent = DISK_VERSION;
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -1171,6 +1156,10 @@ async function collectDiagnostics() {
       url: location.origin + location.pathname,
       secureContext: isSecureContext,
       crossOriginIsolated,
+    },
+    runtimes: {
+      moonshineJs: "0.1.29",
+      onnxRuntimeWeb: "1.22.0",
     },
     browser: {
       userAgent: navigator.userAgent,

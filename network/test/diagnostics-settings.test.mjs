@@ -4,11 +4,13 @@ import test from 'node:test';
 
 const html = await readFile(new URL('../../index.html', import.meta.url), 'utf8');
 
-test('Settings contains About version information and Diagnostics controls', () => {
-  assert.match(html, /<h3 id="about-settings-title">About<\/h3>/);
+test('Settings keeps version information in Diagnostics without a redundant About section', () => {
+  assert.doesNotMatch(html, /id="about-settings-title"|class="about-versions"/);
   assert.match(html, /const APP_VERSION = "[^"]+"/);
-  assert.match(html, /id="about-app-version"/);
-  assert.match(html, /id="about-vm-version"/);
+  assert.match(html, /version: APP_VERSION/);
+  assert.match(html, /diskVersion: DISK_VERSION/);
+  assert.match(html, /moonshineJs: "0\.1\.29"/);
+  assert.match(html, /onnxRuntimeWeb: "1\.22\.0"/);
   assert.match(html, /<h3 id="diagnostics-settings-title">Diagnostics<\/h3>/);
   assert.match(html, /id="copy-diagnostics"[^>]*>Copy diagnostics</);
   assert.match(html, /id="diagnostics-status" role="status" aria-live="polite"/);
