@@ -263,18 +263,22 @@
       </div>
     </section>
   </div>
-  <div class="settings-action">
-    <div><strong>Import file</strong><br><small>Copy a file from this device into the VM.</small></div>
-    <button id="import-file" type="button">Import file</button>
-  </div>
-  <div class="settings-action">
-    <div><strong>Import project</strong><br><small>Merge a .tar.gz archive into /root/project.</small></div>
-    <button id="import-project" type="button">Import project</button>
-  </div>
-  <div class="settings-action">
-    <div><strong>Export project</strong><br><small>Download /root/project as project.tar.gz.</small></div>
-    <button id="export-project" type="button">Export project</button>
-  </div>
+  <section class="provider-section" aria-labelledby="project-transfer-settings-title">
+    <h3 id="project-transfer-settings-title">Project transfer</h3>
+    <small>Merge a project archive into <code>/root/project</code> or download the whole project.</small>
+    <div class="provider-actions">
+      <button id="import-project" type="button">Import project</button>
+      <button id="export-project" type="button">Export project</button>
+    </div>
+  </section>
+  <section class="provider-section" aria-labelledby="file-transfer-settings-title">
+    <h3 id="file-transfer-settings-title">File transfer</h3>
+    <small>Copy one file into the VM or download a regular guest file up to 8 MiB.</small>
+    <div class="provider-actions">
+      <button id="import-file" type="button">Import file</button>
+      <button id="export-file" type="button">Export file</button>
+    </div>
+  </section>
   <div class="settings-action">
     <div><strong>Help</strong><br><small>Open the VM command reference.</small></div>
     <button id="open-help" type="button">Open help</button>
@@ -473,7 +477,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.1";
+const APP_VERSION = "2026.07.27.2";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
 document.getElementById("about-app-version").textContent = APP_VERSION;
@@ -1474,6 +1478,23 @@ document.getElementById("export-project").onclick = async () => {
   status("packing /root/project…");
   await hostBridge.send("vmproject export /root/project project.tar.gz");
   status("project export requested");
+};
+document.getElementById("export-file").onclick = async () => {
+  const guestPath = prompt("Enter the VM file path to download (maximum 8 MiB):", "/root/project/");
+  if (guestPath === null) return;
+  const path = guestPath.trim();
+  if (!path) return status("file export requires a VM path");
+  if (/[\r\n\0]/.test(path)) return status("invalid file export path");
+  settingsDialog.close();
+  if (!hostBridge) return status("agent bridge is still loading");
+  const quotedPath = `'${path.replaceAll("'", "'\\''")}'`;
+  status(`exporting ${path}…`);
+  try {
+    await hostBridge.send(`vmexport ${quotedPath}`);
+    status("file export requested");
+  } catch (error) {
+    status("file export failed — " + error.message);
+  }
 };
 document.getElementById("open-help").onclick = () => { settingsDialog.close(); window.open("docs/guest-tools.html", "_blank", "noopener"); };
 async function importFileIntoVm(file, afterImport = "") {
