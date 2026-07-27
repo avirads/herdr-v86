@@ -56,11 +56,11 @@ install -m 0755 "$PROJECT_DIR/network/guest/vmexport" "$MOUNT_DIR/usr/local/bin/
 install -m 0755 "$PROJECT_DIR/network/guest/vmgithub" "$MOUNT_DIR/usr/local/bin/vmgithub"
 install -m 0755 "$PROJECT_DIR/network/guest/vmai" "$MOUNT_DIR/usr/local/bin/vmai"
 install -m 0755 "$PROJECT_DIR/network/guest/vmllm" "$MOUNT_DIR/usr/local/bin/vmllm"
-install -m 0755 "$PROJECT_DIR/network/guest/vmagent" "$MOUNT_DIR/usr/local/bin/vmagent"
+install -m 0755 "$PROJECT_DIR/network/guest/vmlang" "$MOUNT_DIR/usr/local/bin/vmlang"
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-poll" "$MOUNT_DIR/usr/local/bin/vmagent-poll"
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/bin/vmagent-rpc"
 install -D -m 0755 "$PROJECT_DIR/network/guest/rig-vm" "$MOUNT_DIR/usr/local/bin/rig"
-install -D -m 0755 "$PROJECT_DIR/network/guest/mastra-vm" "$MOUNT_DIR/usr/local/bin/mastra"
+install -D -m 0755 "$PROJECT_DIR/network/guest/mastra-vm" "$MOUNT_DIR/usr/local/bin/vmmastra"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bin/vmbench"
 # Agent-facing operating manual for the Mastra tier. A system path rather than
 # /root/project/skills/, so the user's workspace is left untouched; the file
@@ -80,9 +80,11 @@ rm -f \
   "$MOUNT_DIR/usr/local/libexec/pi" \
   "$MOUNT_DIR/usr/local/bin/zerostack" \
   "$MOUNT_DIR/usr/local/libexec/zerostack" \
+  "$MOUNT_DIR/usr/local/bin/vmagent" \
+  "$MOUNT_DIR/usr/local/bin/mastra" \
   "$MOUNT_DIR/sbin/herdr-boot"
 
 chroot "$MOUNT_DIR" /usr/bin/curl --version
 chroot "$MOUNT_DIR" /usr/bin/tmux -V
-chroot "$MOUNT_DIR" /bin/sh -c '! command -v zerostack && command -v rig && test -x /usr/local/libexec/rig-agent'
+chroot "$MOUNT_DIR" /bin/sh -c '! command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v vmlang && command -v vmmastra && command -v rig && test -x /usr/local/libexec/rig-agent'
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"

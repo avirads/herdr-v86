@@ -1,13 +1,13 @@
 // Feature parity with the Deep Agents tier, as Mastra tools.
 //
 // @mastra/core/workspace supplies the filesystem/sandbox tools. Everything
-// here is the rest of what `vmagent` can do: the browser-backed vm* commands
+// here is the rest of what `vmlang` can do: the browser-backed vm* commands
 // and the AutoBro browser-automation tools. The guest command strings and
 // approval semantics deliberately mirror agent/src/agent.js one-for-one — the
 // two tiers must behave identically, so this is a faithful port rather than a
 // refactor of the working Deep Agents tier.
 //
-// Every tool is gated by the same approve/YOLO contract used by vmagent.
+// Every tool is gated by the same approve/YOLO contract used by vmlang.
 
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';

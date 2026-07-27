@@ -38,7 +38,7 @@ NIC. The toolbar provides file import. See
 start with [AGENTS.md](AGENTS.md); web-based agents can discover the documentation
 index through [llms.txt](llms.txt).
 
-The guest `vmagent` command provides a full Deep Agents coding assistant
+The guest `vmlang` command provides a full Deep Agents coding assistant
 backed by the page-local LiteRT-LM WebGPU model. **Configure LLM** imports a
 compatible model into browser OPFS; no extension is required. The agent has
 framework-native planning, filesystem, shell, project-memory, skills, context
@@ -46,9 +46,9 @@ management, and subagent tools. Mutations and every command require explicit
 browser approval. Typed browser-bridge tools cover `vmfetch`, `vmgithub`,
 `vmclip`, `vmexport`, `vmai`, and LiteRT status/model discovery. See
 [the Deep Agents guide](docs/deep-agent.md).
-The session-only `vmagent yolo on|off` control can waive individual approvals;
-it is on by default and returns to on after reload or `vmagent reset`. Run
-`vmagent yolo off` before a task to require confirmation for each operation.
+The session-only `vmlang yolo on|off` control can waive individual approvals;
+it is on by default and returns to on after reload or `vmlang reset`. Run
+`vmlang yolo off` before a task to require confirmation for each operation.
 Optional **Connect AutoBro** pairing gives the agent authenticated bridge-v3
 browser automation for tabs, navigation, DOM/form interaction, CDP input,
 waits, dialogs, JavaScript, uploads, and domain commands. It remains separate
@@ -62,7 +62,7 @@ The header's **Voice** control uses the bundled MoonshineJS Tiny English model
 to transcribe the device microphone locally in the parent browser. Audio and
 transcripts are not sent to the VM, gateway, or a cloud transcription service.
 Choose **Settings → Local voice input → After transcription** to either insert
-recognized text at the active shell/`vmagent>` prompt or execute each completed
+recognized text at the active shell/`vmlang>` prompt or execute each completed
 utterance as a command. Execute mode stops listening after one utterance to
 avoid duplicate command submission.
 
@@ -81,7 +81,7 @@ A human client can chat directly with the WebGPU LLM loaded by an agent VM page:
 1. Once the agent VM shell is available, open **Settings → Remote access** and select **Run this agent**. Pairing can start before a model is loaded; configure a model before sending the first chat message.
 2. Copy the generated session pairing key.
 3. On the human device, open [`remote.html`](remote.html) directly or select **Human** during startup, paste the key, and connect.
-4. Type a prompt, or select **Record**, speak, and select **Stop & send**. Requests go directly to the agent model and do not invoke `vmagent` or DeepAgentsJS.
+4. Type a prompt, or select **Record**, speak, and select **Stop & send**. Requests go directly to the agent model and do not invoke `vmlang` or DeepAgentsJS.
 
 The mobile-only page does not load v86, a VM disk, xterm, LiteRT-LM, Moonshine,
 or a model. For voice requests, it records a compressed, single-channel clip and

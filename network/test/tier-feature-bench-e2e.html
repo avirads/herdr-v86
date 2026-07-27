@@ -8,7 +8,7 @@
 <script type="module">
 // Per-FEATURE comparison of the three agent tiers against the same real guest.
 //
-// Each tier's own file layer is driven directly — vmagent's
+// Each tier's own file layer is driven directly — vmlang's
 // V86DeepAgentsBackend, rig's tool dispatch, Mastra's generated workspace
 // tools — so this measures the tier, not the model. The model is out of the
 // loop entirely here; the aggregate task comparison lives in tier-bench.
@@ -247,7 +247,7 @@ async function run() {
     }
     table.push(row);
     const fmt = (r) => (r.unsupported ? "    —" : `${String(r.ms).padStart(4)}ms/${r.rpc}${r.error ? "!" : ""}`);
-    log(`${feature.padEnd(15)} vmagent ${fmt(row.vmagent)}  rig ${fmt(row.rig)}  mastra ${fmt(row.mastra)}  warm ${fmt(row.mastraWarm)}`);
+    log(`${feature.padEnd(15)} vmlang ${fmt(row.vmagent)}  rig ${fmt(row.rig)}  vmmastra ${fmt(row.mastra)}  warm ${fmt(row.mastraWarm)}`);
   }
 
   // Tool-surface + prompt cost, which is a per-turn cost rather than per-call.

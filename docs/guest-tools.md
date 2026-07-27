@@ -50,7 +50,7 @@ The terminal also supports direct clipboard controls:
 - Select text and press **Copy**, `Ctrl+C`, or `Ctrl+Shift+C` (`Cmd+C` on
   macOS). Without a selection, `Ctrl+C` remains the shell interrupt key.
 - Press **Paste**, `Ctrl+Shift+V` (`Cmd+V` on macOS), or `Shift+Insert` to
-  insert clipboard text into the active shell or `vmagent` conversation.
+  insert clipboard text into the active shell or `vmlang` conversation.
 - Plain `Ctrl+C` remains the shell interrupt key when terminal text is not
   selected.
 - If direct clipboard permission is unavailable, the **Paste** button opens a
@@ -230,16 +230,16 @@ their URLs, headers, bodies, and responses. Do not use secrets with an untrusted
 or modified deployment. The browser bridge deliberately cannot bypass browser
 security controls.
 
-## `vmagent` — Deep Agents coding agent
+## `vmlang` — Deep Agents coding agent
 
-The guest command `vmagent 'TASK'` uses the page-local WebGPU LLM and maps
-DeepAgentsJS filesystem and shell tools to `/root/project`. Use `vmagent status`,
+The guest command `vmlang 'TASK'` uses the page-local WebGPU LLM and maps
+DeepAgentsJS filesystem and shell tools to `/root/project`. Use `vmlang status`,
 `stop`, `reset`, or `yolo on|off` for lifecycle control. After the first reply,
-the browser keeps a persistent `vmagent>` conversation using the same agent
+the browser keeps a persistent `vmlang>` conversation using the same agent
 checkpoint; enter `/exit` to return to the guest shell. A hidden second UART
 carries agent tool RPC while VM retains the visible primary console. YOLO is
-on by default; use `vmagent yolo off` to require per-operation
-browser confirmations. Running bare `vmagent` reads the first prompt; stdin
+on by default; use `vmlang yolo off` to require per-operation
+browser confirmations. Running bare `vmlang` reads the first prompt; stdin
 pipes can contain longer initial prompts.
 Reads run automatically; edits and commands require browser confirmation. See
 [the Deep Agents guide](deep-agent.md) for capabilities, skills, approvals, and

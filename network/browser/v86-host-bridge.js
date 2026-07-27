@@ -106,7 +106,7 @@ export class V86HostBridge extends EventTarget {
     if (operation === "LLM_COMPLETION") return this.llm(id, "completion", fields[0]);
     if (operation === "LLM_OPENAI") return this.llm(id, "openai", fields[0]);
     if (operation.startsWith("AGENT_")) {
-      if (!this.agentHandler) throw new Error("vmagent is still initializing");
+      if (!this.agentHandler) throw new Error("vmlang is still initializing");
       if (this.handledAgentRequests.has(id)) return;
       this.handledAgentRequests.add(id);
       if (this.handledAgentRequests.size > 128) this.handledAgentRequests.delete(this.handledAgentRequests.values().next().value);

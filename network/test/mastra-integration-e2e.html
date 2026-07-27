@@ -9,7 +9,7 @@
 // The other Mastra e2es call createMastraVMAgent directly. This one exercises
 // the path a user actually takes and nothing else does end to end:
 //
-//   guest `mastra 'TASK'` -> /dev/ttyS0 -> V86HostBridge -> AGENT_MASTRA
+//   guest `vmmastra 'TASK'` -> /dev/ttyS0 -> V86HostBridge -> AGENT_MASTRA
 //     -> VmAgentController.handle('mastra', ...) -> Mastra harness
 //     -> onOutput back to the terminal
 //
@@ -85,11 +85,11 @@ async function wireController() {
   };
 
   const controller = new VmAgentController({
-    createAgent: async () => { throw new Error('deep agents tier must not be used by `mastra`'); },
+    createAgent: async () => { throw new Error('deep agents tier must not be used by `vmmastra`'); },
     createMastraAgent: async (options) => {
       harnessOptions = Object.keys(options).sort();
       const { createMastraVMAgent } = await import('../../agent/dist/mastra-agent.js');
-      // Mirror index.html so `mastra tools lean|full` is genuinely exercised.
+      // Mirror index.html so `vmmastra tools lean|full` is genuinely exercised.
       const { fullTools = true, ...rest } = options;
       return createMastraVMAgent({ ...rest, enableVmTools: fullTools, enablePlanning: fullTools });
     },
@@ -133,15 +133,15 @@ emulator.add_listener('serial0-output-byte', (byte) => {
         // Exercise the whole CLI surface from the guest shell, then the task.
         // Each subcommand is a distinct AGENT_MASTRA_* RPC, so this proves the
         // routing as well as the handlers.
-        log('running the mastra CLI subcommands from the guest shell');
-        emulator.serial0_send('mastra status\n');
-        setTimeout(() => emulator.serial0_send('mastra tools lean\n'), 700);
-        setTimeout(() => emulator.serial0_send('mastra yolo off\n'), 1400);
-        setTimeout(() => emulator.serial0_send('mastra yolo on\n'), 2100);
-        setTimeout(() => emulator.serial0_send('mastra reset\n'), 2800);
+        log('running the vmmastra CLI subcommands from the guest shell');
+        emulator.serial0_send('vmmastra status\n');
+        setTimeout(() => emulator.serial0_send('vmmastra tools lean\n'), 700);
+        setTimeout(() => emulator.serial0_send('vmmastra yolo off\n'), 1400);
+        setTimeout(() => emulator.serial0_send('vmmastra yolo on\n'), 2100);
+        setTimeout(() => emulator.serial0_send('vmmastra reset\n'), 2800);
         setTimeout(() => {
-          log("running: mastra 'check arch and write TIER.md'");
-          emulator.serial0_send("mastra 'check arch and write TIER.md'\n");
+          log("running: vmmastra 'check arch and write TIER.md'");
+          emulator.serial0_send("vmmastra 'check arch and write TIER.md'\n");
         }, 3500);
         waitForCompletion().catch((error) => report({ ok: false, error: String(error?.stack || error) }));
       })
@@ -169,7 +169,7 @@ async function waitForCompletion() {
       .every((name) => cliCommands.includes(name)),
     cliCommandsSeen: cliCommands,
     // The guest itself acknowledged the submission.
-    guestAcknowledged: /\[mastra\] submitted to the ready browser agent\./.test(serial),
+    guestAcknowledged: /\[vmmastra\] submitted to the ready browser agent\./.test(serial),
     // The controller built the harness with the expected wiring.
     harnessBuiltWithGuestAndLlm:
       Array.isArray(harnessOptions) &&

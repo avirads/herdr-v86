@@ -95308,7 +95308,7 @@ ${text}`;
     const instruction = deriveInstruction(args);
     if (currentAutoBroExecution) {
       return `AUTOBRO_EXECUTION_COMPLETE
-A browser automation sequence has already run during this vmagent turn. Do not run another browser tool.
+A browser automation sequence has already run during this vmlang turn. Do not run another browser tool.
 ${currentAutoBroExecution.text}`;
     }
     const detail = { instruction, planner: "page-local WebGPU LLM", context: "current page, visible controls, related actions, and AutoBro skills" };
@@ -95362,7 +95362,7 @@ Relevant skills: ${JSON.stringify(skillContext)}` }
     const text = [`AutoBro task completed.`, `Task: ${instruction}`, ...stepLines, pageLine].join("\n");
     currentAutoBroExecution = { instruction, results, finalPage, text };
     return `AUTOBRO_EXECUTION_COMPLETE
-The browser task ran exactly once. This result will be returned directly in the vmagent shell. Do not call another browser tool.
+The browser task ran exactly once. This result will be returned directly in the vmlang shell. Do not call another browser tool.
 ${text}`;
   }, {
     name: "autobro_automate",
@@ -95374,7 +95374,7 @@ ${text}`;
   }));
   if (browserClient) browserTools.push(tool(async ({ command, parameters }) => {
     if (currentAutoBroExecution) return `AUTOBRO_EXECUTION_COMPLETE
-A browser task already ran during this vmagent turn.
+A browser task already ran during this vmlang turn.
 ${currentAutoBroExecution.text}`;
     const fallbackUrl = ["gotoUrl", "newTab"].includes(command) ? parameters?.url : null;
     const canFetchFallback = fallbackUrl && /^https:\/\//i.test(fallbackUrl);
@@ -95414,7 +95414,7 @@ ${currentAutoBroExecution.text}`;
     memory: ["/AGENTS.md"],
     skills: ["/skills/"],
     systemPrompt: {
-      prefix: "Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. When AutoBro is connected, use autobro_automate for natural-language browser tasks so the page-local WebGPU LLM plans commands from exact live-page controls and skills. When that tool returns AUTOBRO_EXECUTION_COMPLETE, do not invoke any browser tool again for the same task; report its step results and final page directly in the vmagent shell. Use browser_search for explicit web searches, autobro_command only when the exact low-level command is already known, and vmfetch only for CORS-enabled HTTP APIs/resources. Provider tools automatically switch between equivalent vm* and AutoBro capabilities on recoverable failures; inspect switchedProvider results and continue with the active provider.",
+      prefix: "Work autonomously on the project using Deep Agents planning, filesystem, shell, and delegation tools. Inspect before editing, make focused changes, run relevant verification, and report evidence. Mutations and shell commands require user approval at execution time. When AutoBro is connected, use autobro_automate for natural-language browser tasks so the page-local WebGPU LLM plans commands from exact live-page controls and skills. When that tool returns AUTOBRO_EXECUTION_COMPLETE, do not invoke any browser tool again for the same task; report its step results and final page directly in the vmlang shell. Use browser_search for explicit web searches, autobro_command only when the exact low-level command is already known, and vmfetch only for CORS-enabled HTTP APIs/resources. Provider tools automatically switch between equivalent vm* and AutoBro capabilities on recoverable failures; inspect switchedProvider results and continue with the active provider.",
       suffix: "The backend maps Deep Agents path / to the real guest workspace /root/project. The guest is Alpine Linux i386 with BusyBox sh. Do not claim success without reading results and running proportionate checks."
     }
   });

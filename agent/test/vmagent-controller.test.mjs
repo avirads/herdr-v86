@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VmAgentController } from '../../network/browser/vmagent-controller.js';
 
-test('vmagent command controller runs a persistent harness and reports in the terminal', async () => {
+test('vmlang command controller runs a persistent harness and reports in the terminal', async () => {
   const outputs = [];
   const busy = [];
   const prompts = [];
@@ -31,7 +31,7 @@ test('vmagent command controller runs a persistent harness and reports in the te
   assert.equal(controller.conversationActive, false);
 });
 
-test('vmagent reset and YOLO remain command-controlled and session-local', async () => {
+test('vmlang reset and YOLO remain command-controlled and session-local', async () => {
   const outputs = [];
   const approvals = [];
   const controller = new VmAgentController({
@@ -53,7 +53,7 @@ test('vmagent reset and YOLO remain command-controlled and session-local', async
   assert.match(outputs.at(-1), /YOLO is on by default/);
 });
 
-test('vmagent reports an unloaded model instead of stalling at "conversation started"', async () => {
+test('vmlang reports an unloaded model instead of stalling at "conversation started"', async () => {
   const outputs = [];
   let created = 0;
   const controller = new VmAgentController({
@@ -69,7 +69,7 @@ test('vmagent reports an unloaded model instead of stalling at "conversation sta
   assert.match(outputs.at(-1), /no model loaded/i);
 });
 
-test('vmagent surfaces model-not-ready states: missing WebGPU and still-loading', async () => {
+test('vmlang surfaces model-not-ready states: missing WebGPU and still-loading', async () => {
   const run = async status => {
     const outputs = [];
     const controller = new VmAgentController({
@@ -86,7 +86,7 @@ test('vmagent surfaces model-not-ready states: missing WebGPU and still-loading'
   assert.match(await run({ webgpu: true, loading: true, modelName: '' }), /still loading/i);
 });
 
-test('vmagent reports when the agent returns empty output rather than showing nothing', async () => {
+test('vmlang reports when the agent returns empty output rather than showing nothing', async () => {
   const outputs = [];
   const controller = new VmAgentController({
     createAgent: async () => ({ run: async () => ({ output: '' }) }),
@@ -99,7 +99,7 @@ test('vmagent reports when the agent returns empty output rather than showing no
   assert.match(outputs.at(-1), /returned no output/i);
 });
 
-test('mastra runs as a third tier: lazy harness, reused across runs, YOLO propagated', async () => {
+test('vmmastra runs as a third tier: lazy harness, reused across runs, YOLO propagated', async () => {
   const outputs = [];
   const prompts = [];
   let created = 0;
@@ -139,7 +139,7 @@ test('mastra runs as a third tier: lazy harness, reused across runs, YOLO propag
   assert.equal(outputs.at(-1), 'deepagents');
 });
 
-test('mastra reports a missing model rather than failing silently, and is optional', async () => {
+test('vmmastra reports a missing model rather than failing silently, and is optional', async () => {
   const outputs = [];
   const noModel = new VmAgentController({
     createAgent: async () => ({ run: async () => ({ output: 'x' }) }),
@@ -189,7 +189,7 @@ function mastraController({ model = { modelName: 'm' }, onOutput } = {}) {
   return { controller, outputs, runs, built: () => built, lastOptions: () => lastOptions };
 }
 
-test('mastra batch asks for the one-shot path, and plain mastra does not', async () => {
+test('vmmastra batch asks for the one-shot path, and plain vmmastra does not', async () => {
   const { controller, runs } = mastraController();
 
   await controller.handle('mastra_batch', 'count the files');
@@ -199,7 +199,7 @@ test('mastra batch asks for the one-shot path, and plain mastra does not', async
   assert.equal(runs.at(-1).batchFirst, false, 'plain run must stay on the tool loop');
 });
 
-test('mastra CLI exposes status, tools, cost, yolo, reset and stop', async () => {
+test('vmmastra CLI exposes status, tools, cost, yolo, reset and stop', async () => {
   const { controller, outputs } = mastraController();
 
   await controller.handle('mastra_status');
@@ -227,7 +227,7 @@ test('mastra CLI exposes status, tools, cost, yolo, reset and stop', async () =>
   assert.match(outputs.at(-1), /no task is running/);
 });
 
-test('mastra tools lean|full switches profile and rebuilds the harness', async () => {
+test('vmmastra tools lean|full switches profile and rebuilds the harness', async () => {
   const { controller, outputs, built, lastOptions } = mastraController();
 
   await controller.handle('mastra', 'first');
@@ -248,7 +248,7 @@ test('mastra tools lean|full switches profile and rebuilds the harness', async (
   assert.notEqual(controller.mastraHarness, null);
 });
 
-test('mastra status and reset work before any model is loaded', async () => {
+test('vmmastra status and reset work before any model is loaded', async () => {
   // status must be able to explain WHY the tier is not ready, so it cannot
   // itself require a model.
   const { controller, outputs } = mastraController({ model: { modelName: '' } });

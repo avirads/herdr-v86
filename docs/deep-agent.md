@@ -1,24 +1,24 @@
 # Deep Agents coding agent
 
 The browser demo integrates DeepAgentsJS with the real `/root/project`
-filesystem inside v86. Run it from the guest terminal with `vmagent`; there is
+filesystem inside v86. Run it from the guest terminal with `vmlang`; there is
 no separate agent panel. The agent uses the page-local LiteRT-LM WebGPU model
 and does not require a browser extension or cloud API.
 
 ```sh
-vmagent 'Inspect the project, fix the failing test, and verify the change.'
-vmagent                       # starts a persistent vmagent> conversation
-cat task.txt | vmagent
-vmagent status
-vmagent stop
-vmagent reset
-vmagent yolo on
-vmagent yolo off
+vmlang 'Inspect the project, fix the failing test, and verify the change.'
+vmlang                       # starts a persistent vmlang> conversation
+cat task.txt | vmlang
+vmlang status
+vmlang stop
+vmlang reset
+vmlang yolo on
+vmlang yolo off
 ```
 
 The command starts a persistent conversation in the terminal. DeepAgents keeps
 the same in-memory checkpoint for follow-up prompts. Enter `/exit` or `/quit`
-at `vmagent>` to return to the guest shell. VM stays on the primary console;
+at `vmlang>` to return to the guest shell. VM stays on the primary console;
 a hidden second UART carries agent filesystem, shell, and browser RPC without
 mixing protocol records into the TUI. Press Ctrl-C to request a stop.
 
@@ -38,7 +38,7 @@ The integration enables the framework's standard coding-agent facilities:
 - typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`, and `vmllm_info`
   tools backed by the browser bridge
 
-Run `vmagent reset` to discard the conversation checkpoint. YOLO returns to its
+Run `vmlang reset` to discard the conversation checkpoint. YOLO returns to its
 default enabled state. Guest files remain unchanged until edited or the VM is
 restarted/restored.
 
@@ -95,9 +95,9 @@ next run receives the `autobro_automate` and `autobro_command` tools.
 the current page's exact controls, related actions, and relevant AutoBro skills;
 asks the ready page-local WebGPU LLM for a constrained command sequence; validates
 the plan; executes it once; and returns step results plus the final page directly
-to the `vmagent` shell. Repeated planner sequences, duplicate RPC request IDs,
-and an identical prompt within the current `vmagent` session are singleton-safe.
-Use `vmagent reset` before intentionally rerunning the exact same prompt.
+to the `vmlang` shell. Repeated planner sequences, duplicate RPC request IDs,
+and an identical prompt within the current `vmlang` session are singleton-safe.
+Use `vmlang reset` before intentionally rerunning the exact same prompt.
 `autobro_command` remains available when the agent
 already knows the exact low-level command. Together they cover tab management,
 navigation, page/DOM inventory,
@@ -147,8 +147,8 @@ but does not create the guest output file originally requested from `vmfetch`.
 
 YOLO is enabled by default for each page session, so agent writes, deletions,
 shell commands, and browser actions run without per-operation confirmation.
-Run `vmagent yolo off` before a task to restore approval prompts. Turning it
-back on with `vmagent yolo on` requires browser confirmation. `vmagent reset`
+Run `vmlang yolo off` before a task to restore approval prompts. Turning it
+back on with `vmlang yolo on` requires browser confirmation. `vmlang reset`
 and page reload both restore the enabled default. The choice is never stored in
 localStorage, OPFS, a VM snapshot, or the URL.
 
@@ -183,7 +183,7 @@ by the framework's complete native tool catalogue.
 1. Download the model with the link in the VM header.
 2. Select it with **Configure LLM** and wait for WebGPU compilation.
 3. Prepare a project at `/root/project`.
-4. Run `vmagent 'TASK'` with a concrete task including expected verification.
+4. Run `vmlang 'TASK'` with a concrete task including expected verification.
 5. Review each requested mutation or command before approving it.
 
 Example:

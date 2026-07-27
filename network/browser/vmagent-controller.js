@@ -4,7 +4,7 @@ export class VmAgentController {
     this.harness = null;
     this.mastraHarness = null;
     // Matches what index.html asks for, and switchable at runtime with
-    // `mastra tools lean|full`.
+    // `vmmastra tools lean|full`.
     this.mastraFullTools = true;
     this.abortController = null;
     this.yolo = true;
@@ -14,22 +14,22 @@ export class VmAgentController {
 
   resetHarness() { this.harness = null; this.mastraHarness = null; this.completedRuns.clear(); }
 
-  // Everything the Mastra harness can do, reachable from `mastra` in the guest
+  // Everything the Mastra harness can do, reachable from `vmmastra` in the guest
   // shell. Subcommands arrive as separate AGENT_MASTRA_* operations, matching
-  // how vmagent's status/stop/reset/yolo are routed.
+  // how vmlang's status/stop/reset/yolo are routed.
   async handleMastra(command, value) {
-    if (!this.createMastraAgent) return await this.onOutput('[mastra] tier is not available in this build.');
+    if (!this.createMastraAgent) return await this.onOutput('[vmmastra] tier is not available in this build.');
 
     // Cheap, harness-free commands first — these must work before a model is
-    // loaded, otherwise `mastra status` cannot tell you why it is not ready.
+    // loaded, otherwise `vmmastra status` cannot tell you why it is not ready.
     if (command === 'mastra_stop') {
-      if (!this.abortController) return await this.onOutput('[mastra] no task is running.');
+      if (!this.abortController) return await this.onOutput('[vmmastra] no task is running.');
       this.abortController.abort();
-      return await this.onOutput('[mastra] stop requested.');
+      return await this.onOutput('[vmmastra] stop requested.');
     }
     if (command === 'mastra_reset') {
       this.mastraHarness = null;
-      return await this.onOutput('[mastra] session reset; the next run rebuilds it.');
+      return await this.onOutput('[vmmastra] session reset; the next run rebuilds it.');
     }
     if (command === 'mastra_yolo') {
       if (value === 'on' && !this.yolo) {
@@ -40,7 +40,7 @@ export class VmAgentController {
       }
       if (value === 'off') this.yolo = false;
       this.mastraHarness?.setYolo?.(this.yolo);
-      return await this.onOutput(`[mastra] YOLO ${this.yolo ? 'on' : 'off'} (shared with vmagent).`);
+      return await this.onOutput(`[vmmastra] YOLO ${this.yolo ? 'on' : 'off'} (shared with vmlang).`);
     }
     if (command === 'mastra_tools' && (value === 'lean' || value === 'full')) {
       const wanted = value === 'full';
@@ -50,11 +50,11 @@ export class VmAgentController {
         // profiles has to discard the harness rather than mutate it.
         this.mastraHarness = null;
       }
-      return await this.onOutput(`[mastra] tool profile: ${value}${wanted ? ' (20 tools)' : ' (9 workspace tools)'}.`);
+      return await this.onOutput(`[vmmastra] tool profile: ${value}${wanted ? ' (20 tools)' : ' (9 workspace tools)'}.`);
     }
 
     const guest = this.getGuest();
-    if (!guest) return await this.onOutput('[mastra] guest bridge is still initializing.');
+    if (!guest) return await this.onOutput('[vmmastra] guest bridge is still initializing.');
     const llmClient = this.getLlmClient();
     const model = llmClient && typeof llmClient.status === 'function'
       ? await llmClient.status().catch(() => null)
@@ -62,9 +62,9 @@ export class VmAgentController {
 
     if (command === 'mastra_status') {
       const lines = [
-        `[mastra] ${this.abortController ? 'running' : 'idle'}`,
+        `[vmmastra] ${this.abortController ? 'running' : 'idle'}`,
         `  model:   ${model?.modelName || 'not configured — use Configure LLM in the header'}`,
-        `  YOLO:    ${this.yolo ? 'on' : 'off'} (shared with vmagent)`,
+        `  YOLO:    ${this.yolo ? 'on' : 'off'} (shared with vmlang)`,
         `  profile: ${this.mastraFullTools ? 'full (20 tools)' : 'lean (9 workspace tools)'}`,
         `  session: ${this.mastraHarness ? 'built' : 'not built — starts on first run'}`,
       ];
@@ -78,9 +78,9 @@ export class VmAgentController {
     }
 
     // Remaining commands need the harness, which needs a model.
-    if (!llmClient) return await this.onOutput('[mastra] WebGPU LLM is not ready; use Configure LLM in the browser header.');
+    if (!llmClient) return await this.onOutput('[vmmastra] WebGPU LLM is not ready; use Configure LLM in the browser header.');
     if (model && !model.modelName) {
-      return await this.onOutput('[mastra] no model loaded; click "Configure LLM" in the header, load a .litertlm model, then run mastra again.');
+      return await this.onOutput('[vmmastra] no model loaded; click "Configure LLM" in the header, load a .litertlm model, then run vmmastra again.');
     }
 
     const harness = async () => {
@@ -100,28 +100,28 @@ export class VmAgentController {
     if (command === 'mastra_tools') {
       try {
         const names = await (await harness()).listTools();
-        return await this.onOutput([`[mastra] ${names.length} tools active:`, ...names.map(name => `  ${name}`)].join('\n'));
+        return await this.onOutput([`[vmmastra] ${names.length} tools active:`, ...names.map(name => `  ${name}`)].join('\n'));
       } catch (error) { return await this.onOutput(`Mastra error: ${error.message}`); }
     }
     if (command === 'mastra_cost') {
       try {
         const cost = await (await harness()).systemPromptCost();
         return await this.onOutput(
-          `[mastra] system prompt ~${cost.approxTokens} tokens (${cost.chars} chars) across ${cost.toolCount} tools — ` +
+          `[vmmastra] system prompt ~${cost.approxTokens} tokens (${cost.chars} chars) across ${cost.toolCount} tools — ` +
           `${Math.round((cost.approxTokens / 16384) * 100)}% of a 16k window.`,
         );
       } catch (error) { return await this.onOutput(`Mastra error: ${error.message}`); }
     }
 
-    // Default: run a task. `mastra batch` tries a one-shot script first and
+    // Default: run a task. `vmmastra batch` tries a one-shot script first and
     // falls back to the tool loop if it does not exit clean — codeact's speed
     // without codeact's habit of reporting a half-finished script as success.
-    if (this.abortController) return await this.onOutput('[mastra] another agent task is running.');
+    if (this.abortController) return await this.onOutput('[vmmastra] another agent task is running.');
     this.abortController = new AbortController();
     await this.onBusy(true);
     try {
       const output = await (await harness()).run(value, { batchFirst: command === 'mastra_batch' });
-      await this.onOutput(String(output || '').trim() || '[mastra] the agent returned no output.');
+      await this.onOutput(String(output || '').trim() || '[vmmastra] the agent returned no output.');
     } catch (error) {
       await this.onOutput(`Mastra error: ${error.message}`);
     } finally {
@@ -193,12 +193,12 @@ export class VmAgentController {
     if (command === 'status') {
       const llm = this.getLlmClient();
       const model = llm ? await llm.status().catch(() => null) : null;
-      return await this.onOutput(`[vmagent] ${this.abortController ? 'running' : 'idle'}; model: ${model?.modelName || 'not configured'}; YOLO: ${this.yolo ? 'on' : 'off'}`);
+      return await this.onOutput(`[vmlang] ${this.abortController ? 'running' : 'idle'}; model: ${model?.modelName || 'not configured'}; YOLO: ${this.yolo ? 'on' : 'off'}`);
     }
     if (command === 'stop') {
-      if (!this.abortController) return await this.onOutput('[vmagent] no task is running.');
+      if (!this.abortController) return await this.onOutput('[vmlang] no task is running.');
       this.abortController.abort();
-      return await this.onOutput('[vmagent] stop requested.');
+      return await this.onOutput('[vmlang] stop requested.');
     }
     if (command === 'reset') {
       this.abortController?.abort();
@@ -207,7 +207,7 @@ export class VmAgentController {
       this.completedRuns.clear();
       this.yolo = true;
       this.conversationActive = false;
-      return await this.onOutput('[vmagent] session reset; YOLO is on by default.');
+      return await this.onOutput('[vmlang] session reset; YOLO is on by default.');
     }
     if (command === 'yolo') {
       if (value === 'on' && !this.yolo) this.yolo = await this.approveAction('enable_yolo', {
@@ -217,9 +217,9 @@ export class VmAgentController {
       if (value === 'off') this.yolo = false;
       // One YOLO setting governs every tier, so the Mastra harness must follow.
       this.mastraHarness?.setYolo?.(this.yolo);
-      return await this.onOutput(`[vmagent] YOLO ${this.yolo ? 'on' : 'off'}.`);
+      return await this.onOutput(`[vmlang] YOLO ${this.yolo ? 'on' : 'off'}.`);
     }
-    // Third tier, beside rig and vmagent. Same lifecycle as rig: one task per
+    // Third tier, beside rig and vmlang. Same lifecycle as rig: one task per
     // invocation, no persistent conversation. The harness is built lazily and
     // reused so the 9.5 MB bundle is only imported if someone actually runs it.
     if (command.startsWith('mastra')) return await this.handleMastra(command, value);
@@ -235,18 +235,18 @@ export class VmAgentController {
       finally { this.abortController = null; await this.onBusy(false); }
       return;
     }
-    if (command !== 'run') throw new Error(`unsupported vmagent command: ${command}`);
+    if (command !== 'run') throw new Error(`unsupported vmlang command: ${command}`);
     const runKey = String(value).trim();
     if (this.completedRuns.has(runKey)) {
       await this.onOutput(this.completedRuns.get(runKey));
       await this.onBusy(false);
       return;
     }
-    if (this.abortController) return await this.onOutput('[vmagent] another task is already running; use vmagent stop first.');
+    if (this.abortController) return await this.onOutput('[vmlang] another task is already running; use vmlang stop first.');
     const llmClient = this.getLlmClient();
     const guest = this.getGuest();
-    if (!llmClient) return await this.onOutput('[vmagent] WebGPU LLM is not ready; use Configure LLM in the browser header.');
-    if (!guest) return await this.onOutput('[vmagent] guest bridge is still initializing.');
+    if (!llmClient) return await this.onOutput('[vmlang] WebGPU LLM is not ready; use Configure LLM in the browser header.');
+    if (!guest) return await this.onOutput('[vmlang] guest bridge is still initializing.');
 
     // A LiteRtLmClient object exists from page load even before a model file is
     // loaded, so the !llmClient guard above is not enough. Without a ready model
@@ -255,9 +255,9 @@ export class VmAgentController {
     // "conversation started". Check readiness up front and report it plainly.
     const model = typeof llmClient.status === 'function' ? await llmClient.status().catch(() => null) : null;
     if (model) {
-      if (model.webgpu === false) return await this.onOutput('[vmagent] WebGPU is unavailable in this browser; open the page in a WebGPU-capable desktop browser (Chrome/Edge).');
-      if (model.loading) return await this.onOutput('[vmagent] the model is still loading; wait for it to finish, then run vmagent again.');
-      if (!model.modelName) return await this.onOutput('[vmagent] no model loaded; click "Configure LLM" in the header, load a .litertlm model, then run vmagent again.');
+      if (model.webgpu === false) return await this.onOutput('[vmlang] WebGPU is unavailable in this browser; open the page in a WebGPU-capable desktop browser (Chrome/Edge).');
+      if (model.loading) return await this.onOutput('[vmlang] the model is still loading; wait for it to finish, then run vmlang again.');
+      if (!model.modelName) return await this.onOutput('[vmlang] no model loaded; click "Configure LLM" in the header, load a .litertlm model, then run vmlang again.');
     }
 
     this.conversationActive = true;
@@ -273,7 +273,7 @@ export class VmAgentController {
       });
       const result = await this.harness.run(value, { signal: this.abortController.signal });
       const output = (result?.output ?? '').toString();
-      const display = output.trim() ? output : '[vmagent] the agent returned no output.';
+      const display = output.trim() ? output : '[vmlang] the agent returned no output.';
       this.completedRuns.set(runKey, display);
       if (this.completedRuns.size > 64) this.completedRuns.delete(this.completedRuns.keys().next().value);
       await this.onOutput(display);

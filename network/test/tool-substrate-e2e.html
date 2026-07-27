@@ -59,7 +59,7 @@ async function run() {
   // Warm the RPC path once (first call includes serial getty settle).
   await guest.execute('true').catch(() => {});
 
-  // --- Shared guest tool substrate (both rig and vmagent call these) ---
+  // --- Shared guest tool substrate (both rig and vmlang call these) ---
   const substrate = {};
   substrate.write        = await timeIt(i => guest.write(`bench${i}.txt`, 'hello from benchmark'), N);
   substrate.read         = await timeIt(i => guest.read(`bench${i % N}.txt`), N);

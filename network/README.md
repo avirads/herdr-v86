@@ -228,7 +228,7 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
   CA certificates, and curl/OpenSSL supporting HTTPS, HTTP/2, WSS, and common
   network protocols. The image also includes tmux 3.5a and the low-latency
   browser-orchestrated `rig` launcher. Deep-agent orchestration remains
-  browser-side through `vmagent`.
+  browser-side through `vmlang`.
 - `guest/build-zellij-x86.sh` builds the version-pinned Zellij package in an
   isolated Alpine x86 environment. It requires root for the x86 chroot and can
   take around 15–20 minutes with release link-time optimization.

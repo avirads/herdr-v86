@@ -1,14 +1,14 @@
-# Agent tiers: vmagent, rig, mastra
+# Agent tiers: vmlang, rig, vmmastra
 
 Three agent tiers ship in the guest. They are not ranked — they trade the same
 three resources differently: **guest round-trips**, **system-prompt tokens**,
 and **capability**.
 
-| | `vmagent` | `rig` | `mastra` |
+| | `vmlang` | `rig` | `vmmastra` |
 |---|---|---|---|
 | Framework | Deep Agents (LangChain) | hand-rolled loop | `@mastra/core` |
 | Tools | 18 | 4 | 9, or 20 with `enableVmTools`/`enablePlanning` |
-| Conversation | persistent (`vmagent>`) | one task per run | one task per run |
+| Conversation | persistent (`vmlang>`) | one task per run | one task per run |
 | Bundle | `agent/dist/agent.js` | none (in the controller) | `agent/dist/mastra-agent.js`, ~9.7 MB, lazy |
 
 ## Why round-trips are the metric
@@ -39,7 +39,7 @@ Format is `wall / guest round-trips`. The Mastra column is measured twice:
 of one call from scratch — and **warm**, what a repeat inside the TTL costs. A
 single number would have let a warm cache masquerade as the cost of the work.
 
-| Feature | `vmagent` | `rig` | `mastra` cold | `mastra` warm |
+| Feature | `vmlang` | `rig` | `vmmastra` cold | `vmmastra` warm |
 |---|--:|--:|--:|--:|
 | read file | 492 ms / 1 | 478 ms / 1 | 1861 ms / 3 | **0 ms / 0** |
 | list directory (recursive) | **465 ms / 1** | 480 ms / 1 | 2077 ms / 5 | 2036 ms / 5 |
@@ -51,7 +51,7 @@ single number would have let a warm cache masquerade as the cost of the work.
 | file stat | — | — | 647 ms / 1 | **0 ms / 0** |
 | mkdir | — | — | **526 ms / 1** | 513 ms / 1 |
 
-**`rig` and `vmagent` are one round-trip per operation.** Their tools map
+**`rig` and `vmlang` are one round-trip per operation.** Their tools map
 straight onto a guest RPC, so they sit at the floor — roughly the cost of the
 serial exchange itself.
 
@@ -59,7 +59,7 @@ serial exchange itself.
 `read_file` still issues `stat`, `read`, then `stat` again, and `list_files`
 walks the tree with a `readdir` per directory. The short-TTL cache in
 `V86Filesystem` removes the duplicates on a repeat, which is why the
-whole-task count below equals `vmagent`'s.
+whole-task count below equals `vmlang`'s.
 
 `grep` and `glob` reach the floor because they bypass Mastra's own
 implementations and call the guest directly — see below. `run command` reaches
@@ -110,35 +110,35 @@ model (`PAGE=tier-bench-e2e.html`):
 
 | Tier | Wall | Round-trips | Model calls |
 |---|--:|--:|--:|
-| `mastra batch` | **725 ms** | **1** | **1** |
+| `vmmastra batch` | **725 ms** | **1** | **1** |
 | `rig --codeact` | 973 ms | 1 | 1 |
 | `rig` | 1776 ms | 3 | 4 |
-| `mastra` (as shipped) | 2537 ms | 5 | 4 |
-| `mastra batch`, script failed → fell back | 2778 ms | 5 | 4 |
-| `vmagent` (Deep Agents) | 3041 ms | 5 | 4 |
-| `mastra` (stderr split on) | 3923 ms | 5 | 4 |
+| `vmmastra` (as shipped) | 2537 ms | 5 | 4 |
+| `vmmastra batch`, script failed → fell back | 2778 ms | 5 | 4 |
+| `vmlang` (Deep Agents) | 3041 ms | 5 | 4 |
+| `vmmastra` (stderr split on) | 3923 ms | 5 | 4 |
 
 **Mastra's tool loop is now faster than the Deep Agents tier** — the same five
 round-trips and ~15% less wall clock, where it was 1.68× slower before. Two
 changes did it, and only one of them was about trip count:
 
 1. The filesystem cache took the task from 6 round-trips to 5, matching
-   `vmagent`.
+   `vmlang`.
 2. Dropping the stderr wrapper took ~900 ms out of each command.
 
-`vmagent`'s 5 trips include two at startup, reading `/AGENTS.md` and listing
+`vmlang`'s 5 trips include two at startup, reading `/AGENTS.md` and listing
 `skills/`.
 
 ### Batch mode is the larger win, and it is bounded
 
-Everything above is a tool loop paying one round-trip per operation. `mastra
+Everything above is a tool loop paying one round-trip per operation. `vmmastra
 batch` and `rig --codeact` instead spend one model call on a single shell
 script and one round-trip running it — **3.5× faster than the tool loop**,
 which is far more than anything left to win inside the loop.
 
 The reason batch mode is not the default is the row that says *script failed*.
 A 2B model writes a correct script often enough to be worth trying and not
-often enough to trust. So `mastra batch` differs from `rig --codeact` in one
+often enough to trust. So `vmmastra batch` differs from `rig --codeact` in one
 respect that matters: it prepends `set -e`, so a script that dies halfway exits
 non-zero instead of returning its partial output as if it had succeeded. That
 makes the exit code worth branching on, and the mode falls back to the full
@@ -171,13 +171,13 @@ on every turn:
 | Tier | Tools | System prompt | Share of 16k |
 |---|--:|--:|--:|
 | `rig` | 4 | small | — |
-| `mastra` lean | 9 | ~2,621 tok | 16% |
-| `vmagent` | 18 | — | — |
-| `mastra` full | 20 | ~5,537 tok | **34%** |
+| `vmmastra` lean | 9 | ~2,621 tok | 16% |
+| `vmlang` | 18 | — | — |
+| `vmmastra` full | 20 | ~5,537 tok | **34%** |
 
 ## Choosing
 
-- **`mastra batch`** — fastest of everything here, and the safe way to take
+- **`vmmastra batch`** — fastest of everything here, and the safe way to take
   that speed: a bad script costs ~240 ms and falls back to the tool loop
   instead of returning a half-finished result. Start here for anything
   expressible as one shell script.
@@ -186,10 +186,10 @@ on every turn:
   you no signal when it did not.
 - **`rig`** — lowest per-operation overhead, four tools, no bundle. The default
   for simple file-and-shell work.
-- **`vmagent`** — one round-trip per operation *and* the widest tool set,
+- **`vmlang`** — one round-trip per operation *and* the widest tool set,
   including `glob`, sub-agent delegation and a persistent conversation. The
   best all-rounder when a task needs more than rig's four tools.
-- **`mastra`** — fastest of the three full tool-calling tiers on a whole task,
+- **`vmmastra`** — fastest of the three full tool-calling tiers on a whole task,
   though a cold single file read still costs more than `rig`'s, and its full
   surface takes a third of the context window. Choose it for the framework:
   Mastra's workspace abstraction, its planning tools, and single-operation

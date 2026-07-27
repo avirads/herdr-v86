@@ -133,7 +133,7 @@
     <div id="setup-progress" class="setup-progress">Step 1 of 2</div>
     <section id="setup-step-llm" class="setup-step">
       <h3>Configure local AI model</h3>
-      <p>Load the page-local LiteRT-LM model used by <code>vmagent</code> and AutoBro. The model remains in this browser.</p>
+      <p>Load the page-local LiteRT-LM model used by <code>vmlang</code> and AutoBro. The model remains in this browser.</p>
       <div class="setup-actions">
         <button id="setup-configure-llm" type="button">Choose model file</button>
         <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download model (~2 GB)</a>
@@ -146,7 +146,7 @@
       <h3>Connect AutoBro</h3>
       <p id="autobro-intro">Checking whether the AutoBro extension is installed…</p>
       <div id="autobro-unavailable" class="setup-status" hidden>
-        Chrome extensions are not supported in this mobile browser. You can continue without AutoBro; VM commands and <code>vmagent</code> remain available, but browser automation will not work.
+        Chrome extensions are not supported in this mobile browser. You can continue without AutoBro; VM commands and <code>vmlang</code> remain available, but browser automation will not work.
       </div>
       <div id="autobro-not-installed" hidden>
         <ol>
@@ -666,13 +666,13 @@ import("./network/browser/v86-host-bridge.js").then(module => {
           const { createVMAgent } = await import("./agent/dist/agent.js");
           return createVMAgent(options);
         },
-        // Third tier. Imported lazily on first `mastra TASK` so its 9.5 MB
+        // Third tier. Imported lazily on first `vmmastra TASK` so its 9.5 MB
         // bundle costs nothing for users who never invoke it. The vm*/AutoBro
         // tools are opt-in: they take the system prompt from ~17% to ~35% of a
         // 16k window, which is a real cost on the 2B on-device model.
         createMastraAgent: async options => {
           const { createMastraVMAgent } = await import("./agent/dist/mastra-agent.js");
-          // fullTools is owned by the controller so `mastra tools lean|full`
+          // fullTools is owned by the controller so `vmmastra tools lean|full`
           // can switch profiles at runtime; default is the full 19-tool set.
           const { fullTools = true, ...rest } = options;
           return createMastraVMAgent({
@@ -701,10 +701,10 @@ import("./network/browser/v86-host-bridge.js").then(module => {
         },
         onBusy: async busy => {
           agentBusy = busy;
-          status(busy ? "vmagent responding — Ctrl-C to stop" : "vmagent conversation active — /exit returns to shell");
+          status(busy ? "vmlang responding — Ctrl-C to stop" : "vmlang conversation active — /exit returns to shell");
           flushSerialOutput();
           if (busy) term.write("\r\x1b[2K");
-          else if (vmAgentController?.conversationActive) term.write("vmagent> ");
+          else if (vmAgentController?.conversationActive) term.write("vmlang> ");
         },
       });
       hostBridge.setAgentHandler((command, value) => vmAgentController.handle(command, value));
@@ -763,7 +763,7 @@ async function createVoiceTranscriber() {
   });
 }
 async function startVoiceInput() {
-  if (agentBusy) return voiceStatus("wait for vmagent to finish");
+  if (agentBusy) return voiceStatus("wait for vmlang to finish");
   voiceButton.disabled = true;
   try {
     voiceTranscriber = await createVoiceTranscriber();
@@ -1270,7 +1270,7 @@ emulator.add_listener("serial0-output-byte", (byte) => {
 });
 function handleTerminalData(data) {
   // xterm answers terminal status/cursor queries internally. Those replies are
-  // protocol traffic, not chat input, and must never appear at `vmagent>`.
+  // protocol traffic, not chat input, and must never appear at `vmlang>`.
   if (vmAgentController?.conversationActive && /^\x1b\[\??\d*(?:;\d+)*[Rcn]$/.test(data)) return;
   if (agentBusy) {
     if (data === "\x03") vmAgentController?.handle("stop");
@@ -1282,10 +1282,10 @@ function handleTerminalData(data) {
         term.write("\r\n");
         const prompt = agentInput.trim();
         agentInput = "";
-        if (!prompt) { term.write("vmagent> "); continue; }
+        if (!prompt) { term.write("vmlang> "); continue; }
         if (prompt === "/exit" || prompt === "/quit") {
           vmAgentController.closeConversation();
-          status("running — type in the terminal. Try: vmagent --help");
+          status("running — type in the terminal. Try: vmlang --help");
           term.write("[conversation closed]\r\n");
           emulator.serial0_send("\n");
           continue;
@@ -1295,7 +1295,7 @@ function handleTerminalData(data) {
         if (agentInput) { agentInput = agentInput.slice(0, -1); term.write("\b \b"); }
       } else if (ch === "\x03") {
         agentInput = "";
-        term.write("^C\r\nvmagent> ");
+        term.write("^C\r\nvmlang> ");
       } else if (ch >= " ") {
         agentInput += ch;
         term.write(ch);

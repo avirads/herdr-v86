@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent call flows — vmllm · rig · vmagent</title>
+<title>Agent call flows — vmllm · rig · vmlang</title>
 <style>
   :root {
     color-scheme: dark;
@@ -110,7 +110,7 @@
 <div class="wrap">
   <header>
     <div class="eyebrow">herdr-v86 · architecture</div>
-    <h1>Three agent paths: <span class="a">vmllm</span> · <span class="b">rig</span> · <span class="c">vmagent</span></h1>
+    <h1>Three agent paths: <span class="a">vmllm</span> · <span class="b">rig</span> · <span class="c">vmlang</span></h1>
     <p class="dek">All three run the model in the browser. They differ in how the task gets in, how much orchestration wraps the model, and how much of it crosses the serial line back into the VM.</p>
   </header>
 
@@ -196,7 +196,7 @@ sequenceDiagram
   <section class="path">
     <div class="path-head">
       <span class="tier">Path 03 · full agent</span>
-      <span class="cmd">vmagent</span>
+      <span class="cmd">vmlang</span>
       <span class="role">Deep Agents loop · planning · full tool suite</span>
     </div>
     <p class="path-note">The guest <strong>stages the request as a file</strong>; the browser drains it with a periodic <code>vmagent-poll</code>. From there it mirrors rig but with the heavier Deep Agents orchestrator and its browser-reaching tools.</p>
@@ -213,7 +213,7 @@ sequenceDiagram
     participant DA as Deep Agents<br/>orchestrator
     participant LLM as WebGPU LLM
   end
-  GC->>GC: user runs vmagent 'TASK'
+  GC->>GC: user runs vmlang 'TASK'
   GC->>GC: stage /run/vmagent-request<br/>__V86RPC__ AGENT_RUN
   HB-->>RPC: vmagent-poll  (every 500ms)
   RPC-->>HB: __V86RPC__ AGENT_RUN · b64(task)
@@ -244,7 +244,7 @@ sequenceDiagram
           <th class="axis">Dimension</th>
           <th class="vmllm">vmllm</th>
           <th class="rig">rig</th>
-          <th class="vmagent">vmagent</th>
+          <th class="vmagent">vmlang</th>
         </tr>
       </thead>
       <tbody>
@@ -293,7 +293,7 @@ sequenceDiagram
     <ul>
       <li>Frames ride a hidden serial line — inittab runs <code>autologin</code> on <code>ttyS0</code> and <code>autologin-rpc</code> on <code>ttyS1</code>; the browser filters <code>__V86RPC__</code> markers out of the visible terminal.</li>
       <li>Bytes are paced ~1/ms to stay under the emulated 115200-baud UART's ~11.5 KB/s ceiling; long replies use ACK'd <code>reliableReply</code> chunks to avoid overrun drops.</li>
-      <li>For <code>rig</code> and <code>vmagent</code>, non-YOLO runs gate <code>write</code>/<code>shell</code> behind a browser <code>confirm()</code> before the tool crosses into the VM.</li>
+      <li>For <code>rig</code> and <code>vmlang</code>, non-YOLO runs gate <code>write</code>/<code>shell</code> behind a browser <code>confirm()</code> before the tool crosses into the VM.</li>
     </ul>
   </footer>
 </div>

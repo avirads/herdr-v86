@@ -15,10 +15,10 @@ clipboard, file-transfer, GitHub, or AI operations.
 
 ## Canonical command documentation
 
-- `docs/guest-tools.md`: complete guest command reference and examples, including `vmllm` and `vmagent`.
+- `docs/guest-tools.md`: complete guest command reference and examples, including `vmllm` and `vmlang`.
 - `docs/deep-agent.md`: full Deep Agents tools, approvals, skills, and limits.
-- `docs/mastra-agent.md`: the Mastra tier (`mastra 'TASK'`), its tool set and prompt budget.
-- `docs/agent-tiers.md`: measured comparison of vmagent, rig and mastra per feature.
+- `docs/mastra-agent.md`: the Mastra tier (`vmmastra 'TASK'`), its tool set and prompt budget.
+- `docs/agent-tiers.md`: measured comparison of vmlang, rig and vmmastra per feature.
 - `network/docs/host-bridge.md`: browser-bridge protocol, limits, and security.
 - `network/README.md`: full IPv4 gateway deployment and testing.
 - Run `<command> --help` inside the guest for concise local usage.
@@ -48,20 +48,20 @@ clipboard, file-transfer, GitHub, or AI operations.
     skills in `/root/project/skills/NAME/SKILL.md`.
 13. Deep Agents has typed `vmfetch`, `vmgithub`, `vmclip`, `vmexport`, `vmai`,
     and `vmllm_info` tools. Do not use recursive `vmllm chat` from the agent.
-14. Launch Deep Agents from the guest terminal with `vmagent 'TASK'`; lifecycle
-    commands are `vmagent status|stop|reset|yolo on|yolo off`. There is no
+14. Launch Deep Agents from the guest terminal with `vmlang 'TASK'`; lifecycle
+    commands are `vmlang status|stop|reset|yolo on|yolo off`. There is no
     separate agent panel.
 15. When paired, prefer `autobro_automate` for natural-language browser tasks;
     it uses the page-local WebGPU LLM and live page context to select validated
     AutoBro commands. Use `autobro_command` for known low-level commands. Treat
     all page reads and actions as external operations; approval/YOLO applies.
-16. `mastra 'TASK'` is the third agent tier, running Mastra in the browser page
+16. `vmmastra 'TASK'` is the third agent tier, running Mastra in the browser page
     against the same guest bridge. One task per invocation, like `rig`; it
-    shares `vmagent`'s YOLO/approval setting and exposes the same `vm*` and
+    shares `vmlang`'s YOLO/approval setting and exposes the same `vm*` and
     AutoBro tools as Deep Agents. Its bundle loads lazily on first use.
-    Lifecycle commands are `mastra status|stop|reset|cost|yolo on|yolo off`
-    and `mastra tools [lean|full]`, which switches between the 8 workspace
-    tools and all 19. Run `mastra --help` in the guest for the full usage.
+    Lifecycle commands are `vmmastra status|stop|reset|cost|yolo on|yolo off`
+    and `vmmastra tools [lean|full]`, which switches between the 8 workspace
+    tools and all 19. Run `vmmastra --help` in the guest for the full usage.
     Before driving it autonomously, read
     `/usr/local/share/mastra/SKILL.md` — it covers the preflight check, the
     failure modes, and why a Mastra run must be verified by its effect on the
@@ -75,7 +75,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 ## Quick capability check
 
 ```sh
-command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmagent rig mastra tmux
+command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmlang rig vmmastra tmux
 ip route
 vmfetch --help
 ```

@@ -1,22 +1,22 @@
 # Mastra agent tier
 
-A third agent tier beside `rig` and `vmagent`, running
+A third agent tier beside `rig` and `vmlang`, running
 [Mastra](https://mastra.ai) entirely in the page — no server. Neither existing
 tier is modified.
 
-    mastra TASK...              run a task
-    mastra run TASK...
-    mastra status               model, approvals, tool profile, prompt cost
-    mastra tools                list the tools currently active
-    mastra tools lean|full      9 tools, or all 20
-    mastra cost                 system-prompt budget for the active profile
-    mastra yolo on|off          approvals for mutations and shell commands
-    mastra reset                drop the session and rebuild on next run
-    mastra stop                 abort the task in flight
+    vmmastra TASK...              run a task
+    vmmastra run TASK...
+    vmmastra status               model, approvals, tool profile, prompt cost
+    vmmastra tools                list the tools currently active
+    vmmastra tools lean|full      9 tools, or all 20
+    vmmastra cost                 system-prompt budget for the active profile
+    vmmastra yolo on|off          approvals for mutations and shell commands
+    vmmastra reset                drop the session and rebuild on next run
+    vmmastra stop                 abort the task in flight
 
 Like `rig`, one task per invocation; there is no persistent conversation and no
-separate panel. Approvals are shared with `vmagent` — `mastra yolo` and
-`vmagent yolo` set the same flag.
+separate panel. Approvals are shared with `vmlang` — `vmmastra yolo` and
+`vmlang yolo` set the same flag.
 
 Each subcommand is its own `AGENT_MASTRA_*` RPC. `status`, `reset`, `yolo` and
 `tools lean|full` deliberately work **before** a model is loaded: `status` has
@@ -24,9 +24,9 @@ to be able to explain why the tier is not ready, so it cannot itself require
 the thing that is missing. `status` also declines to build the harness just to
 answer, since that would import the ~9.7 MB bundle as a side effect — the
 prompt-cost line appears once a session exists, or immediately from
-`mastra cost`.
+`vmmastra cost`.
 
-`mastra tools lean|full` discards the session, because the tool set is fixed
+`vmmastra tools lean|full` discards the session, because the tool set is fixed
 when the agent is constructed. Switching to the profile already active is a
 no-op and keeps the session.
 
@@ -39,9 +39,9 @@ no-op and keeps the session.
 | `agent/src/vm-tools.js` | the `vm*` and AutoBro tools, ported from the Deep Agents tier |
 | `agent/src/mastra-browser.js` | page entry — takes `guestReadonlyClient` + `webGpuLlmClient` |
 | `agent/shims/` | 12 shims covering the 14 node builtins `@mastra/core` imports |
-| `agent/dist/mastra-agent.js` | ~9.7 MB bundle, imported lazily on first `mastra` run |
+| `agent/dist/mastra-agent.js` | ~9.7 MB bundle, imported lazily on first `vmmastra` run |
 
-The bundle is only fetched when someone actually runs `mastra`, so users who
+The bundle is only fetched when someone actually runs `vmmastra`, so users who
 never touch this tier download none of it.
 
 ## Tools and the prompt budget
@@ -97,7 +97,7 @@ The second e2e drives the genuine `LiteRtLmClient`, substituting only its
 model under software rendering would exceed the 180 s budget anyway. Everything
 above that seam is covered: message normalisation, session/KV reuse, tool-call
 parsing, transport, and the guest bridge. Loading a real `.litertlm` model via
-**Configure LLM** and running `mastra 'TASK'` is the remaining manual check.
+**Configure LLM** and running `vmmastra 'TASK'` is the remaining manual check.
 
 ## Gotchas
 
@@ -123,7 +123,7 @@ queue. `writeFile` with `expectedMtime` costs two. On an emulated CPU this
 dominates latency — prefer few batched commands.
 
 **Batch mode is the biggest lever.** `runBatch(task)` — or
-`run(task, { batchFirst: true })`, which the `mastra batch` CLI verb uses —
+`run(task, { batchFirst: true })`, which the `vmmastra batch` CLI verb uses —
 spends one model call on a single shell script and one round-trip running it:
 ~725 ms against the tool loop's ~2537 ms. It prepends `set -e` so a script that
 dies halfway exits non-zero rather than returning partial output as success,

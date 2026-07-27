@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>agent tier comparison — vmagent vs rig vs mastra</title>
+<title>agent tier comparison — vmlang vs rig vs vmmastra</title>
 <pre id="serial"></pre>
 <pre id="log"></pre>
 <div id="screen_container"><div></div><canvas></canvas></div>
@@ -12,7 +12,7 @@
 // The model is scripted per tier and returns instantly. That is deliberate:
 // with a real model, run-to-run variance swamps the difference between tiers,
 // and each tier speaks a different protocol anyway (rig wants native
-// tool_calls, vmagent wants {"tool":...}, mastra wants {"tool_call":...}), so
+// tool_calls, vmlang wants {"tool":...}, Mastra wants {"tool_call":...}), so
 // "same model" is not achievable in the first place. Holding model cost at
 // zero isolates what the TIER costs: guest round-trips and framework overhead.
 //
@@ -183,9 +183,9 @@ async function run() {
   log('tier                     wall   rpc  model  wrote');
   const rows = [];
 
-  // --- vmagent (Deep Agents) ---
+  // --- vmlang (Deep Agents) ---
   const { createVMAgent } = await import('../../agent/dist/agent.js');
-  rows.push(await measure('vmagent (deepagents)', async (box) => {
+  rows.push(await measure('vmlang (deepagents)', async (box) => {
     const harness = createVMAgent({
       llmClient: counted(vmagentClient(), box), guest,
       browserClient: null, approveAction: async () => true, onActivity: () => {},
@@ -228,7 +228,7 @@ async function run() {
     }));
   }
 
-  // --- mastra batch: one model call, one script, one round-trip ---
+  // --- vmmastra batch: one model call, one script, one round-trip ---
   rows.push(await measure('mastra --batch', async (box) => {
     const vm = createMastraVMAgent({
       guest, llmClient: counted(mastraBatchClient(), box), yolo: true,

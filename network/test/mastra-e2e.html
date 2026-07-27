@@ -102,19 +102,21 @@ async function run() {
   // --- guest side effects: the only evidence that counts --------------------
   const notes = await guest.read('NOTES.md').catch((error) => `ERROR: ${error.message}`);
   const unameProof = await guest.execute('uname -m');
-  // All three agent tiers must be installed in the shipped image. The `mastra`
+  // All three agent tiers must be installed in the shipped image. The `vmmastra`
   // command is what makes this tier reachable from the guest shell at all, so
   // a missing one means the image was rebuilt without it.
   const tierCommands = await guest
     .execute(
-      'for t in vmagent rig mastra vmbench; do command -v $t >/dev/null && echo "$t=ok" || echo "$t=MISSING"; done; ' +
+      'for t in vmlang rig vmmastra vmbench; do command -v $t >/dev/null && echo "$t=ok" || echo "$t=MISSING"; done; ' +
+      '! command -v vmagent && echo vmagent=removed || echo vmagent=STALE; ' +
+      '! command -v mastra && echo mastra=removed || echo mastra=STALE; ' +
       // The agent-facing operating manual has to survive an image rebuild too;
       // it is the only thing telling an autonomous agent how to verify a run.
       'test -r /usr/local/share/mastra/SKILL.md && echo skill=ok || echo skill=MISSING; ' +
       // The CLI lives in the ext4 image, patched in with debugfs, so it can
       // silently lag the repo whenever someone forgets that step. Prove the
       // booted guest has the batch subcommand rather than trusting the patch.
-      'mastra --help 2>&1 | grep -q "mastra batch" && echo batch=ok || echo batch=MISSING',
+      'vmmastra --help 2>&1 | grep -q "vmmastra batch" && echo batch=ok || echo batch=MISSING',
     )
     .catch((error) => `ERROR: ${error.message}`);
 
@@ -125,8 +127,9 @@ async function run() {
     modelTurnsUsed: turn,
     guestStillResponsive: /i[3-6]86/.test(unameProof),
     allTiersInstalled:
-      /vmagent=ok/.test(tierCommands) && /rig=ok/.test(tierCommands) &&
-      /mastra=ok/.test(tierCommands) && /vmbench=ok/.test(tierCommands),
+      /vmlang=ok/.test(tierCommands) && /rig=ok/.test(tierCommands) &&
+      /vmmastra=ok/.test(tierCommands) && /vmbench=ok/.test(tierCommands) &&
+      /vmagent=removed/.test(tierCommands) && /mastra=removed/.test(tierCommands),
     agentSkillInstalled: /skill=ok/.test(tierCommands),
     batchSubcommandInstalled: /batch=ok/.test(tierCommands),
   };

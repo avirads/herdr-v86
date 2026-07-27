@@ -3,18 +3,18 @@ set -eu
 
 usage() {
   cat >&2 <<'EOF'
-usage: vmagent PROMPT...
-       vmagent run PROMPT...
-       vmagent status
-       vmagent stop
-       vmagent reset
-       vmagent yolo on|off
+usage: vmlang PROMPT...
+       vmlang run PROMPT...
+       vmlang status
+       vmlang stop
+       vmlang reset
+       vmlang yolo on|off
 
 Run the browser-hosted Deep Agents coding agent against /root/project. After
-the first reply, enter follow-up prompts at `vmagent>`; use /exit to return to
+the first reply, enter follow-up prompts at `vmlang>`; use /exit to return to
 the guest shell. Configure the WebGPU model in the browser header first. YOLO
 is enabled by default, so mutations and shell
-commands run without confirmation. Use `vmagent yolo off` for approval prompts.
+commands run without confirmation. Use `vmlang yolo off` for approval prompts.
 EOF
   exit "${1:-2}"
 }
@@ -40,7 +40,7 @@ if [ "$operation" = RUN ]; then
     payload=$*
     set --
   elif [ -t 0 ]; then
-    printf 'vmagent> '
+    printf 'vmlang> '
     IFS= read -r payload || exit 1
   else
     payload=$(cat)
@@ -53,6 +53,6 @@ request_tmp="/run/vmagent-request.$$"
 printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > "$request_tmp"
 mv "$request_tmp" /run/vmagent-request
 case "$operation" in
-  RUN) echo '[vmagent] conversation started; Ctrl-C stops the current response.' ;;
-  *) echo "[vmagent] $operation requested." ;;
+  RUN) echo '[vmlang] conversation started; Ctrl-C stops the current response.' ;;
+  *) echo "[vmlang] $operation requested." ;;
 esac

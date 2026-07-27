@@ -10,7 +10,7 @@ import path from 'node:path';
 // kernel resolves it to a nonexistent interpreter path — exec fails with
 // "can't execute", silently. This exact corruption previously broke
 // /sbin/autologin-rpc in a released VM image, which knocked out the ttyS1
-// RPC shell that vmagent/FETCH/CLIPBOARD/LLM_* all depend on, with zero
+// RPC shell that AGENT_*/FETCH/CLIPBOARD/LLM_* all depend on, with zero
 // visible error anywhere in the browser. Guard against it recurring by
 // scanning every guest script's source for embedded CR bytes before it ever
 // gets baked into an image.
