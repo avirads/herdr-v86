@@ -105,6 +105,7 @@ const prompt = document.getElementById('prompt');
 const sendButton = document.getElementById('send');
 const recordButton = document.getElementById('record');
 const voiceStatus = document.getElementById('voice-status');
+const SAVED_PAIRING_KEY = 'vm.remotePairingKey';
 let remote;
 let sendBusy = false;
 let recorder;
@@ -151,6 +152,8 @@ async function connectWithKey(rawKey) {
       if (event.detail.agentConnected === false) resetToPairingScreen('Agent disconnected. Enter a pairing key or scan again to reconnect.');
     });
     await remote.connect(rawKey);
+    key.value = rawKey;
+    localStorage.setItem(SAVED_PAIRING_KEY, rawKey);
     pairing.hidden = true;
     chat.classList.add('active');
     prompt.focus();
@@ -178,6 +181,8 @@ if (urlKey) {
   history.replaceState(null, '', location.pathname);
   key.value = urlKey;
   connectWithKey(urlKey.trim());
+} else {
+  key.value = localStorage.getItem(SAVED_PAIRING_KEY) || '';
 }
 
 // In-page scanner: for when this page is already open (e.g. reopened from a
