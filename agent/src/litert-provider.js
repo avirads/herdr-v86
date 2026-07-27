@@ -120,18 +120,35 @@ function parseLooseJson(text) {
   const trimmed = String(text ?? '').trim();
   if (!trimmed) return undefined;
   const unfenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] ?? trimmed;
+  // Strip model-native delimiter tokens like <tool_call|> that the model
+  // appends after our JSON protocol object.
+  const stripped = unfenced.replace(/<tool_call\|>|<tool_result\|>|<\|[a-z_]+\|>$/g, '');
   try {
-    return JSON.parse(unfenced);
+    return JSON.parse(stripped);
+  } catch {
+    /* fall through */
+  }
+  // The 2B model sometimes drops the outer closing } — the JSON is
+  //   {"tool_call":{...}}
+  // with only two }s instead of three. Try appending a } before giving up.
+  try {
+    return JSON.parse(stripped + '}');
   } catch {
     /* fall through to brace scan */
   }
-  const start = unfenced.indexOf('{');
-  const end = unfenced.lastIndexOf('}');
+  const start = stripped.indexOf('{');
+  const end = stripped.lastIndexOf('}');
   if (start >= 0 && end > start) {
+    const candidate = stripped.slice(start, end + 1);
     try {
-      return JSON.parse(unfenced.slice(start, end + 1));
+      return JSON.parse(candidate);
     } catch {
-      /* not JSON */
+      // Brace scan may also be missing the outer close; try with one more }.
+      try {
+        return JSON.parse(candidate + '}');
+      } catch {
+        /* not JSON */
+      }
     }
   }
   return undefined;
@@ -149,6 +166,7 @@ function normalizeArguments(value) {
 
 const TOOL_NAME_KEYS = ['name', 'tool', 'tool_name', 'toolName'];
 const TOOL_ARG_KEYS = ['arguments', 'args', 'parameters', 'input'];
+const TOOL_OBJECT_KEYS = ['tool_call', 'toolCall', 'function', 'final'];
 
 // Small models reach for whichever call shape they saw most in training.
 // Accept all of them rather than losing the turn to a schema mismatch.
@@ -178,6 +196,21 @@ export function extractToolCall(value) {
       ),
     );
     if (Object.keys(leftover).length) args = leftover;
+  }
+
+  // The same 2B model sometimes puts tool arguments at the top level
+  // alongside tool_call rather than nested inside it — e.g.
+  //   {"tool_call":{"name":"write_file","content":"..."},"path":"file.sh"}
+  // Absorb those top-level keys into args so the parameter is not lost.
+  if (value !== candidate && typeof value === 'object' && !Array.isArray(value)) {
+    const topLevelArgs = Object.fromEntries(
+      Object.entries(value).filter(
+        ([key]) => ![...TOOL_OBJECT_KEYS, ...TOOL_NAME_KEYS, ...TOOL_ARG_KEYS].includes(key),
+      ),
+    );
+    if (Object.keys(topLevelArgs).length) {
+      args = { ...(typeof args === 'object' && args !== null ? args : {}), ...topLevelArgs };
+    }
   }
 
   return { name, arguments: normalizeArguments(args) };
@@ -220,23 +253,45 @@ export function parseCompletion(completion, { hasTools = false } = {}) {
   const text = typeof raw === 'string' ? raw : partsToText(raw);
 
   if (hasTools) {
-    const value = parseLooseJson(text);
-    const call = extractToolCall(value);
-    if (call) {
+    const calls = [];
+    for (const line of text.split(/\r?\n/)) {
+      const lineTrimmed = line.trim();
+      if (!lineTrimmed) continue;
+      const value = parseLooseJson(lineTrimmed);
+      if (!value) continue;
+      const call = extractToolCall(value);
+      if (call) {
+        calls.push({
+          type: 'tool-call',
+          toolCallId: newToolCallId(),
+          toolName: call.name,
+          input: stringifyInput(call.arguments),
+        });
+      } else if (typeof value.final === 'string') {
+        return { content: [{ type: 'text', text: value.final }], finishReason: 'stop' };
+      }
+    }
+    if (calls.length) {
+      return { content: calls, finishReason: 'tool-calls' };
+    }
+    // Single-object fallback: try parsing the whole text (fenced code, brace
+    // scan) for the case where the model wraps the tool call in a markdown fence
+    // or includes surrounding explanation text.
+    const fallbackValue = parseLooseJson(text);
+    const fallbackCall = extractToolCall(fallbackValue);
+    if (fallbackCall) {
       return {
-        content: [
-          {
-            type: 'tool-call',
-            toolCallId: newToolCallId(),
-            toolName: call.name,
-            input: stringifyInput(call.arguments),
-          },
-        ],
+        content: [{
+          type: 'tool-call',
+          toolCallId: newToolCallId(),
+          toolName: fallbackCall.name,
+          input: stringifyInput(fallbackCall.arguments),
+        }],
         finishReason: 'tool-calls',
       };
     }
-    if (value && typeof value.final === 'string') {
-      return { content: [{ type: 'text', text: value.final }], finishReason: 'stop' };
+    if (fallbackValue && typeof fallbackValue.final === 'string') {
+      return { content: [{ type: 'text', text: fallbackValue.final }], finishReason: 'stop' };
     }
   }
 

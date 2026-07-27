@@ -256037,12 +256037,21 @@ function parseLooseJson(text10) {
     return JSON.parse(stripped);
   } catch {
   }
+  try {
+    return JSON.parse(stripped + "}");
+  } catch {
+  }
   const start = stripped.indexOf("{");
   const end = stripped.lastIndexOf("}");
   if (start >= 0 && end > start) {
+    const candidate = stripped.slice(start, end + 1);
     try {
-      return JSON.parse(stripped.slice(start, end + 1));
+      return JSON.parse(candidate);
     } catch {
+      try {
+        return JSON.parse(candidate + "}");
+      } catch {
+      }
     }
   }
   return void 0;
