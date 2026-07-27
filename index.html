@@ -406,7 +406,7 @@ function failBoot(message) {
   bootMessage.textContent = message;
 }
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "vm-shell-37-glob-grep";
+const DISK_VERSION = "vm-shell-38-dev-tools";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -417,7 +417,10 @@ async function rangePreflight() {
     status("checking disk delivery…");
     const response = await fetch(diskURL, {
       headers: { Range: "bytes=0-0" },
-      cache: "no-store",
+      // Revalidate the versioned disk URL. When the server validators say the
+      // image is unchanged, the browser serves its local cached range instead
+      // of downloading it again. A newer image gets a new DISK_VERSION.
+      cache: "no-cache",
     });
     const contentRange = response.headers.get("content-range") || "";
     const valid = response.status === 206 && contentRange === `bytes 0-0/${DISK_SIZE}`;

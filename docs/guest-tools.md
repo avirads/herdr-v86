@@ -5,6 +5,10 @@ Every coding-agent tier can read the canonical in-guest capability reference at
 content as its global `AGENTS.md`, so newly started agents discover it
 automatically.
 
+The main page revalidates its versioned VM image URL at boot. If the hosted
+image is not newer, the browser loads the existing local HTTP-cache entry.
+Change `DISK_VERSION` in `index.html` whenever `vm-network-ext4.img` changes.
+
 This is the canonical command reference for gateway-free services in the
 VM guest. These tools communicate with JavaScript in the hosting browser;
 they do not require a guest network interface or the external TAP gateway.
