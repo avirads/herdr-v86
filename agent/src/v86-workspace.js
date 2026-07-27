@@ -604,8 +604,9 @@ export class V86Sandbox extends MastraSandbox {
     return [
       'Commands run inside an emulated Linux guest in the browser tab.',
       'The shell is BusyBox sh; GNU-only flags are frequently unavailable.',
-      'Installed commands include jq, rg, git, curl, tar, gzip, qjs, vmjs, and',
-      'vmproject. Use vmproject import/export for project archive transfer.',
+      'Installed commands include jq, rg, git, curl, tar, gzip, qjs, vmjs,',
+      'shfmt, ctags, make, patch, and vmproject. ShellCheck is not installed. Use shfmt and sh -n for shell',
+      'scripts and vmproject import/export for project archive transfer.',
       'Without the WebSocket gateway there is no IP address, DNS, or general',
       'TCP/UDP. Use the browser-backed commands (vmfetch, vmclip, vmexport,',
       'vmgithub) instead of curl, git clone, or ssh when `ip route` shows no',

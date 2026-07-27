@@ -53,7 +53,7 @@ mount --bind /dev "$MOUNT_DIR/dev"
 
 # The minimal base image intentionally has no resolv.conf.
 cp /etc/resolv.conf "$MOUNT_DIR/etc/resolv.conf"
-chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc quickjs jq git ripgrep
+chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc quickjs jq git ripgrep shfmt ctags make patch
 tar -xzf "$RIG_PACKAGE" -C "$MOUNT_DIR"
 tar -xzf "$ZEROSTACK_PACKAGE" -C "$MOUNT_DIR"
 chmod 0755 "$MOUNT_DIR/usr/local/libexec/rig-agent"
@@ -106,6 +106,10 @@ chroot "$MOUNT_DIR" /usr/bin/qjs -q
 chroot "$MOUNT_DIR" /usr/bin/jq --version
 chroot "$MOUNT_DIR" /usr/bin/git --version
 chroot "$MOUNT_DIR" /usr/bin/rg --version
+chroot "$MOUNT_DIR" /usr/bin/shfmt --version
+chroot "$MOUNT_DIR" /usr/bin/ctags --version
+chroot "$MOUNT_DIR" /usr/bin/make --version
+chroot "$MOUNT_DIR" /usr/bin/patch --version
 chroot "$MOUNT_DIR" /usr/local/libexec/zerostack --version
-chroot "$MOUNT_DIR" /bin/sh -c 'command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && command -v jq && command -v git && command -v rg && command -v vmproject && test -x /usr/local/libexec/rig-agent'
+chroot "$MOUNT_DIR" /bin/sh -c 'command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && command -v jq && command -v git && command -v rg && command -v shfmt && command -v ctags && command -v make && command -v patch && command -v vmproject && test -x /usr/local/libexec/rig-agent'
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"

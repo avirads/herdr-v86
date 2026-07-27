@@ -122,6 +122,10 @@ test('Rig prompts advertise installed guest tools and its AutoBro boundary', asy
     const prompt = call.messages[0].content;
     assert.match(prompt, /BusyBox sh/);
     assert.match(prompt, /jq, rg, git, curl/);
+    assert.match(prompt, /ShellCheck is not installed/);
+    assert.match(prompt, /shfmt and sh -n/);
+    assert.match(prompt, /ctags, make, patch/);
+    assert.match(prompt, /vm-agent-capabilities\.md/);
     assert.match(prompt, /vmproject/);
     assert.match(prompt, /AutoBro is not available/);
   }

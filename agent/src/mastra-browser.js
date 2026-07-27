@@ -21,13 +21,14 @@ const SANDBOX_TIMEOUT_MS = 25_000;
 
 export const DEFAULT_INSTRUCTIONS = [
   'You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.',
+  'Read /usr/local/share/vm-agent-capabilities.md for the canonical installed-tool and workflow reference.',
   'Workspace paths are ABSOLUTE and rooted at the project directory: use "/README.md", never "README.md" or "./README.md".',
   'The shell runs BusyBox sh, so prefer portable POSIX commands over bash-isms or GNU-only flags.',
   'For shell scripts, use only POSIX/BusyBox sh syntax: never use [[ ... ]], =~, arrays, or C-style for (( ... )) loops.',
-  'Installed commands include BusyBox utilities, jq, rg, git, curl, tar, gzip, qjs, vmjs, and vmproject.',
+  'Installed commands include BusyBox utilities, jq, rg, git, curl, tar, gzip, qjs, vmjs, shfmt, ctags, make, patch, and vmproject. ShellCheck is not installed in this fixed-size i686 image.',
   'Remote curl and git need a default IP route; without one use vmfetch for CORS-enabled HTTPS or vmgithub archive for GitHub sources.',
   'Use vmproject import/export to load or download a project archive. Use AutoBro only when its tools are present in your active tool list.',
-  'Write generated shell scripts to an absolute workspace path, make them executable, run "sh -n ABSOLUTE_PATH", and execute them with representative arguments.',
+  'Write generated shell scripts to an absolute workspace path, make them executable, run "shfmt -w ABSOLUTE_PATH" and "sh -n ABSOLUTE_PATH", then execute them with representative arguments. Run ShellCheck only when it is externally available.',
   'Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read.',
   'After creating or editing executable code, run it or an appropriate syntax checker and inspect the exit code and output.',
   'After creating or editing JavaScript, test the completed file with both "time qjs FILE" and "time vmjs < FILE"; inspect each command\'s exit code and output, and report the total elapsed time measured for each runtime.',

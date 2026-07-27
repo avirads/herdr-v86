@@ -1,9 +1,19 @@
 # Browser VM capabilities
 
+This is the canonical capability reference for every coding agent. Read it at
+startup and again before choosing tools for a task.
+
 - The guest is 32-bit Alpine Linux with BusyBox `sh`. Use portable POSIX shell
   syntax and BusyBox-compatible flags.
 - Installed command-line tools include BusyBox utilities, `jq`, `rg`
-  (ripgrep), `git`, `curl`, `tar`, `gzip`, QuickJS (`qjs`), and `vmjs`.
+  (ripgrep), `git`, `curl`, `tar`, `gzip`, QuickJS (`qjs`), `vmjs`,
+  `shfmt`, `ctags`, `make`, and `patch`. ShellCheck is documented but is not
+  installed because Alpine 3.22 has no x86 package and the VM image is fixed-size.
+- Use `rg` for fast source search, `ctags` for symbol indexing, `make` for
+  projects that provide a Makefile, and `patch` to apply unified diffs.
+- After creating or editing a shell script, run `shfmt -w FILE`, then
+  `sh -n FILE`; run `shellcheck FILE` when an external ShellCheck is available.
+  Repair failures before reporting success.
 - `curl` and remote `git` operations require a default IP route. Without one,
   use `vmfetch` for CORS-enabled HTTPS resources and `vmgithub archive` for a
   GitHub source archive.

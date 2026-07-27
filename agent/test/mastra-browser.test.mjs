@@ -51,7 +51,9 @@ test('default instructions require executable code verification and repair', () 
   assert.match(DEFAULT_INSTRUCTIONS, /run it or an appropriate syntax checker/i);
   assert.match(DEFAULT_INSTRUCTIONS, /inspect the exit code and output/i);
   assert.match(DEFAULT_INSTRUCTIONS, /never use \[\[ \.\.\. \]\], =~, arrays, or C-style/i);
-  assert.match(DEFAULT_INSTRUCTIONS, /run "sh -n ABSOLUTE_PATH"/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /run "shfmt -w ABSOLUTE_PATH" and "sh -n ABSOLUTE_PATH"/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /ShellCheck is not installed/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /ctags, make, patch/i);
   assert.match(DEFAULT_INSTRUCTIONS, /execute them with representative arguments/i);
   assert.match(DEFAULT_INSTRUCTIONS, /jq, rg, git, curl/i);
   assert.match(DEFAULT_INSTRUCTIONS, /vmproject import\/export/i);

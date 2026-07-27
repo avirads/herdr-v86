@@ -1,5 +1,10 @@
 # Browser-backed guest tools
 
+Every coding-agent tier can read the canonical in-guest capability reference at
+`/usr/local/share/vm-agent-capabilities.md`. Zerostack also receives the same
+content as its global `AGENTS.md`, so newly started agents discover it
+automatically.
+
 This is the canonical command reference for gateway-free services in the
 VM guest. These tools communicate with JavaScript in the hosting browser;
 they do not require a guest network interface or the external TAP gateway.
@@ -109,9 +114,20 @@ The browser Settings dialog provides matching **Import project** and
 rejected. Exports are limited to the browser bridge's 8 MiB compressed-file
 limit.
 
-The guest also includes `git`, `rg` (ripgrep), `jq`, and `curl`. Remote Git and
-curl require a default route; without one, use `vmgithub archive` or `vmfetch`
-as appropriate.
+The guest also includes `git`, `rg` (ripgrep), `jq`, `curl`, `shfmt`, `ctags`,
+`make`, and `patch`. ShellCheck is documented but is not installed because
+Alpine 3.22 does not publish an x86 package and this VM image remains fixed-size.
+Remote Git and curl require a default route; without one, use
+`vmgithub archive` or `vmfetch` as appropriate. For shell scripts, run:
+
+```sh
+shfmt -w script.sh
+sh -n script.sh
+shellcheck script.sh
+```
+
+Run the ShellCheck command above only in an external environment where
+ShellCheck is installed.
 
 ## `vmgithub` — focused GitHub helper
 

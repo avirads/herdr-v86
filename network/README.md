@@ -227,7 +227,7 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
 - `../../vm-network-ext4.img`: Alpine x86 image with automatic DHCP,
   CA certificates, and curl/OpenSSL supporting HTTPS, HTTP/2, WSS, and common
   network protocols. The image also includes tmux 3.5a, QuickJS, `jq`, `git`,
-  ripgrep, browser-backed project archive import/export, and the low-latency
+  ripgrep, shfmt, ctags, make, patch, browser-backed project archive import/export, and the low-latency
   browser-orchestrated `rig` launcher, and the native i686 Zerostack 1.5.0
   agent backed by the browser model. Deep-agent orchestration remains
   browser-side through `vmlang`.
