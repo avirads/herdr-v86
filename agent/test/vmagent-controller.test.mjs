@@ -268,3 +268,36 @@ test('vmmastra status and reset work before any model is loaded', async () => {
   await controller.handle('mastra_tools');
   assert.match(outputs.at(-1), /no model loaded/i);
 });
+
+test('vmmastra code uses the directory where the guest command was invoked', async () => {
+  const outputs = [];
+  const workspaces = [];
+  let creations = 0;
+  let resets = 0;
+  const guest = { setWorkspace(path) { workspaces.push(path); } };
+  const controller = new VmAgentController({
+    createAgent: async () => ({ run: async () => ({ output: 'unused' }) }),
+    createCodeAgent: async () => {
+      creations += 1;
+      return {
+        setYolo() {},
+        async run(task) { return { content: `ran: ${task}` }; },
+        async reset() { resets += 1; },
+      };
+    },
+    getLlmClient: () => ({ chat: async () => ({}) }),
+    getGuest: () => guest,
+    approveAction: async () => true,
+    onOutput: output => outputs.push(output),
+  });
+
+  await controller.handle('mastra_code', 'run:first task', '/root');
+  assert.deepEqual(workspaces, ['/root']);
+  assert.equal(creations, 1);
+  assert.equal(outputs.at(-1), 'ran: first task');
+
+  await controller.handle('mastra_code', 'run:second task', '/root/project');
+  assert.deepEqual(workspaces, ['/root', '/root/project']);
+  assert.equal(resets, 1, 'changing workspace must discard the old code harness');
+  assert.equal(creations, 2);
+});

@@ -102,10 +102,10 @@ async function wireController() {
     onBusy: (value) => busy.push(value),
   });
 
-  hostBridge.setAgentHandler((command, value) => {
+  hostBridge.setAgentHandler((command, value, cwd) => {
     if (command === 'mastra') sawMastraCommand = true;
     if (command.startsWith('mastra')) cliCommands.push(command);
-    return controller.handle(command, value);
+    return controller.handle(command, value, cwd);
   });
   setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
   controllerReady = true;

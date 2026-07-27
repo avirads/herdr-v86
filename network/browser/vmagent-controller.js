@@ -139,11 +139,18 @@ export class VmAgentController {
     }
   }
 
-  async handleMastraCode(value) {
+  async handleMastraCode(value, cwd = '') {
     if (!this.createCodeAgent) return await this.onOutput('[vmmastra] code tier is not available in this build.');
 
     const guest = this.getGuest();
     if (!guest) return await this.onOutput('[vmmastra] guest bridge is still initializing.');
+    const workspace = String(cwd || '/root/project');
+    if (workspace !== this.codeWorkspace) {
+      await this.codeHarness?.reset();
+      this.codeHarness = null;
+      this.codeWorkspace = workspace;
+    }
+    guest.setWorkspace?.(workspace);
     const llmClient = this.getLlmClient();
     if (!llmClient) return await this.onOutput('[vmmastra] WebGPU LLM is not ready; use Configure LLM in the browser header.');
 
@@ -266,7 +273,7 @@ export class VmAgentController {
     return String(output);
   }
 
-  async handle(command, value = '') {
+  async handle(command, value = '', cwd = '') {
     if (command === 'status') {
       const llm = this.getLlmClient();
       const model = llm ? await llm.status().catch(() => null) : null;
@@ -302,7 +309,10 @@ export class VmAgentController {
     // Third tier, beside rig and vmlang. Same lifecycle as rig: one task per
     // invocation, no persistent conversation. The harness is built lazily and
     // reused so the 9.5 MB bundle is only imported if someone actually runs it.
-    if (command.startsWith('mastra')) return await this.handleMastra(command, value);
+    if (command.startsWith('mastra')) {
+      if (command === 'mastra_code') return await this.handleMastraCode(value, cwd);
+      return await this.handleMastra(command, value);
+    }
     if (command === 'rig' || command === 'codeact') {
       if (this.abortController) return await this.onOutput('[rig] another agent task is running.');
       this.abortController = new AbortController();

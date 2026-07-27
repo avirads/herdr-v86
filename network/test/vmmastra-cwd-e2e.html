@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>vmmastra cwd and hidden RPC check</title>
+<pre id="serial"></pre><div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+let serial = '', started = false, submitted = false;
+async function submit(ok, reason = '', extra = {}) {
+  if (submitted) return;
+  submitted = true;
+  await fetch('/__result', {
+    method: 'POST',
+    body: JSON.stringify({ ok, reason, serial: serial.slice(-4000), ...extra }),
+  });
+}
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 256 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+
+const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
+const { V86GuestReadonlyClient } = await import('../browser/v86-guest-readonly.js');
+const hostBridge = new V86HostBridge(emulator);
+const guest = new V86GuestReadonlyClient(emulator, hostBridge, { rpcSerial: 1 });
+hostBridge.setAgentHandler(async (command, value, cwd) => {
+  if (command !== 'mastra_code') return;
+  try {
+    guest.setWorkspace(cwd);
+    const content = `const payload = "${'x'.repeat(1024)}";\n`;
+    await guest.write('factorial.js', content);
+    const saved = await guest.read('factorial.js');
+    const leaked = serial.includes(btoa(content).slice(-512));
+    await submit(cwd === '/root/current-test' && saved === content && !leaked, '', {
+      command, value, cwd, bytes: saved.length, payloadLeakedToTerminal: leaked,
+    });
+  } catch (error) {
+    await submit(false, error.message);
+  }
+});
+
+setTimeout(() => submit(false, 'vmmastra cwd test timed out'), 120000);
+emulator.add_listener('serial0-output-byte', byte => {
+  serial = (serial + String.fromCharCode(byte)).slice(-200000);
+  document.querySelector('#serial').textContent = serial;
+  if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    started = true;
+    emulator.serial0_send(
+      "mkdir -p /root/current-test && cd /root/current-test && " +
+      "vmmastra code 'write factorial.js'\n",
+    );
+  }
+});
+</script>

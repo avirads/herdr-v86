@@ -100,6 +100,7 @@ fi
 
 [ "$#" -eq 0 ] || usage 2
 
-printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > /dev/ttyS0
+printf '__V86RPC__\tAGENT_%s\t%s\t%s\t%s\n' \
+  "$operation" "$$-$(date +%s)" "$(b64 "$payload")" "$(b64 "$(pwd -P)")" > /dev/ttyS0
 
 echo '[vmmastra] code tier: request sent.'

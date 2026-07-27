@@ -12,6 +12,10 @@ function decode(value) {
   return new TextDecoder().decode(Uint8Array.from(binary, character => character.charCodeAt(0)));
 }
 
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
 export class V86GuestReadonlyClient extends EventTarget {
   constructor(emulator, hostBridge, { timeoutMs = 30_000, rpcSerial = 0 } = {}) {
     super();
@@ -19,6 +23,7 @@ export class V86GuestReadonlyClient extends EventTarget {
     this.hostBridge = hostBridge;
     this.timeoutMs = timeoutMs;
     this.rpcSerial = rpcSerial;
+    this.workspace = '/root/project';
     this.line = '';
     this.nextId = 0;
     this.pending = new Map();
@@ -51,7 +56,13 @@ export class V86GuestReadonlyClient extends EventTarget {
         const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`guest ${operation} timed out`)); }, this.timeoutMs);
         this.pending.set(id, { resolve, reject, timer });
       });
-      const command = ['vmagent-rpc', id, operation, ...args.map(value => encode(value))].join(' ');
+      const command = [
+        `VMAGENT_WORKSPACE=${shellQuote(this.workspace)}`,
+        'vmagent-rpc',
+        id,
+        operation,
+        ...args.map(value => encode(value)),
+      ].join(' ');
       this.dispatchEvent(new CustomEvent('activity', { detail: { operation, args } }));
       await this.hostBridge.send(command, this.rpcSerial);
       return await response;
@@ -69,6 +80,11 @@ export class V86GuestReadonlyClient extends EventTarget {
   delete(path) { return this.request('delete', path); }
   execute(command) { return this.request('execute', command); }
   test(recipe) { return this.request('test', recipe); }
+  setWorkspace(path) {
+    const value = String(path || '');
+    if (!value.startsWith('/') || /[\r\n]/.test(value)) throw new Error('guest workspace must be an absolute path');
+    this.workspace = value;
+  }
 
   destroy() { this.emulator.remove_listener?.(`serial${this.rpcSerial}-output-byte`, this.onByte); }
 }

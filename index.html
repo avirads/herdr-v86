@@ -658,7 +658,7 @@ import("./network/browser/v86-host-bridge.js").then(module => {
   hostBridge = new module.V86HostBridge(emulator, { llmClient: webGpuLlmClient });
   window.v86HostBridge = hostBridge;
   import("./network/browser/v86-guest-readonly.js").then(({ V86GuestReadonlyClient }) => {
-    guestReadonlyClient = new V86GuestReadonlyClient(emulator, hostBridge);
+    guestReadonlyClient = new V86GuestReadonlyClient(emulator, hostBridge, { rpcSerial: 1 });
     window.v86GuestReadonly = guestReadonlyClient;
     import("./network/browser/vmagent-controller.js").then(async ({ VmAgentController }) => {
       vmAgentController = new VmAgentController({
@@ -715,7 +715,7 @@ onBusy: async busy => {
           if (busy) term.write("\r\x1b[2K");
         },
       });
-      hostBridge.setAgentHandler((command, value) => vmAgentController.handle(command, value));
+      hostBridge.setAgentHandler((command, value, cwd) => vmAgentController.handle(command, value, cwd));
       setInterval(() => {
         if (!agentBusy && !vmAgentController?.conversationActive) hostBridge.send("vmagent-poll").catch(() => {});
       }, 500);
