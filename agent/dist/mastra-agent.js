@@ -256774,6 +256774,8 @@ var V86Sandbox = class extends MastraSandbox {
     return [
       "Commands run inside an emulated Linux guest in the browser tab.",
       "The shell is BusyBox sh; GNU-only flags are frequently unavailable.",
+      "Installed commands include jq, rg, git, curl, tar, gzip, qjs, vmjs, and",
+      "vmproject. Use vmproject import/export for project archive transfer.",
       "Without the WebSocket gateway there is no IP address, DNS, or general",
       "TCP/UDP. Use the browser-backed commands (vmfetch, vmclip, vmexport,",
       "vmgithub) instead of curl, git clone, or ssh when `ip route` shows no",
@@ -257169,6 +257171,9 @@ var DEFAULT_INSTRUCTIONS = [
   'Workspace paths are ABSOLUTE and rooted at the project directory: use "/README.md", never "README.md" or "./README.md".',
   "The shell runs BusyBox sh, so prefer portable POSIX commands over bash-isms or GNU-only flags.",
   "For shell scripts, use only POSIX/BusyBox sh syntax: never use [[ ... ]], =~, arrays, or C-style for (( ... )) loops.",
+  "Installed commands include BusyBox utilities, jq, rg, git, curl, tar, gzip, qjs, vmjs, and vmproject.",
+  "Remote curl and git need a default IP route; without one use vmfetch for CORS-enabled HTTPS or vmgithub archive for GitHub sources.",
+  "Use vmproject import/export to load or download a project archive. Use AutoBro only when its tools are present in your active tool list.",
   'Write generated shell scripts to an absolute workspace path, make them executable, run "sh -n ABSOLUTE_PATH", and execute them with representative arguments.',
   "Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read.",
   "After creating or editing executable code, run it or an appropriate syntax checker and inspect the exit code and output.",

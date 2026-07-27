@@ -226,7 +226,7 @@ export class VmAgentController {
       { type: 'function', function: { name: 'shell', description: 'Run a shell command in the project', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } } },
     ];
     const messages = [
-      { role: 'system', content: 'You are a concise coding agent in /root/project. Use tools only when needed, then answer directly.' },
+      { role: 'system', content: 'You are a concise coding agent in /root/project on 32-bit Alpine Linux with BusyBox sh. Installed commands include BusyBox utilities, jq, rg, git, curl, tar, gzip, qjs, vmjs, and vmproject. Remote curl and git require a default route; without one use vmfetch or vmgithub archive when available. Use vmproject import/export for project archives. AutoBro is not available in this Rig tool set. Use tools only when needed, verify changes, then answer directly.' },
       { role: 'user', content: String(prompt) },
     ];
     for (let turn = 0; turn < 6; turn += 1) {
@@ -260,7 +260,7 @@ export class VmAgentController {
     const guest = this.getGuest();
     if (!llm || !guest) throw new Error('model or VM bridge is not ready');
     const messages = [
-      { role: 'system', content: 'You are a coding agent working in /root/project on a 32-bit Linux VM. Accomplish the task by writing ONE POSIX sh script that uses standard tools (cat, ls, grep, sed, awk, printf, test, mkdir, etc.). Output ONLY the script body — no explanation and no markdown fences.' },
+      { role: 'system', content: 'You are a coding agent working in /root/project on 32-bit Alpine Linux with BusyBox sh. Installed commands include BusyBox utilities, jq, rg, git, curl, tar, gzip, qjs, vmjs, and vmproject. Remote curl and git require a default route. AutoBro is not available in this Rig tool set. Accomplish the task by writing ONE POSIX sh script using the installed tools. Output ONLY the script body — no explanation and no markdown fences.' },
       { role: 'user', content: String(prompt) },
     ];
     const completion = await llm.chat({ model: llm.modelName || 'webgpu', temperature: 0, max_tokens: 1000, chat_template_kwargs: { enable_thinking: false }, messages });

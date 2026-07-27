@@ -87,6 +87,32 @@ vmexport project.tar.gz
 The browser opens its normal download flow. Maximum file size is 8 MiB. Export
 only regular files; directories should first be archived.
 
+## `vmproject` — import and export projects
+
+```text
+vmproject import ARCHIVE.tar.gz [DESTINATION]
+vmproject pack [PROJECT_DIR] [OUTPUT.tar.gz]
+vmproject export [PROJECT_DIR] [DOWNLOAD_NAME.tar.gz]
+```
+
+Examples:
+
+```sh
+vmproject import /root/my-project.tar.gz /root/project
+vmproject pack /root/project /tmp/project.tar.gz
+vmproject export /root/project project.tar.gz
+```
+
+The browser Settings dialog provides matching **Import project** and
+**Export project** controls. Imports merge a `.tar.gz` or `.tgz` archive into
+`/root/project`; archive entries with absolute paths or `..` traversal are
+rejected. Exports are limited to the browser bridge's 8 MiB compressed-file
+limit.
+
+The guest also includes `git`, `rg` (ripgrep), `jq`, and `curl`. Remote Git and
+curl require a default route; without one, use `vmgithub archive` or `vmfetch`
+as appropriate.
+
 ## `vmgithub` — focused GitHub helper
 
 ```text

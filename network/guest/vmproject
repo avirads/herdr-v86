@@ -1,0 +1,66 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  cat >&2 <<'EOF'
+usage: vmproject import ARCHIVE.tar.gz [DESTINATION]
+       vmproject pack [PROJECT_DIR] [OUTPUT.tar.gz]
+       vmproject export [PROJECT_DIR] [DOWNLOAD_NAME.tar.gz]
+
+Import merges an archive into DESTINATION (default: /root/project).
+Pack creates an archive without downloading it.
+Export packs the project and downloads it through the browser (maximum 8 MiB).
+EOF
+  exit "${1:-2}"
+}
+
+safe_archive() {
+  tar -tzf "$1" | awk '
+    /^\// { bad = 1 }
+    /(^|\/)\.\.(\/|$)/ { bad = 1 }
+    END { exit bad }
+  '
+  tar -tvzf "$1" | awk '
+    substr($0, 1, 1) != "-" && substr($0, 1, 1) != "d" { bad = 1 }
+    END { exit bad }
+  '
+}
+
+command=${1:-}
+[ -n "$command" ] || usage
+shift
+
+case "$command" in
+  import)
+    [ "$#" -ge 1 ] && [ "$#" -le 2 ] || usage
+    archive=$1
+    destination=${2:-/root/project}
+    [ -f "$archive" ] || { echo "vmproject: archive not found: $archive" >&2; exit 1; }
+    case "$destination" in /|'') echo 'vmproject: refusing unsafe destination' >&2; exit 1;; esac
+    mkdir -p "$destination"
+    safe_archive "$archive" ||
+      { echo 'vmproject: archive contains an unsafe path or non-file entry' >&2; exit 1; }
+    tar -xzf "$archive" -C "$destination"
+    printf 'imported project into %s\n' "$destination"
+    ;;
+  pack|export)
+    [ "$#" -le 2 ] || usage
+    project_dir=${1:-/root/project}
+    [ -d "$project_dir" ] || { echo "vmproject: project directory not found: $project_dir" >&2; exit 1; }
+    project_dir=$(readlink -f "$project_dir")
+    case "$command" in
+      pack) output=${2:-/tmp/project.tar.gz};;
+      export) output="/tmp/$(basename "${2:-project.tar.gz}")";;
+    esac
+    tar -czf "$output" -C "$project_dir" .
+    size=$(wc -c < "$output")
+    printf 'packed %s bytes from %s\n' "$size" "$project_dir"
+    if [ "$command" = export ]; then
+      vmexport "$output"
+    else
+      printf '%s\n' "$output"
+    fi
+    ;;
+  -h|--help|help) usage 0;;
+  *) usage;;
+esac

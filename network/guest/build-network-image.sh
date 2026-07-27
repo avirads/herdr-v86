@@ -53,7 +53,7 @@ mount --bind /dev "$MOUNT_DIR/dev"
 
 # The minimal base image intentionally has no resolv.conf.
 cp /etc/resolv.conf "$MOUNT_DIR/etc/resolv.conf"
-chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc quickjs jq
+chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc quickjs jq git ripgrep
 tar -xzf "$RIG_PACKAGE" -C "$MOUNT_DIR"
 tar -xzf "$ZEROSTACK_PACKAGE" -C "$MOUNT_DIR"
 chmod 0755 "$MOUNT_DIR/usr/local/libexec/rig-agent"
@@ -64,6 +64,7 @@ install -m 0644 "$PROJECT_DIR/network/guest/inittab" "$MOUNT_DIR/etc/inittab"
 install -m 0755 "$PROJECT_DIR/network/guest/vmfetch" "$MOUNT_DIR/usr/local/bin/vmfetch"
 install -m 0755 "$PROJECT_DIR/network/guest/vmclip" "$MOUNT_DIR/usr/local/bin/vmclip"
 install -m 0755 "$PROJECT_DIR/network/guest/vmexport" "$MOUNT_DIR/usr/local/bin/vmexport"
+install -m 0755 "$PROJECT_DIR/network/guest/vmproject" "$MOUNT_DIR/usr/local/bin/vmproject"
 install -m 0755 "$PROJECT_DIR/network/guest/vmgithub" "$MOUNT_DIR/usr/local/bin/vmgithub"
 install -m 0755 "$PROJECT_DIR/network/guest/vmai" "$MOUNT_DIR/usr/local/bin/vmai"
 install -m 0755 "$PROJECT_DIR/network/guest/vmllm" "$MOUNT_DIR/usr/local/bin/vmllm"
@@ -79,6 +80,9 @@ install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bi
 # /root/project/skills/, so the user's workspace is left untouched; the file
 # itself explains the one-line copy that makes Deep Agents auto-discover it.
 install -D -m 0644 "$PROJECT_DIR/network/guest/skills/mastra/SKILL.md" "$MOUNT_DIR/usr/local/share/mastra/SKILL.md"
+install -D -m 0644 "$PROJECT_DIR/network/guest/agent-capabilities.md" "$MOUNT_DIR/usr/local/share/vm-agent-capabilities.md"
+# Zerostack automatically loads this global AGENTS.md into its system context.
+install -D -m 0644 "$PROJECT_DIR/network/guest/agent-capabilities.md" "$MOUNT_DIR/root/.local/share/zerostack/AGENTS.md"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-proxy" "$MOUNT_DIR/usr/local/libexec/vm-openai-proxy"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-request" "$MOUNT_DIR/usr/local/libexec/vm-openai-request"
 # The source image predates the shell-only guest. Do not carry its legacy app
@@ -100,6 +104,8 @@ chroot "$MOUNT_DIR" /usr/bin/curl --version
 chroot "$MOUNT_DIR" /usr/bin/tmux -V
 chroot "$MOUNT_DIR" /usr/bin/qjs -q
 chroot "$MOUNT_DIR" /usr/bin/jq --version
+chroot "$MOUNT_DIR" /usr/bin/git --version
+chroot "$MOUNT_DIR" /usr/bin/rg --version
 chroot "$MOUNT_DIR" /usr/local/libexec/zerostack --version
-chroot "$MOUNT_DIR" /bin/sh -c 'command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && command -v jq && test -x /usr/local/libexec/rig-agent'
+chroot "$MOUNT_DIR" /bin/sh -c 'command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && command -v jq && command -v git && command -v rg && command -v vmproject && test -x /usr/local/libexec/rig-agent'
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"

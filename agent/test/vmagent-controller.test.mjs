@@ -99,6 +99,34 @@ test('vmlang reports when the agent returns empty output rather than showing not
   assert.match(outputs.at(-1), /returned no output/i);
 });
 
+test('Rig prompts advertise installed guest tools and its AutoBro boundary', async () => {
+  const calls = [];
+  const llm = {
+    modelName: 'test-model',
+    async chat(request) {
+      calls.push(request);
+      return { choices: [{ message: { content: calls.length === 1 ? 'done' : 'echo ok' } }] };
+    },
+  };
+  const guest = { execute: async () => 'ok' };
+  const controller = new VmAgentController({
+    createAgent: async () => ({ run: async () => ({ output: 'unused' }) }),
+    getLlmClient: () => llm,
+    getGuest: () => guest,
+    approveAction: async () => true,
+  });
+
+  await controller.runRig('inspect');
+  await controller.runRigCodeAct('inspect');
+  for (const call of calls) {
+    const prompt = call.messages[0].content;
+    assert.match(prompt, /BusyBox sh/);
+    assert.match(prompt, /jq, rg, git, curl/);
+    assert.match(prompt, /vmproject/);
+    assert.match(prompt, /AutoBro is not available/);
+  }
+});
+
 test('vmmastra runs as a third tier: lazy harness, reused across runs, YOLO propagated', async () => {
   const outputs = [];
   const prompts = [];

@@ -53,6 +53,8 @@ test('default instructions require executable code verification and repair', () 
   assert.match(DEFAULT_INSTRUCTIONS, /never use \[\[ \.\.\. \]\], =~, arrays, or C-style/i);
   assert.match(DEFAULT_INSTRUCTIONS, /run "sh -n ABSOLUTE_PATH"/i);
   assert.match(DEFAULT_INSTRUCTIONS, /execute them with representative arguments/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /jq, rg, git, curl/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /vmproject import\/export/i);
   assert.match(DEFAULT_INSTRUCTIONS, /both "time qjs FILE" and "time vmjs < FILE"/i);
   assert.match(DEFAULT_INSTRUCTIONS, /each command's exit code and output/i);
   assert.match(DEFAULT_INSTRUCTIONS, /report the total elapsed time measured for each runtime/i);
