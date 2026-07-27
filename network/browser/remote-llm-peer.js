@@ -114,25 +114,16 @@ export class RemoteLlmPeer extends EventTarget {
     if (!client) throw new Error('agent WebGPU LLM is not ready');
     this.activity('prompt submitted to agent LLM', { kind: 'llm', direction: 'in', id, content: prompt });
     const body = { messages: [{ role: 'user', content: prompt }] };
-    let streamedContent = '';
-    let completion = client.chatStream
-      ? await client.chatStream(body, delta => {
-          streamedContent += delta || '';
-          connection.send({ type: 'llm.chunk', id, delta });
-        })
-      : await client.chat(body);
-    // Some LiteRT/model combinations can terminate a streaming conversation
-    // with padding before producing visible text. Retry through the stable
-    // non-streaming path rather than returning a blank response to the phone.
-    if (client.chatStream && !streamedContent.trim() && client.chat) {
-      this.activity('empty model stream — retrying without streaming', { kind: 'llm', direction: 'in', id });
-      completion = await client.chat(body);
-    }
-    const content = streamedContent || completion?.choices?.[0]?.message?.content || '';
+    // Use the same serialized, non-streaming LiteRT path as the terminal
+    // agents. Cancelling a padding-loop stream can leave some WebGPU backends
+    // unable to generate the immediate retry, which appeared blank on phones.
+    const completion = await client.chat(body);
+    const content = completion?.choices?.[0]?.message?.content || '';
+    if (!content.trim()) throw new Error('the AI model returned an empty response');
     const response = { type: 'llm.result', id, content };
     this.seen.set(id, response);
     if (this.seen.size > 256) this.seen.delete(this.seen.keys().next().value);
-    connection.send(client.chatStream && streamedContent ? { type: 'llm.done', id } : response);
+    connection.send(response);
     this.activity('LLM response sent to phone', { kind: 'traffic', direction: 'out', id, content });
   }
 
