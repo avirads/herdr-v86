@@ -8,8 +8,11 @@ automatically.
 The main page revalidates its versioned VM image URL at boot. If the hosted
 image is not newer, the browser loads the existing local HTTP-cache entry.
 Change `DISK_VERSION` in `index.html` whenever `vm-network-ext4.img` changes.
-The boot overlay reports whether it is loading the VM from the local cache or
-downloading it from the remote host.
+After a VM version boots successfully, the page records that version locally.
+Every long-lived startup message then includes `[local cache]` for that same
+version or `[remote]` for a new version. The source is not inferred from a
+one-byte Range cache probe because browsers do not reliably expose cached
+partial responses through `only-if-cached`.
 
 This is the canonical command reference for gateway-free services in the
 VM guest. These tools communicate with JavaScript in the hosting browser;

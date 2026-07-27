@@ -385,10 +385,13 @@ function setBootProgress(value, message) {
   if (message) bootMessage.textContent = message;
 }
 const bootTicker = setInterval(() => {
-  if (bootProgress < 90) setBootProgress(bootProgress + 1, "Starting VM…");
+  if (bootProgress < 90) {
+    setBootProgress(bootProgress + 1, `Starting VM [${vmImageSource}]…`);
+  }
 }, 700);
 function finishBoot() {
   clearInterval(bootTicker);
+  localStorage.setItem("vm.diskVersion", DISK_VERSION);
   bootOverlay.classList.remove("error");
   setBootProgress(100, "Ready");
   status("Setup required");
@@ -410,26 +413,13 @@ const DISK_VERSION = "vm-shell-38-dev-tools";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
-
-async function hasCachedDiskRange() {
-  try {
-    const response = await fetch(diskURL, {
-      headers: { Range: "bytes=0-0" },
-      cache: "only-if-cached",
-      mode: "same-origin",
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
+const vmImageSource = localStorage.getItem("vm.diskVersion") === DISK_VERSION
+  ? "local cache"
+  : "remote";
 
 async function rangePreflight() {
-  const localDiskAvailable = await hasCachedDiskRange();
   try {
-    const sourceMessage = localDiskAvailable
-      ? "Checking local VM image…"
-      : "Checking remote VM image…";
+    const sourceMessage = `Checking VM [${vmImageSource}]…`;
     setBootProgress(3, sourceMessage);
     status(sourceMessage.toLowerCase());
     const response = await fetch(diskURL, {
@@ -442,11 +432,10 @@ async function rangePreflight() {
     const contentRange = response.headers.get("content-range") || "";
     const valid = response.status === 206 && contentRange === `bytes 0-0/${DISK_SIZE}`;
     await response.arrayBuffer();
-    const loadingMessage = localDiskAvailable
-      ? "Loading VM from local cache…"
-      : "Downloading VM from remote…";
-    setBootProgress(8, valid ? loadingMessage : "Preparing compatibility boot from remote…");
-    status(valid ? loadingMessage.toLowerCase() : "preparing compatibility boot from remote…");
+    const loadingMessage = `Starting VM [${vmImageSource}]…`;
+    const compatibilityMessage = `Preparing compatibility boot [${vmImageSource}]…`;
+    setBootProgress(8, valid ? loadingMessage : compatibilityMessage);
+    status((valid ? loadingMessage : compatibilityMessage).toLowerCase());
     return valid;
   } catch {
     return false;
@@ -455,7 +444,7 @@ async function rangePreflight() {
 
 if (!compatibilityBoot && !await rangePreflight()) {
   compatibilityBoot = true;
-  status("Range delivery unavailable — using compatibility boot");
+  status(`Range delivery unavailable — compatibility boot [${vmImageSource}]`);
 }
 
 const term = new Terminal({
@@ -601,7 +590,9 @@ new ResizeObserver(scheduleTerminalFit).observe(document.getElementById("term"))
 window.addEventListener("resize", scheduleTerminalFit, { passive: true });
 requestAnimationFrame(() => requestAnimationFrame(fitTerminal));
 
-if (compatibilityBoot) status("compatibility boot — downloading full 96 MiB disk…");
+if (compatibilityBoot) {
+  status(`compatibility boot [${vmImageSource}] — loading full 96 MiB disk…`);
+}
 const emulator = new V86({
   wasm_path: "v86-network.wasm",
   memory_size: 512 * 1024 * 1024,
@@ -1273,7 +1264,9 @@ if (gatewayURL && sessionToken) {
 }
 
 emulator.add_listener("emulator-ready", () => {
-  setBootProgress(28, compatibilityBoot ? "Starting compatibility boot…" : "Starting VM…");
+  setBootProgress(28, compatibilityBoot
+    ? `Starting compatibility boot [${vmImageSource}]…`
+    : `Starting VM [${vmImageSource}]…`);
   status(`emulator ready — booting${compatibilityBoot ? " in compatibility mode" : ""}… (first boot ~30-90s)`);
 });
 emulator.add_listener("download-progress", (e) => {
@@ -1312,7 +1305,11 @@ function serialHasShellPrompt(output) {
   return /(?:^|\n)[^\n]{0,200}[#$] $/.test(plain);
 }
 emulator.add_listener("serial0-output-byte", (byte) => {
-  if (!gotSerial) { gotSerial = true; setBootProgress(68, "Starting VM…"); status("VM booting — output live"); }
+  if (!gotSerial) {
+    gotSerial = true;
+    setBootProgress(68, `Starting VM [${vmImageSource}]…`);
+    status(`VM booting [${vmImageSource}] — output live`);
+  }
   writeSerialByte(byte);
   if (!compatibilityBoot && !compatibilityRestartScheduled) {
     diskErrorOutput = (diskErrorOutput + String.fromCharCode(byte)).slice(-256);
