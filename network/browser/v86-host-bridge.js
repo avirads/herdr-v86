@@ -33,6 +33,7 @@ export class V86HostBridge extends EventTarget {
     this.lines = ["", ""];
     this.replyChannels = new Map();
     this.handledAgentRequests = new Set();
+    this.pendingAgentRequests = [];
     this.sendQueue = Promise.resolve();
     this.ackWaiters = new Map();
     this.onByte0 = byte => this.consumeByte(byte, 0);
@@ -107,18 +108,28 @@ export class V86HostBridge extends EventTarget {
     if (operation === "LLM_OPENAI") return this.llm(id, "openai", fields[0]);
     if (operation === "EVAL") return this.eval(id, fields[0]);
     if (operation.startsWith("AGENT_")) {
-      if (!this.agentHandler) throw new Error("vmlang is still initializing");
-      if (this.handledAgentRequests.has(id)) return;
-      this.handledAgentRequests.add(id);
-      if (this.handledAgentRequests.size > 128) this.handledAgentRequests.delete(this.handledAgentRequests.values().next().value);
       const command = operation.slice("AGENT_".length).toLowerCase();
       const values = fields.map(value => decodeText(value || ""));
-      this.agentHandler(command, ...values).catch(error => {
-        this.dispatchEvent(new CustomEvent("agent-error", { detail: error }));
-      });
+      if (!this.agentHandler) {
+        if (!this.pendingAgentRequests.some(request => request.id === id)) {
+          this.pendingAgentRequests.push({ id, command, values });
+          if (this.pendingAgentRequests.length > 128) this.pendingAgentRequests.shift();
+        }
+        return;
+      }
+      this.dispatchAgentRequest({ id, command, values });
       return;
     }
     throw new Error(`unsupported host operation: ${operation}`);
+  }
+
+  dispatchAgentRequest({ id, command, values }) {
+    if (this.handledAgentRequests.has(id)) return;
+    this.handledAgentRequests.add(id);
+    if (this.handledAgentRequests.size > 128) this.handledAgentRequests.delete(this.handledAgentRequests.values().next().value);
+    Promise.resolve(this.agentHandler(command, ...values)).catch(error => {
+        this.dispatchEvent(new CustomEvent("agent-error", { detail: error }));
+      });
   }
 
   setLlmClient(client) {
@@ -127,6 +138,9 @@ export class V86HostBridge extends EventTarget {
 
   setAgentHandler(handler) {
     this.agentHandler = handler;
+    for (const request of this.pendingAgentRequests.splice(0)) {
+      this.dispatchAgentRequest(request);
+    }
   }
 
   async llm(id, operation, body64) {

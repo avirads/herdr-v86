@@ -16,6 +16,23 @@ test('host bridge handles each agent RPC request id only once', async () => {
   assert.deepEqual(calls, [['run', 'perform task']]);
 });
 
+test('host bridge replays agent RPC requests received during initialization', async () => {
+  const emulator = {
+    add_listener() {},
+    serial_send_bytes() {},
+  };
+  const calls = [];
+  const bridge = new V86HostBridge(emulator);
+  const prompt = btoa('generate factorial.js');
+
+  await bridge.handle(`AGENT_MASTRA_CODE\trequest-early\t${prompt}`);
+  await bridge.handle(`AGENT_MASTRA_CODE\trequest-early\t${prompt}`);
+  assert.deepEqual(calls, []);
+
+  bridge.setAgentHandler(async (...args) => calls.push(args));
+  assert.deepEqual(calls, [['mastra_code', 'generate factorial.js']]);
+});
+
 test('host bridge formats page-local completions as OpenAI SSE', () => {
   const emulator = { add_listener() {}, serial_send_bytes() {} };
   const bridge = new V86HostBridge(emulator);
