@@ -256032,15 +256032,16 @@ function parseLooseJson(text10) {
   const trimmed = String(text10 ?? "").trim();
   if (!trimmed) return void 0;
   const unfenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] ?? trimmed;
+  const stripped = unfenced.replace(/<tool_call\|>|<tool_result\|>|<\|[a-z_]+\|>$/g, "");
   try {
-    return JSON.parse(unfenced);
+    return JSON.parse(stripped);
   } catch {
   }
-  const start = unfenced.indexOf("{");
-  const end = unfenced.lastIndexOf("}");
+  const start = stripped.indexOf("{");
+  const end = stripped.lastIndexOf("}");
   if (start >= 0 && end > start) {
     try {
-      return JSON.parse(unfenced.slice(start, end + 1));
+      return JSON.parse(stripped.slice(start, end + 1));
     } catch {
     }
   }
@@ -256057,6 +256058,7 @@ function normalizeArguments(value) {
 }
 var TOOL_NAME_KEYS = ["name", "tool", "tool_name", "toolName"];
 var TOOL_ARG_KEYS = ["arguments", "args", "parameters", "input"];
+var TOOL_OBJECT_KEYS = ["tool_call", "toolCall", "function", "final"];
 function extractToolCall(value) {
   if (!value || typeof value !== "object") return void 0;
   const candidate = value.tool_call ?? value.toolCall ?? value.function ?? value;
@@ -256070,6 +256072,16 @@ function extractToolCall(value) {
       )
     );
     if (Object.keys(leftover).length) args = leftover;
+  }
+  if (value !== candidate && typeof value === "object" && !Array.isArray(value)) {
+    const topLevelArgs = Object.fromEntries(
+      Object.entries(value).filter(
+        ([key]) => ![...TOOL_OBJECT_KEYS, ...TOOL_NAME_KEYS, ...TOOL_ARG_KEYS].includes(key)
+      )
+    );
+    if (Object.keys(topLevelArgs).length) {
+      args = { ...typeof args === "object" && args !== null ? args : {}, ...topLevelArgs };
+    }
   }
   return { name: name30, arguments: normalizeArguments(args) };
 }
