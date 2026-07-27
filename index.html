@@ -52,7 +52,14 @@
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   #voice-button.listening { color: #fff; background: #da3633; border-color: #f85149; }
+  #voice-button.loading { color: #f0f6fc; border-color: #58a6ff; }
   #voice-status { font-size: 12px; color: #8b949e; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #voice-progress { box-sizing: border-box; position: fixed; z-index: 800; top: 58px; left: 50%; transform: translateX(-50%); width: min(440px, calc(100vw - 28px)); display: flex; align-items: center; gap: 12px; padding: 12px 14px; color: #f0f6fc; background: #161b22; border: 1px solid #58a6ff; border-radius: 8px; box-shadow: 0 8px 30px rgb(0 0 0 / .45); }
+  #voice-progress[hidden] { display: none; }
+  #voice-progress.error { border-color: #f85149; }
+  #voice-progress strong { display: block; margin-bottom: 2px; }
+  #voice-progress-message { display: block; color: #c9d1d9; font-size: 12px; line-height: 1.35; }
+  #voice-progress.error .spinner { display: none; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
   .tool-link { color: #58a6ff; align-self: center; font-size: 12px; white-space: nowrap; }
   dialog { color: #c9d1d9; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 18px; width: min(420px, calc(100vw - 48px)); }
@@ -83,6 +90,7 @@
     header h1 { flex: 1 1 auto; font-size: 14px; }
     #status { order: 3; flex: 1 0 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #llm-status, #browser-status, #voice-status { display: none; }
+    #voice-progress { top: auto; bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 20px); padding: 14px; }
     #tools { margin-left: 0; }
     #term { padding: 0 4px max(4px, env(safe-area-inset-bottom)); }
     #boot-ring { width: 96px; height: 96px; }
@@ -198,6 +206,13 @@
     <button id="open-settings" title="Reset model or AutoBro configuration">Settings</button>
   </div>
 </header>
+<div id="voice-progress" role="status" aria-live="assertive" aria-atomic="true" hidden>
+  <span class="spinner" aria-hidden="true"></span>
+  <div>
+    <strong id="voice-progress-title">Preparing voice input</strong>
+    <span id="voice-progress-message">Loading Moonshine Tiny…</span>
+  </div>
+</div>
 <dialog id="settings-dialog">
   <h2>Settings</h2>
   <div class="settings-action">
@@ -761,6 +776,9 @@ const voiceStatus = message => {
   document.getElementById("voice-button").title = "Local Moonshine voice input — " + message;
 };
 const voiceButton = document.getElementById("voice-button");
+const voiceProgress = document.getElementById("voice-progress");
+const voiceProgressTitle = document.getElementById("voice-progress-title");
+const voiceProgressMessage = document.getElementById("voice-progress-message");
 const voiceMode = document.getElementById("voice-mode");
 voiceMode.value = localStorage.getItem("vm.voiceMode") === "execute" ? "execute" : "dictate";
 voiceMode.onchange = () => localStorage.setItem("vm.voiceMode", voiceMode.value);
@@ -769,6 +787,22 @@ function setVoiceListening(listening) {
   voiceButton.classList.toggle("listening", listening);
   voiceButton.textContent = listening ? "■ Stop" : "🎙 Voice";
   voiceButton.setAttribute("aria-pressed", String(listening));
+}
+function showVoiceProgress(message, { error = false } = {}) {
+  voiceProgress.hidden = false;
+  voiceProgress.classList.toggle("error", error);
+  voiceProgressTitle.textContent = error ? "Voice input unavailable" : "Preparing voice input";
+  voiceProgressMessage.textContent = message;
+  voiceButton.classList.toggle("loading", !error);
+  voiceButton.setAttribute("aria-busy", String(!error));
+  if (!voiceListening) voiceButton.textContent = error ? "🎙 Voice" : "Loading voice…";
+}
+function hideVoiceProgress() {
+  voiceProgress.hidden = true;
+  voiceProgress.classList.remove("error");
+  voiceButton.classList.remove("loading");
+  voiceButton.setAttribute("aria-busy", "false");
+  if (!voiceListening) voiceButton.textContent = "🎙 Voice";
 }
 async function createVoiceTranscriber() {
   if (!isSecureContext || !navigator.mediaDevices?.getUserMedia)
@@ -780,11 +814,18 @@ async function createVoiceTranscriber() {
   Moonshine.Settings.BASE_ASSET_PATH.ONNX_RUNTIME = assetRoot + "ort/";
   Moonshine.Settings.BASE_ASSET_PATH.SILERO_VAD = assetRoot + "vad/";
   return new Moonshine.Transcriber("model/tiny", {
-    onModelLoadStarted() { voiceStatus("loading local model…"); },
-    onModelLoaded() { voiceStatus("model ready"); },
+    onModelLoadStarted() {
+      voiceStatus("loading local model…");
+      showVoiceProgress("Downloading and loading Moonshine Tiny. The first load is about 42 MiB.");
+    },
+    onModelLoaded() {
+      voiceStatus("model ready");
+      showVoiceProgress("Voice model ready. Preparing microphone access…");
+    },
     onTranscribeStarted() {
       setVoiceListening(true);
       voiceStatus("listening…");
+      hideVoiceProgress();
     },
     onSpeechStart() { voiceStatus("hearing speech…"); },
     onSpeechEnd() { voiceStatus("transcribing…"); },
@@ -798,15 +839,18 @@ async function createVoiceTranscriber() {
     onError(error) {
       setVoiceListening(false);
       voiceStatus("error — " + String(error));
+      showVoiceProgress(String(error), { error: true });
     },
   });
 }
 async function startVoiceInput() {
   if (agentBusy) return voiceStatus("wait for vmlang to finish");
   voiceButton.disabled = true;
+  showVoiceProgress("Loading Moonshine Tiny. The first load is about 42 MiB.");
   try {
     voiceTranscriber = await createVoiceTranscriber();
     voiceStatus("allow microphone access…");
+    showVoiceProgress("Voice model loaded. Allow microphone access to start listening.");
     const stream = await navigator.mediaDevices.getUserMedia({ audio: {
       channelCount: 1,
       echoCancellation: true,
@@ -815,10 +859,12 @@ async function startVoiceInput() {
       sampleRate: 16000,
     }});
     voiceTranscriber.attachStream(stream);
+    showVoiceProgress("Starting local speech recognition…");
     await voiceTranscriber.start();
   } catch (error) {
     setVoiceListening(false);
     voiceStatus("unavailable — " + error.message);
+    showVoiceProgress(error.message, { error: true });
   } finally {
     voiceButton.disabled = false;
   }
@@ -828,6 +874,7 @@ function stopVoiceInput() {
   voiceTranscriber?.mediaStream?.getTracks?.().forEach(track => track.stop());
   voiceTranscriber = null;
   setVoiceListening(false);
+  hideVoiceProgress();
   voiceStatus("ready");
   term.focus();
 }
