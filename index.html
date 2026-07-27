@@ -1347,7 +1347,9 @@ emulator.add_listener("serial0-output-byte", (byte) => {
     if (serialHasShellPrompt(recentOutput)) {
       sttySent = true;
       fitTerminal();
-      for (const ch of `stty rows ${term.rows} cols ${term.cols}\n`) emulator.serial0_send(ch);
+      for (const ch of `stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project && cd /root/project\n`) {
+        emulator.serial0_send(ch);
+      }
       finishBoot();
     }
   }
