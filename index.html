@@ -71,6 +71,13 @@
   .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   .settings-action { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 12px 0; border-top: 1px solid #30363d; }
   .settings-action small, #settings-dialog p { color: #8b949e; }
+  .provider-settings { display: grid; gap: 10px; margin-bottom: 14px; }
+  .provider-section { padding: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 7px; }
+  .provider-section h3 { margin: 0 0 4px; font-size: 14px; color: #f0f6fc; }
+  .provider-section > small { display: block; color: #8b949e; line-height: 1.4; }
+  .provider-actions { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .provider-actions label { flex: 1 1 180px; margin: 0; }
+  .provider-actions button { flex: 0 0 auto; }
   #remote-dialog { width: min(560px, calc(100vw - 32px)); }
   #remote-status { display: flex; align-items: center; gap: 8px; }
   .spinner { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin .8s linear infinite; }
@@ -104,6 +111,8 @@
     dialog { box-sizing: border-box; max-height: calc(100dvh - 24px); overflow-y: auto; width: calc(100vw - 24px); padding: 16px; }
     .settings-action { align-items: stretch; flex-direction: column; gap: 8px; }
     .settings-action button { width: 100%; }
+    .provider-actions { align-items: stretch; flex-direction: column; }
+    .provider-actions label, .provider-actions button { box-sizing: border-box; width: 100%; }
     .role-options { grid-template-columns: 1fr; }
     .role-card { min-height: 145px; }
   }
@@ -215,6 +224,41 @@
 </div>
 <dialog id="settings-dialog">
   <h2>Settings</h2>
+  <div class="provider-settings">
+    <section class="provider-section" aria-labelledby="ai-model-settings-title">
+      <h3 id="ai-model-settings-title">AI Model</h3>
+      <small>Load a LiteRT-LM model into this browser or clear all cached models.</small>
+      <div class="provider-actions">
+        <label id="cached-model-row" hidden>Loaded model
+          <select id="cached-model-select" aria-label="Loaded AI model"></select>
+        </label>
+        <button id="configure-llm-later" type="button">Load</button>
+        <button id="reset-llm" type="button">Reset</button>
+      </div>
+    </section>
+    <section class="provider-section" aria-labelledby="autobro-settings-title">
+      <h3 id="autobro-settings-title">AutoBro</h3>
+      <small>Connect browser automation or forget the current pairing.</small>
+      <div class="provider-actions">
+        <button id="configure-autobro-later" type="button">Connect</button>
+        <button id="reset-autobro" type="button">Reset</button>
+      </div>
+    </section>
+    <section class="provider-section" aria-labelledby="voice-settings-title">
+      <h3 id="voice-settings-title">Voice</h3>
+      <small>Load Moonshine Tiny locally for microphone transcription.</small>
+      <div class="provider-actions">
+        <label>After transcription
+          <select id="voice-mode">
+            <option value="dictate">Insert at prompt</option>
+            <option value="execute">Run as command</option>
+          </select>
+        </label>
+        <button id="load-voice" type="button">Load</button>
+        <button id="reset-voice" type="button">Reset</button>
+      </div>
+    </section>
+  </div>
   <div class="settings-action">
     <div><strong>Import file</strong><br><small>Copy a file from this device into the VM.</small></div>
     <button id="import-file" type="button">Import file</button>
@@ -234,30 +278,6 @@
   <div class="settings-action">
     <div><strong>Remote agent</strong><br><small>Run this model as an agent or chat with a paired agent over WebRTC.</small></div>
     <button id="open-remote" type="button">Remote access</button>
-  </div>
-  <div class="settings-action">
-    <div><strong>Configure providers</strong><br><small>Configure the browser model or connect AutoBro after skipping setup.</small></div>
-    <button id="configure-llm-later" type="button">Configure model</button>
-    <button id="configure-autobro-later" type="button">Connect AutoBro</button>
-  </div>
-  <div class="settings-action">
-    <div><strong>Local voice input</strong><br><small>Moonshine Tiny transcribes the microphone locally in this browser.</small></div>
-    <label>After transcription
-      <select id="voice-mode">
-        <option value="dictate">Insert at prompt</option>
-        <option value="execute">Run as command</option>
-      </select>
-    </label>
-    <button id="reset-voice" type="button">Reset voice</button>
-  </div>
-  <p>Resetting a provider returns the app to the corresponding setup-wizard step.</p>
-  <div class="settings-action">
-    <div><strong>Local AI model</strong><br><small>Unload and delete cached model files from this browser.</small></div>
-    <button id="reset-llm" type="button">Reset model</button>
-  </div>
-  <div class="settings-action">
-    <div><strong>AutoBro</strong><br><small>Disconnect and forget the extension ID and pairing token.</small></div>
-    <button id="reset-autobro" type="button">Reset AutoBro</button>
   </div>
   <div class="dialog-actions"><button id="close-settings" type="button">Close</button></div>
 </dialog>
@@ -1054,7 +1074,10 @@ async function renderRemoteQr(url) {
     container.hidden = true; // QR is a convenience; the pairing key field above still works
   }
 }
-document.getElementById("open-settings").onclick = () => settingsDialog.showModal();
+document.getElementById("open-settings").onclick = () => {
+  settingsDialog.showModal();
+  refreshCachedModelSelect().catch(error => llmStatus("could not list cached models — " + error.message));
+};
 document.getElementById("close-settings").onclick = () => settingsDialog.close();
 document.getElementById("open-remote").onclick = openRemoteDialog;
 document.getElementById("setup-connect-remote").onclick = () => { location.href = "remote.html"; };
@@ -1119,9 +1142,45 @@ function skipSetupAndOpenShell() {
   status("Shell ready — providers can be configured in Settings");
   term.focus();
 }
-document.getElementById("configure-llm-later").onclick = () => openSetupStep("llm");
+document.getElementById("configure-llm-later").onclick = () => llmFileInput.click();
 document.getElementById("configure-autobro-later").onclick = () => openSetupStep("autobro");
+document.getElementById("load-voice").onclick = () => {
+  settingsDialog.close();
+  startVoiceInput();
+};
 document.getElementById("skip-setup-llm").onclick = skipSetupAndOpenShell;
+async function refreshCachedModelSelect() {
+  const row = document.getElementById("cached-model-row");
+  const select = document.getElementById("cached-model-select");
+  const names = await webGpuLlmClient?.cachedModelNames?.() || [];
+  select.replaceChildren(...names.map(name => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    return option;
+  }));
+  if (names.includes(webGpuLlmClient?.modelName)) select.value = webGpuLlmClient.modelName;
+  row.hidden = names.length < 2;
+}
+document.getElementById("cached-model-select").onchange = async event => {
+  const select = event.currentTarget;
+  const name = select.value;
+  if (!name || name === webGpuLlmClient?.modelName) return;
+  select.disabled = true;
+  llmStatus(`loading ${name}`);
+  try {
+    await webGpuLlmClient.loadCachedModel(name);
+    llmReady = true;
+    vmAgentController?.resetHarness();
+    document.getElementById("setup-llm-status").textContent = `Ready — ${name}`;
+    await refreshCachedModelSelect();
+  } catch (error) {
+    llmStatus("model switch failed — " + error.message);
+    await refreshCachedModelSelect();
+  } finally {
+    select.disabled = false;
+  }
+};
 document.getElementById("reset-llm").onclick = async () => {
   if (!confirm("Reset the local AI model and delete its cached model files from this browser?")) return;
   const button = document.getElementById("reset-llm");
@@ -1133,6 +1192,7 @@ document.getElementById("reset-llm").onclick = async () => {
     vmAgentController?.resetHarness();
     llmStatus("reset — configure a model");
     document.getElementById("setup-llm-status").textContent = "Choose a .litertlm or .task model file.";
+    await refreshCachedModelSelect();
     settingsDialog.close();
     returnToSetup();
   } catch (error) {
@@ -1217,6 +1277,7 @@ try {
     llmReady = Boolean(result.modelName);
     llmCheckComplete = true;
     document.getElementById("setup-llm-status").textContent = result.modelName ? `Ready — ${result.modelName}` : "Choose a .litertlm or .task model file.";
+    refreshCachedModelSelect().catch(error => llmStatus("could not list cached models — " + error.message));
     updateSetupWizard();
   }).catch(error => {
     llmStatus("unavailable — " + error.message);
@@ -1235,6 +1296,7 @@ try {
       llmReady = true;
       requestedSetupStep = null;
       document.getElementById("setup-llm-status").textContent = `Ready — ${client.modelName}`;
+      await refreshCachedModelSelect();
       updateSetupWizard();
     } catch (error) {
       llmStatus("error — " + error.message);
