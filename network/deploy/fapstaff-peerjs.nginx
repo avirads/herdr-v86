@@ -12,6 +12,8 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     server_name fapstaff.com;
+    root /var/www/herdr-v86/current;
+    index index.html;
 
     ssl_certificate /etc/letsencrypt/live/fapstaff.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/fapstaff.com/privkey.pem;
@@ -32,7 +34,17 @@ server {
         proxy_buffering off;
     }
 
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+        try_files $uri =404;
+    }
+
+    location = /service-worker.js {
+        add_header Cache-Control "no-cache";
+        try_files $uri =404;
+    }
+
     location / {
-        return 404;
+        try_files $uri $uri/ =404;
     }
 }
