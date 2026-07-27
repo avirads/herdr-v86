@@ -23,6 +23,8 @@ export const DEFAULT_INSTRUCTIONS = [
   'You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.',
   'Workspace paths are ABSOLUTE and rooted at the project directory: use "/README.md", never "README.md" or "./README.md".',
   'The shell runs BusyBox sh, so prefer portable POSIX commands over bash-isms or GNU-only flags.',
+  'For shell scripts, use only POSIX/BusyBox sh syntax: never use [[ ... ]], =~, arrays, or C-style for (( ... )) loops.',
+  'Write generated shell scripts to an absolute workspace path, make them executable, run "sh -n ABSOLUTE_PATH", and execute them with representative arguments.',
   'Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read.',
   'After creating or editing executable code, run it or an appropriate syntax checker and inspect the exit code and output.',
   'After creating or editing JavaScript, test the completed file with both "time qjs FILE" and "time vmjs < FILE"; inspect each command\'s exit code and output, and report the total elapsed time measured for each runtime.',

@@ -114,6 +114,7 @@ test('injects the protocol into an existing system message', async () => {
   assert.match(sent.content, /^be brief/);
   assert.match(sent.content, /tool_call/);
   assert.match(sent.content, /vmfetch/);
+  assert.match(sent.content, /put every tool parameter inside "arguments"/i);
 });
 
 test('toolChoice none suppresses the protocol entirely', async () => {

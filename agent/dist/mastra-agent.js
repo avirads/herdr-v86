@@ -256026,6 +256026,7 @@ You MUST call the tool "${toolChoice.toolName}" on this turn.` : toolChoice?.typ
 You have tools. Work one step at a time. Reply with exactly ONE JSON object and no prose, no markdown fences:
 {"tool_call":{"name":"TOOL_NAME","arguments":{...}}}   to call a tool
 {"final":"your answer"}                                 when you are done
+Always put every tool parameter inside "arguments"; never place path, content, or command beside "name".
 Available tools: ${JSON.stringify(catalog)}${forced}`;
 }
 function parseLooseJson(text10) {
@@ -257167,6 +257168,8 @@ var DEFAULT_INSTRUCTIONS = [
   "You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.",
   'Workspace paths are ABSOLUTE and rooted at the project directory: use "/README.md", never "README.md" or "./README.md".',
   "The shell runs BusyBox sh, so prefer portable POSIX commands over bash-isms or GNU-only flags.",
+  "For shell scripts, use only POSIX/BusyBox sh syntax: never use [[ ... ]], =~, arrays, or C-style for (( ... )) loops.",
+  'Write generated shell scripts to an absolute workspace path, make them executable, run "sh -n ABSOLUTE_PATH", and execute them with representative arguments.',
   "Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read.",
   "After creating or editing executable code, run it or an appropriate syntax checker and inspect the exit code and output.",
   `After creating or editing JavaScript, test the completed file with both "time qjs FILE" and "time vmjs < FILE"; inspect each command's exit code and output, and report the total elapsed time measured for each runtime.`,

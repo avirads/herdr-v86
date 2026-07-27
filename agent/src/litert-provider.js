@@ -108,6 +108,7 @@ export function toolProtocolInstruction(tools, toolChoice) {
     'object and no prose, no markdown fences:\n' +
     '{"tool_call":{"name":"TOOL_NAME","arguments":{...}}}   to call a tool\n' +
     '{"final":"your answer"}                                 when you are done\n' +
+    'Always put every tool parameter inside "arguments"; never place path, content, or command beside "name".\n' +
     `Available tools: ${JSON.stringify(catalog)}${forced}`
   );
 }

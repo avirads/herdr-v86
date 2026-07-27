@@ -50,6 +50,9 @@ test('requires both a guest and an llm client', () => {
 test('default instructions require executable code verification and repair', () => {
   assert.match(DEFAULT_INSTRUCTIONS, /run it or an appropriate syntax checker/i);
   assert.match(DEFAULT_INSTRUCTIONS, /inspect the exit code and output/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /never use \[\[ \.\.\. \]\], =~, arrays, or C-style/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /run "sh -n ABSOLUTE_PATH"/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /execute them with representative arguments/i);
   assert.match(DEFAULT_INSTRUCTIONS, /both "time qjs FILE" and "time vmjs < FILE"/i);
   assert.match(DEFAULT_INSTRUCTIONS, /each command's exit code and output/i);
   assert.match(DEFAULT_INSTRUCTIONS, /report the total elapsed time measured for each runtime/i);
