@@ -85,7 +85,7 @@
   .about-versions { display: grid; grid-template-columns: max-content 1fr; gap: 5px 12px; margin: 10px 0 0; font-size: 12px; }
   .about-versions dt { color: #8b949e; }
   .about-versions dd { margin: 0; color: #c9d1d9; overflow-wrap: anywhere; }
-  #diagnostics-output { box-sizing: border-box; max-height: 180px; overflow: auto; margin: 10px 0 0; padding: 9px; color: #c9d1d9; background: #090c10; border: 1px solid #30363d; border-radius: 5px; font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #diagnostics-status { min-height: 1.4em; margin: 8px 0 0; color: #8b949e; font-size: 12px; }
   #remote-dialog { width: min(560px, calc(100vw - 32px)); }
   #remote-status { display: flex; align-items: center; gap: 8px; }
   .spinner { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin .8s linear infinite; }
@@ -317,10 +317,9 @@
   <section class="provider-section" aria-labelledby="diagnostics-settings-title">
     <h3 id="diagnostics-settings-title">Diagnostics</h3>
     <small>Local capability and runtime metrics only. Project files, prompts, and pairing credentials are excluded.</small>
-    <pre id="diagnostics-output" aria-live="polite">Open Settings to collect diagnostics.</pre>
+    <div id="diagnostics-status" role="status" aria-live="polite"></div>
     <div class="provider-actions">
-      <button id="refresh-diagnostics" type="button">Refresh</button>
-      <button id="download-diagnostics" type="button">Download JSON</button>
+      <button id="copy-diagnostics" type="button">Copy diagnostics</button>
     </div>
   </section>
   <div class="dialog-actions"><button id="close-settings" type="button">Close</button></div>
@@ -494,7 +493,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.5";
+const APP_VERSION = "2026.07.27.6";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
 document.getElementById("about-app-version").textContent = APP_VERSION;
@@ -1121,7 +1120,6 @@ async function renderRemoteQr(url) {
     container.hidden = true; // QR is a convenience; the pairing key field above still works
   }
 }
-let latestDiagnostics = null;
 async function collectGpuDiagnostics() {
   if (!navigator.gpu) return { available: false };
   try {
@@ -1222,33 +1220,24 @@ async function collectDiagnostics() {
     },
   };
 }
-async function refreshDiagnostics() {
-  const output = document.getElementById("diagnostics-output");
-  output.textContent = "Collecting browser and runtime metrics…";
+document.getElementById("copy-diagnostics").onclick = async () => {
+  const button = document.getElementById("copy-diagnostics");
+  const output = document.getElementById("diagnostics-status");
+  button.disabled = true;
+  output.textContent = "Collecting diagnostics…";
   try {
-    latestDiagnostics = await collectDiagnostics();
-    output.textContent = JSON.stringify(latestDiagnostics, null, 2);
+    const diagnostics = await collectDiagnostics();
+    await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2) + "\n");
+    output.textContent = "Diagnostics copied to clipboard.";
   } catch (error) {
-    latestDiagnostics = null;
-    output.textContent = "Diagnostics failed: " + error.message;
+    output.textContent = "Could not copy diagnostics: " + error.message;
+  } finally {
+    button.disabled = false;
   }
-}
+};
 document.getElementById("open-settings").onclick = () => {
   settingsDialog.showModal();
   refreshCachedModelSelect().catch(error => llmStatus("could not list cached models — " + error.message));
-  refreshDiagnostics();
-};
-document.getElementById("refresh-diagnostics").onclick = refreshDiagnostics;
-document.getElementById("download-diagnostics").onclick = async () => {
-  if (!latestDiagnostics) await refreshDiagnostics();
-  if (!latestDiagnostics) return;
-  const blob = new Blob([JSON.stringify(latestDiagnostics, null, 2) + "\n"], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `herdr-v86-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 document.getElementById("close-settings").onclick = () => settingsDialog.close();
 document.getElementById("open-remote").onclick = openRemoteDialog;

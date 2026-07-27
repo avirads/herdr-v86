@@ -10,8 +10,9 @@ test('Settings contains About version information and Diagnostics controls', () 
   assert.match(html, /id="about-app-version"/);
   assert.match(html, /id="about-vm-version"/);
   assert.match(html, /<h3 id="diagnostics-settings-title">Diagnostics<\/h3>/);
-  assert.match(html, /id="refresh-diagnostics"[^>]*>Refresh</);
-  assert.match(html, /id="download-diagnostics"[^>]*>Download JSON</);
+  assert.match(html, /id="copy-diagnostics"[^>]*>Copy diagnostics</);
+  assert.match(html, /id="diagnostics-status" role="status" aria-live="polite"/);
+  assert.doesNotMatch(html, /id="diagnostics-output"|id="download-diagnostics"|id="refresh-diagnostics"/);
 });
 
 test('diagnostics capture useful local metrics and exclude sensitive content', () => {
@@ -25,13 +26,14 @@ test('diagnostics capture useful local metrics and exclude sensitive content', (
     'vmImageSource',
   ]) assert.ok(html.includes(signal), `missing diagnostic signal: ${signal}`);
   assert.match(html, /Project files, prompts, and pairing credentials are excluded/);
-  const collector = html.slice(html.indexOf('async function collectDiagnostics()'), html.indexOf('async function refreshDiagnostics()'));
+  const collectorStart = html.indexOf('async function collectDiagnostics()');
+  const collector = html.slice(collectorStart, html.indexOf('document.getElementById("copy-diagnostics")', collectorStart));
   assert.doesNotMatch(collector, /autobroPairingToken|setup-autobro-token|agentInput|remoteKey/);
 });
 
-test('diagnostics download is a local JSON file', () => {
-  assert.match(html, /new Blob\(\[JSON\.stringify\(latestDiagnostics, null, 2\)/);
-  assert.match(html, /type: "application\/json"/);
-  assert.match(html, /herdr-v86-diagnostics-/);
-  assert.match(html, /URL\.revokeObjectURL\(url\)/);
+test('diagnostics are collected on demand and copied without being displayed', () => {
+  assert.match(html, /const diagnostics = await collectDiagnostics\(\)/);
+  assert.match(html, /navigator\.clipboard\.writeText\(JSON\.stringify\(diagnostics, null, 2\)/);
+  assert.match(html, /Diagnostics copied to clipboard\./);
+  assert.doesNotMatch(html, /new Blob\(\[JSON\.stringify\(latestDiagnostics/);
 });
