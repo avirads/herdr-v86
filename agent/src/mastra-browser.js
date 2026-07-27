@@ -142,7 +142,16 @@ export function createMastraVMAgent({
   // whatever it printed: `set -e` is prepended, so a command failing halfway
   // exits non-zero instead of reporting partial output as success. That turns
   // the exit code into a signal worth branching on, which is what lets
-  // run({ batchFirst: true }) fall back safely.
+  // run({ batchFirst: true }) fall back.
+  //
+  // Know exactly how far that guarantee reaches. Measured on real weights
+  // across eight one-script tasks: 7 worked, 1 was wrong, and `set -e` caught
+  // ZERO — because a small model's characteristic failure is not a crash but
+  // a plausible script that exits 0 doing the wrong thing (asked to put
+  // `uname -m` in a file, it wrote `printf "uname -m\n" > ARCH.txt`). The
+  // fallback covers crashes. It does not make batch mode's answers
+  // trustworthy, which is why this is an opt-in verb and why callers must
+  // still verify by side effect.
   const runBatch = async (task) => {
     const completion = await llmClient.chat({
       model: llmClient.modelName || 'webgpu',

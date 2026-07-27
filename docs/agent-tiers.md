@@ -136,19 +136,44 @@ batch` and `rig --codeact` instead spend one model call on a single shell
 script and one round-trip running it — **3.5× faster than the tool loop**,
 which is far more than anything left to win inside the loop.
 
-The reason batch mode is not the default is the row that says *script failed*.
-A 2B model writes a correct script often enough to be worth trying and not
-often enough to trust. So `vmmastra batch` differs from `rig --codeact` in one
-respect that matters: it prepends `set -e`, so a script that dies halfway exits
-non-zero instead of returning its partial output as if it had succeeded. That
-makes the exit code worth branching on, and the mode falls back to the full
-tool loop when it is not clean.
-
 The trade is priced: **~240 ms lost** on a failed attempt (2778 ms against the
-tool loop's 2537 ms), against **~1800 ms saved** when the script works. It wins
-outright unless the model fails more than about seven times in eight.
-`rig --codeact` has no such fallback — a bad script there returns whatever it
-printed.
+tool loop's 2537 ms), against **~1800 ms saved** when the script works.
+`rig --codeact` has no fallback at all — a bad script there returns whatever
+it printed.
+
+#### What the real model actually does — and why batch is not the default
+
+The numbers above use a scripted model, which measures the plumbing rather
+than the bet. Driving `gemma-4-E2B-it-web` on real WebGPU weights through
+eight one-script tasks, then executing each script against a real guest and
+checking a side effect (`batch-script-quality-e2e.html` → `batch-script-exec-e2e.html`):
+
+| Outcome | Count |
+|---|--:|
+| worked | 7 / 8 |
+| exited non-zero, so batch fell back | **0** |
+| exited **0** with the wrong result | **1** |
+
+**`set -e` caught nothing.** That is the finding that matters. It guards
+against a script that *crashes*, and a small model's characteristic failure
+here is not a crash — it is a plausible script that succeeds at doing the
+wrong thing. Asked to put `uname -m` into a file, the model wrote:
+
+```sh
+printf "uname -m
+" > ARCH.txt
+```
+
+which stores the text of the command instead of running it, and exits 0. The
+fallback cannot see that, and neither can the caller.
+
+So the honest summary is: batch mode is ~3.5× faster and right about seven
+times in eight, its safety net covers crashes only, and the one failure in
+eight was silent. That is why it stays an explicit verb rather than becoming
+the default, and why the operating manual insists on verifying by side effect
+after a batch run. Eight tasks is a small sample and the rate will move with
+the model and the task mix; the qualitative point — that failures do not
+announce themselves — is the durable part.
 
 Enabling Mastra's full 19-tool surface changed round-trips not at all and wall
 clock within noise: **extra tools cost prompt tokens, not latency.** With a

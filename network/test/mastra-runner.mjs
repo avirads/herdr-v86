@@ -68,13 +68,21 @@ const server = createServer((request, response) => {
 server.listen(port);
 
 const profile = mkdtempSync(join(tmpdir(), 'mastra-e2e-'));
+
+// HEADED=1 opens a real window instead of headless. Required for anything that
+// runs actual model weights: headless Chrome exposes navigator.gpu but
+// requestAdapter() returns null, so WebGPU inference cannot run there. It also
+// gets its own fresh profile, which matters because loading the model is a
+// single ~2 GB Blob allocation and fails outright in a tab that is already
+// holding one.
+const headed = process.env.HEADED === '1';
 const browser = spawn(
   chrome,
   [
-    '--headless=new',
+    ...(headed ? [] : ['--headless=new', '--disable-gpu']),
     '--no-sandbox',
-    '--disable-gpu',
     '--enable-unsafe-webgpu',
+    ...(headed ? ['--enable-features=Vulkan', '--no-first-run', '--new-window'] : []),
     `--user-data-dir=${profile}`,
     // PAGE lets the same harness drive either e2e (scripted-model transport
     // test, or the real-LiteRtLmClient variant).

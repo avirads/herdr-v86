@@ -23,11 +23,19 @@ Three tiers share this guest. Measured per-operation cost (`docs/agent-tiers.md`
 | Broadest tool set, or a follow-up conversation | `vmlang 'TASK'` | 1 round-trip per operation, 18 tools, persistent session |
 | Mastra's workspace/planning specifically | `vmmastra 'TASK'` | 5 round-trips on the benchmark task, ~15% faster than `vmlang` |
 
-**Reach for `vmmastra batch` first.** One model call writes one shell script and
-one round-trip runs it, which is ~3.5× faster than any tool loop. It prepends
-`set -e`, so a script that dies partway exits non-zero and the run falls back
-to the full tool loop automatically — you get the speed without the risk of a
-half-finished script reported as success. A failed attempt costs ~240 ms.
+**Reach for `vmmastra batch` first, then check its work.** One model call
+writes one shell script and one round-trip runs it, ~3.5x faster than any tool
+loop. It prepends `set -e`, so a script that *dies* partway exits non-zero and
+the run falls back to the full tool loop automatically. A failed attempt costs
+~240 ms.
+
+**But `set -e` does not catch wrong answers.** Measured on real weights over
+eight tasks: 7 worked, 1 was wrong, and `set -e` caught **none of them** — the
+model's typical mistake is a script that exits 0 having done the wrong thing.
+Asked to put `uname -m` in a file it wrote `printf "uname -m
+" > ARCH.txt`,
+storing the text instead of running the command. Batch mode cannot detect that
+and will report success. Verify by side effect, every time.
 
 Batch mode is not always right: it cannot ask a follow-up question, and a task
 that genuinely needs to look at a file before deciding what to do next is

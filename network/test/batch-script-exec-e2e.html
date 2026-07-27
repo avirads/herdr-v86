@@ -1,0 +1,140 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>batch mode: do the real model's scripts actually work?</title>
+<pre id="serial"></pre>
+<pre id="log"></pre>
+<div id="screen_container"><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+// Phase 2 of measuring batch mode's real fallback rate.
+//
+// batch-script-quality-e2e.html captures what the REAL model writes for a set
+// of tasks; this runs those scripts against a REAL guest exactly the way
+// runBatch does (`set -e` prepended, one round-trip) and then checks a side
+// effect. Two different things are being separated:
+//
+//   exit != 0     -> batch mode detects the failure and falls back. Cheap.
+//   exit 0, wrong -> batch mode returns a confident wrong answer. Expensive,
+//                    and invisible. This is the number that decides whether
+//                    the mode is safe to make the default.
+//
+// The scripts are checked in as data rather than regenerated here, because a
+// 2 GB model and an emulator in one tab is how you run out of memory. Refresh
+// them by re-running phase 1 and pasting its output.
+import { V86HostBridge } from '../browser/v86-host-bridge.js';
+import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+
+const logEl = document.querySelector('#log');
+const steps = [];
+const log = (m) => { steps.push(m); logEl.textContent = steps.join('\n'); };
+
+let serial = '';
+let seeded = false;
+let submitted = false;
+const report = (payload) => {
+  if (submitted) return;
+  submitted = true;
+  return fetch('/__result', { method: 'POST', body: JSON.stringify({ ...payload, steps, serial: serial.slice(-2000) }) });
+};
+setTimeout(() => report({ ok: false, error: 'timed out after 300s' }), 300_000);
+
+// Captured verbatim from gemma-4-E2B-it-web via phase 1, temperature 0.
+const CASES = [
+  { id: 'count-files', script: 'ls -1 | wc -l > COUNT.txt',
+    verify: "test -s COUNT.txt && grep -qE '^[0-9]+$' COUNT.txt" },
+  { id: 'copy-readme', script: 'cp README.md README.bak',
+    verify: 'cmp -s README.md README.bak' },
+  { id: 'arch-note', script: 'printf "uname -m\\n" > ARCH.txt',
+    verify: "test -s ARCH.txt && grep -qE 'i[3-6]86|x86' ARCH.txt" },
+  { id: 'count-lines', script: 'cat README.md | wc -l > LINES.txt',
+    verify: "test -s LINES.txt && grep -qE '^[0-9]+$' LINES.txt" },
+  { id: 'find-md', script: 'find . -type f -name "*.md" -print > MDFILES.txt',
+    verify: "grep -q 'README.md' MDFILES.txt && grep -q 'n.md' MDFILES.txt" },
+  { id: 'upper-readme', script: "cat README.md | tr '[:lower:]' '[:upper:]' > UPPER.txt",
+    verify: "test -s UPPER.txt && grep -q 'HERDR' UPPER.txt" },
+  { id: 'concat', script: 'cat README.md sub/n.md > ALL.txt',
+    verify: "test -s ALL.txt && grep -q 'herdr' ALL.txt" },
+  { id: 'mkdir-move', script: 'mkdir archive\nmv sub/n.md archive/',
+    verify: 'test -f archive/n.md && ! test -f sub/n.md' },
+];
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 512 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet loglevel=4',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+
+const hostBridge = new V86HostBridge(emulator);
+hostBridge.setAgentHandler(async () => {});
+setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
+const guest = new V86GuestAgentClient(emulator, hostBridge);
+
+const exitCodeOf = (response) => {
+  const match = String(response ?? '').match(/^__V86AGENT_EXIT__(\d+)/);
+  return match ? Number(match[1]) : 0;
+};
+
+emulator.add_listener('serial0-output-byte', (byte) => {
+  serial = (serial + String.fromCharCode(byte)).slice(-60000);
+  document.querySelector('#serial').textContent = serial.slice(-1500);
+  if (!seeded && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    seeded = true;
+    emulator.serial0_send('mkdir -p /root/project && echo EXEC_SEEDED\n');
+  }
+  if (seeded && /\r?\nEXEC_SEEDED\r?\n/.test(serial) && !window.__started) {
+    window.__started = true;
+    run().catch((e) => report({ ok: false, error: String(e?.stack || e) }));
+  }
+});
+
+// Fresh project for every case, so one script cannot pass on another's
+// leftovers — mkdir-move deletes sub/n.md, which concat needs.
+const RESET = [
+  'cd /root/project',
+  'rm -rf -- * .[!.]* 2>/dev/null',
+  'mkdir -p sub',
+  "printf 'herdr-v86: linux in a browser tab\\nsecond line\\n' > README.md",
+  "printf 'note\\n' > sub/n.md",
+].join('; ');
+
+async function run() {
+  log('shell ready — running the real model\'s scripts against the real guest');
+  log('');
+  const rows = [];
+  for (const testCase of CASES) {
+    await guest.execute(RESET);
+    // Exactly what runBatch sends.
+    const output = await guest.execute(`cd /root/project; set -e\n${testCase.script}`);
+    const exitCode = exitCodeOf(output);
+    const verified = exitCodeOf(await guest.execute(`cd /root/project; ${testCase.verify}`)) === 0;
+
+    // The three outcomes that matter, and they are not the same outcome.
+    const verdict = exitCode !== 0 ? 'caught' : verified ? 'worked' : 'SILENTLY WRONG';
+    rows.push({ ...testCase, exitCode, verified, verdict });
+    log(`${testCase.id.padEnd(14)} exit=${exitCode}  verified=${String(verified).padEnd(5)}  ${verdict}`);
+  }
+
+  const worked = rows.filter(r => r.verdict === 'worked').length;
+  const caught = rows.filter(r => r.verdict === 'caught').length;
+  const silent = rows.filter(r => r.verdict === 'SILENTLY WRONG').length;
+
+  log('');
+  log(`worked: ${worked}/${rows.length}   caught by set -e: ${caught}   silently wrong: ${silent}`);
+  log(silent
+    ? `${silent} script(s) exited 0 with the wrong result — batch mode cannot detect these.`
+    : 'every failure exited non-zero, so batch mode would have fallen back.');
+
+  // Not an assertion on the model's accuracy — that is what is being measured,
+  // and it will move with the model. The harness fails only if it could not
+  // run the cases at all.
+  await report({ ok: rows.length === CASES.length, checks: { rows, worked, caught, silent, total: rows.length } });
+}
+</script>

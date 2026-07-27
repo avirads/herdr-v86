@@ -1,0 +1,167 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>batch mode: what scripts does the real model actually write?</title>
+<pre id="log">idle</pre>
+<script type="module">
+// Phase 1 of measuring batch mode's real fallback rate.
+//
+// `vmmastra batch` bets that a 2B model can turn a task into one correct shell
+// script. Every number published for it so far came from a scripted model
+// returning a script we wrote ourselves, which measures the plumbing and not
+// the bet. This page asks the REAL model, on real weights, and captures what
+// it emits.
+//
+// It deliberately does not boot v86 — 2 GB of weights plus an emulator in one
+// tab is a needless way to run out of memory, and the same split is used by
+// webgpu-inference-e2e. The scripts captured here are executed against a real
+// guest by batch-script-exec-e2e.html, which runs headless. Splitting the two
+// is what lets each half run where it actually works: real WebGPU needs a
+// headed browser, and the guest does not need a GPU at all.
+//
+// Run this in a real browser window. Poll window.__result.
+const logEl = document.querySelector('#log');
+const steps = [];
+const log = (m) => { steps.push(`${new Date().toISOString().slice(11, 19)} ${m}`); logEl.textContent = steps.join('\n'); };
+window.__steps = steps;
+window.__result = { state: 'idle' };
+
+// Also POST to the harness, so this can run under mastra-runner with HEADED=1
+// rather than being driven by hand. Loading ~2 GB of weights takes minutes on
+// a cold cache, hence the long ceiling.
+let submitted = false;
+const report = (payload) => {
+  if (submitted) return;
+  submitted = true;
+  window.__result = { state: 'done', ...payload };
+  return fetch('/__result', { method: 'POST', body: JSON.stringify({ ...payload, steps }) })
+    .catch(() => { /* standalone in a browser tab: window.__result is the channel */ });
+};
+setTimeout(() => report({ ok: false, error: 'timed out after 900s' }), 900_000);
+
+const MODEL_URL = new URLSearchParams(location.search).get('model')
+  || '../../models/gemma-4-E2B-it-web.litertlm';
+
+// Realistic one-script tasks against the seeded project. Each carries a check
+// the executing half can apply, so "did the model succeed" is decided by a
+// side effect rather than by reading the script and being charitable about it.
+const TASKS = [
+  {
+    id: 'count-files',
+    task: 'Count how many files are in the project directory and write just the number to COUNT.txt.',
+    verify: "test -s COUNT.txt && grep -qE '^[0-9]+$' COUNT.txt",
+  },
+  {
+    id: 'copy-readme',
+    task: 'Copy README.md to README.bak.',
+    verify: 'cmp -s README.md README.bak',
+  },
+  {
+    id: 'arch-note',
+    task: 'Write the output of `uname -m` into ARCH.txt.',
+    verify: "test -s ARCH.txt && grep -qE 'i[3-6]86|x86' ARCH.txt",
+  },
+  {
+    id: 'count-lines',
+    task: 'Write the number of lines in README.md to LINES.txt.',
+    verify: "test -s LINES.txt && grep -qE '^[0-9]+$' LINES.txt",
+  },
+  {
+    id: 'find-md',
+    task: 'List every .md file in the project, including files in subdirectories, into MDFILES.txt (one path per line).',
+    verify: "grep -q 'README.md' MDFILES.txt && grep -q 'n.md' MDFILES.txt",
+  },
+  {
+    id: 'upper-readme',
+    task: 'Create UPPER.txt containing the contents of README.md converted to uppercase.',
+    verify: "test -s UPPER.txt && grep -q 'HERDR' UPPER.txt",
+  },
+  {
+    id: 'concat',
+    task: 'Concatenate README.md and sub/n.md into ALL.txt, in that order.',
+    verify: "test -s ALL.txt && grep -q 'herdr' ALL.txt",
+  },
+  {
+    id: 'mkdir-move',
+    task: 'Create a directory called archive and move sub/n.md into it.',
+    verify: 'test -f archive/n.md && ! test -f sub/n.md',
+  },
+];
+
+// The prompt batch mode actually sends. Kept in sync with BATCH_PROMPT in
+// agent/src/mastra-browser.js — if they drift, this measures nothing.
+const BATCH_PROMPT = [
+  'You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.',
+  'Accomplish the task by writing ONE POSIX sh script using BusyBox-available tools (cat, ls, grep, sed, awk, printf, test, mkdir, etc.).',
+  'Paths are relative to the project directory, which is already the working directory.',
+  'Output ONLY the script body — no explanation, no markdown fences.',
+].join('\n');
+
+function stripFence(content) {
+  const text = String(content ?? '').trim();
+  const fenced = text.match(/^```(?:sh|bash)?\s*([\s\S]*?)\s*```$/i);
+  return (fenced ? fenced[1] : text).trim();
+}
+
+async function run() {
+  try {
+    window.__result = { state: 'loading' };
+
+    const adapter = await navigator.gpu?.requestAdapter();
+    if (!adapter) throw new Error('no WebGPU adapter — run this in a real browser window');
+    log(`WebGPU adapter: ${adapter.info?.vendor ?? '?'} ${adapter.info?.architecture ?? ''}`);
+
+    const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+    const client = new LiteRtLmClient();
+
+    // initialize() imports the runtime and populates Engine/loadLiteRtLm;
+    // loadBundledModel() alone throws without it. autoLoad:false so we load
+    // the weights we asked for rather than whatever is in this origin's OPFS.
+    log('initializing the LiteRT-LM runtime');
+    await client.initialize({ autoLoad: false });
+
+    log(`loading weights: ${MODEL_URL}`);
+    const startedAt = performance.now();
+    await client.loadBundledModel(MODEL_URL);
+    const status = await client.status();
+    log(`model ready in ${Math.round(performance.now() - startedAt)} ms — ${status.modelName}`);
+
+    const results = [];
+    for (const entry of TASKS) {
+      const askedAt = performance.now();
+      let script = '';
+      let error = null;
+      try {
+        const completion = await client.chat({
+          model: status.modelName || 'webgpu',
+          temperature: 0,
+          max_tokens: 1000,
+          chat_template_kwargs: { enable_thinking: false },
+          messages: [
+            { role: 'system', content: BATCH_PROMPT },
+            { role: 'user', content: entry.task },
+          ],
+        });
+        script = stripFence(completion?.choices?.[0]?.message?.content);
+      } catch (e) {
+        error = String(e?.message || e);
+      }
+      const ms = Math.round(performance.now() - askedAt);
+      results.push({ ...entry, script, error, ms });
+      log(`${entry.id}: ${error ? `ERROR ${error}` : `${script.split('\n').length} line(s), ${ms} ms`}`);
+      window.__result = { state: 'running', results };
+    }
+
+    const emitted = results.filter(r => r.script).length;
+    log('');
+    log(`${emitted}/${results.length} tasks produced a script (execution is phase 2)`);
+    // Under `checks` so mastra-runner prints it — that is the channel this
+    // harness reports on.
+    await report({ ok: true, checks: { modelName: status.modelName, results } });
+  } catch (error) {
+    log(`FAILED: ${error?.message || error}`);
+    await report({ ok: false, error: String(error?.stack || error) });
+  }
+}
+
+run();
+</script>
