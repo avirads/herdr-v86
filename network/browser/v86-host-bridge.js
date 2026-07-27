@@ -272,11 +272,24 @@ export class V86HostBridge extends EventTarget {
   async eval(id, code64) {
     const code = decodeText(code64);
     try {
-      const fn = new Function(code);
-      const result = await fn();
-      const output = result === undefined ? '' :
-        typeof result === 'string' ? result :
-        JSON.stringify(result, null, 2);
+      const logs = [];
+      const format = value => {
+        if (typeof value === 'string') return value;
+        try { return JSON.stringify(value, null, 2); }
+        catch { return String(value); }
+      };
+      const capture = (...values) => logs.push(values.map(format).join(' '));
+      const evalConsole = {
+        ...console,
+        log: capture,
+        info: capture,
+        warn: capture,
+        error: capture,
+      };
+      const module = { exports: {} };
+      const fn = new Function('module', 'exports', 'console', code);
+      const result = await fn(module, module.exports, evalConsole);
+      const output = result === undefined ? logs.join('\n') : format(result);
       const encoded = encodeText(output);
       for (let offset = 0; offset < encoded.length; offset += 64) {
         await this.reply(id, "DATA", encoded.slice(offset, offset + 64));

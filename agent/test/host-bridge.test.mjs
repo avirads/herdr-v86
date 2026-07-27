@@ -44,3 +44,20 @@ test('host bridge formats page-local completions as OpenAI SSE', () => {
   assert.match(output, /"finish_reason":"tool_calls"/);
   assert.match(output, /data: \[DONE\]/);
 });
+
+test('browser eval supports CommonJS exports and returns console output', async () => {
+  const emulator = { add_listener() {}, serial_send_bytes() {} };
+  const bridge = new V86HostBridge(emulator);
+  const replies = [];
+  bridge.reply = async (_id, kind, value = '') => replies.push([kind, value]);
+
+  await bridge.eval('eval-1', btoa([
+    'function factorial(n) { return n < 2 ? 1 : n * factorial(n - 1); }',
+    'console.log("Factorial of 5 is:", factorial(5));',
+    'module.exports = factorial;',
+  ].join('\n')));
+
+  const encoded = replies.filter(([kind]) => kind === 'DATA').map(([, value]) => value).join('');
+  assert.equal(atob(encoded), 'Factorial of 5 is: 120');
+  assert.deepEqual(replies.at(-1), ['END', '0']);
+});

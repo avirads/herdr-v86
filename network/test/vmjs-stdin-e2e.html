@@ -37,7 +37,10 @@ emulator.add_listener('serial0-output-byte', byte => {
   if (!started && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
     started = true;
     emulator.serial0_send(
-      "printf 'return 720\\n' >/tmp/factorial.js; " +
+      "printf '%s\\n' " +
+      "'function factorial(n) { return n < 2 ? 1 : n * factorial(n - 1); }' " +
+      "'console.log(\"Factorial of 5 is:\", factorial(5));' " +
+      "'module.exports = factorial;' >/tmp/factorial.js; " +
       "echo VMJS_TEST_BEGIN; vmjs </tmp/factorial.js; " +
       "echo; echo VMJS_TEST_END\n",
     );
@@ -45,7 +48,8 @@ emulator.add_listener('serial0-output-byte', byte => {
   if (/\nVMJS_TEST_END\r?\n/.test(serial)) {
     const result = serial.slice(serial.lastIndexOf('\nVMJS_TEST_BEGIN'))
       .split('VMJS_TEST_END')[0];
-    submit(/\b720\b/.test(result) && !/stty:|not a tty|SyntaxError/i.test(result),
+    submit(/Factorial of 5 is:\s*120/.test(result) &&
+      !/stty:|not a tty|SyntaxError|ReferenceError/i.test(result),
       result.trim().slice(-800));
   }
 });
