@@ -26,3 +26,14 @@ test('the cached-model selector uses the real OPFS model list', () => {
   assert.match(html, /await webGpuLlmClient\.loadCachedModel\(name\)/);
   assert.match(html, /vmAgentController\?\.resetHarness\(\)/);
 });
+
+test('Settings offers downloads only for Gemma models missing from the cache', () => {
+  const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
+  assert.match(settings, /id="settings-model-downloads" class="model-downloads"/);
+  for (const model of ['gemma-4-E2B-it-web.litertlm', 'gemma-4-E4B-it-web.litertlm', 'gemma-4-12B-it-web.litertlm']) {
+    assert.ok(settings.includes(`data-model-file="${model}"`), `missing Settings download for ${model}`);
+  }
+  assert.match(html, /const cachedNames = new Set\(names\.map\(name => name\.toLowerCase\(\)\)\)/);
+  assert.match(html, /link\.hidden = cachedNames\.has\(link\.dataset\.modelFile\.toLowerCase\(\)\)/);
+  assert.match(html, /downloads\.hidden = missingCount === 0/);
+});

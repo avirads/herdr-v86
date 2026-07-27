@@ -270,6 +270,11 @@
         <button id="configure-llm-later" type="button">Load</button>
         <button id="reset-llm" type="button">Reset</button>
       </div>
+      <div id="settings-model-downloads" class="model-downloads" aria-label="Download an AI model not yet loaded">
+        <a class="tool-link" data-model-file="gemma-4-E2B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download Gemma 4 E2B</a>
+        <a class="tool-link" data-model-file="gemma-4-E4B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 E4B</a>
+        <a class="tool-link" data-model-file="gemma-4-12B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 12B</a>
+      </div>
     </section>
     <section class="provider-section" aria-labelledby="autobro-settings-title">
       <h3 id="autobro-settings-title">AutoBro</h3>
@@ -497,7 +502,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.11";
+const APP_VERSION = "2026.07.27.12";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
 const bootOptions = new URLSearchParams(location.search);
@@ -1394,6 +1399,14 @@ async function refreshCachedModelSelect() {
   }));
   if (names.includes(webGpuLlmClient?.modelName)) select.value = webGpuLlmClient.modelName;
   row.hidden = names.length < 2;
+  const downloads = document.getElementById("settings-model-downloads");
+  const cachedNames = new Set(names.map(name => name.toLowerCase()));
+  let missingCount = 0;
+  for (const link of downloads.querySelectorAll("[data-model-file]")) {
+    link.hidden = cachedNames.has(link.dataset.modelFile.toLowerCase());
+    if (!link.hidden) missingCount++;
+  }
+  downloads.hidden = missingCount === 0;
 }
 document.getElementById("cached-model-select").onchange = async event => {
   const select = event.currentTarget;
