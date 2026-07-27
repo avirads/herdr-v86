@@ -45,7 +45,7 @@ framework-native planning, filesystem, shell, project-memory, skills, context
 management, and subagent tools. Mutations and every command require explicit
 browser approval. Typed browser-bridge tools cover `vmfetch`, `vmgithub`,
 `vmclip`, `vmexport`, `vmai`, and LiteRT status/model discovery. See
-[the Deep Agents guide](docs/deep-agent.md).
+[the Deep Agents guide](docs/deep-agent.html).
 The session-only `vmlang yolo on|off` control can waive individual approvals;
 it is on by default and returns to on after reload or `vmlang reset`. Run
 `vmlang yolo off` before a task to require confirmation for each operation.

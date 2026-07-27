@@ -1,6 +1,7 @@
 # Deep Agents coding agent
 
-The browser demo integrates DeepAgentsJS with the real `/root/project`
+The browser demo integrates
+[DeepAgentsJS](https://github.com/langchain-ai/deepagentsjs) with the real `/root/project`
 filesystem inside v86. Run it from the guest terminal with `vmlang`; there is
 no separate agent panel. The agent uses the page-local LiteRT-LM WebGPU model
 and does not require a browser extension or cloud API.

@@ -1,18 +1,23 @@
-$ErrorActionPreference = 'Stop'
+param(
+  [ValidateSet('guest-tools', 'deep-agent')]
+  [string]$Document = 'guest-tools'
+)
 
+$ErrorActionPreference = 'Stop'
 $docsDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sourcePath = Join-Path $docsDirectory 'guest-tools.md'
-$outputPath = Join-Path $docsDirectory 'guest-tools.html'
+$sourcePath = Join-Path $docsDirectory "$Document.md"
+$outputPath = Join-Path $docsDirectory "$Document.html"
+$title = if ($Document -eq 'deep-agent') { 'Deep Agents coding agent' } else { 'Browser-backed guest tools' }
 $body = (ConvertFrom-Markdown -Path $sourcePath).Html
 
-$document = @"
+$renderedPage = @"
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0d1117">
-<title>Browser-backed guest tools</title>
+<title>$title</title>
 <style>
   :root {
     color-scheme: dark;
@@ -108,4 +113,4 @@ $body
 </html>
 "@
 
-Set-Content -LiteralPath $outputPath -Value $document -Encoding utf8
+Set-Content -LiteralPath $outputPath -Value $renderedPage -Encoding utf8

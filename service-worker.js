@@ -20,9 +20,13 @@ self.addEventListener("fetch", event => {
   event.respondWith((async () => {
     try {
       const requestedUrl = new URL(event.request.url);
-      const source = requestedUrl.pathname.endsWith("/docs/guest-tools.md")
-        ? new URL("docs/guest-tools.html", self.registration.scope)
-        : event.request;
+      let source = event.request;
+      for (const documentName of ["guest-tools", "deep-agent"]) {
+        if (requestedUrl.pathname.endsWith(`/docs/${documentName}.md`)) {
+          source = new URL(`docs/${documentName}.html`, self.registration.scope);
+          break;
+        }
+      }
       const response = await fetch(source, { cache: "no-cache" });
       if (response.ok) {
         const cache = await caches.open(APP_SHELL_CACHE);

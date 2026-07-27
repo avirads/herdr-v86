@@ -399,5 +399,5 @@ on by default; use `vmlang yolo off` to require per-operation
 browser confirmations. Running bare `vmlang` reads the first prompt; stdin
 pipes can contain longer initial prompts.
 Reads run automatically; edits and commands require browser confirmation. See
-[the Deep Agents guide](deep-agent.md) for capabilities, skills, approvals, and
+[the Deep Agents guide](deep-agent.html) for capabilities, skills, approvals, and
 environment limits.

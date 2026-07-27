@@ -34,6 +34,7 @@ test('the app shell revalidates without intercepting VM disk ranges', () => {
   assert.match(serviceWorker, /event\.request\.mode !== "navigate"/);
   assert.match(serviceWorker, /fetch\(source, \{ cache: "no-cache" \}\)/);
   assert.doesNotMatch(serviceWorker, /vm-network-ext4/);
-  assert.match(serviceWorker, /docs\/guest-tools\.md/);
-  assert.match(serviceWorker, /docs\/guest-tools\.html/);
+  assert.match(serviceWorker, /"guest-tools", "deep-agent"/);
+  assert.match(serviceWorker, /docs\/\$\{documentName\}\.md/);
+  assert.match(serviceWorker, /docs\/\$\{documentName\}\.html/);
 });

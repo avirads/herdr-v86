@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const markdown = await readFile(new URL('../../docs/guest-tools.md', import.meta.url), 'utf8');
 const html = await readFile(new URL('../../docs/guest-tools.html', import.meta.url), 'utf8');
+const deepAgentMarkdown = await readFile(new URL('../../docs/deep-agent.md', import.meta.url), 'utf8');
+const deepAgentHtml = await readFile(new URL('../../docs/deep-agent.html', import.meta.url), 'utf8');
 
 const projects = [
   ['Rig', 'https://github.com/0xPlaygrounds/rig'],
@@ -25,4 +27,12 @@ test('responsive help contains official upstream project links', () => {
     assert.match(markdown, new RegExp(`\\[${name}\\]\\(${url.replaceAll('/', '\\/')}\\)`));
     assert.match(html, new RegExp(`href="${url.replaceAll('/', '\\/')}"`));
   }
+});
+
+test('Deep Agents guide has a responsive generated page', () => {
+  assert.match(deepAgentMarkdown, /\[DeepAgentsJS\]\(https:\/\/github\.com\/langchain-ai\/deepagentsjs\)/);
+  assert.match(deepAgentHtml, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
+  assert.match(deepAgentHtml, /<h1 id="deep-agents-coding-agent">Deep Agents coding agent<\/h1>/);
+  assert.match(deepAgentHtml, /overflow-x: auto/);
+  assert.match(deepAgentHtml, /href="https:\/\/github\.com\/langchain-ai\/deepagentsjs"/);
 });

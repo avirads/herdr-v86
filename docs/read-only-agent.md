@@ -1,7 +1,7 @@
 # Previous read-only milestone
 
 The read-only milestone has been superseded by the full Deep Agents coding
-integration. See [Deep Agents coding agent](deep-agent.md).
+integration. See [Deep Agents coding agent](deep-agent.html).
 
 The current browser agent retains automatic read/list/search access to
 `/root/project`, and adds framework-native planning, writes, exact-string edits,
