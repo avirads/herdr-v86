@@ -493,7 +493,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.6";
+const APP_VERSION = "2026.07.27.7";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
 document.getElementById("about-app-version").textContent = APP_VERSION;
@@ -1107,7 +1107,7 @@ function openRemoteDialog() {
 async function renderRemoteQr(url) {
   const container = document.getElementById("remote-qr");
   try {
-    const { default: qrcodeFactory } = await import("./vendor/qrcode-generator-2.0.4.mjs");
+    const { default: qrcodeFactory } = await import("./vendor/qrcode-generator-2.0.4.mjs?v=20260727-js-mime");
     const qr = qrcodeFactory(0, "M"); // typeNumber 0 = auto-select the smallest version that fits
     qr.addData(url);
     qr.make();
@@ -1116,8 +1116,11 @@ async function renderRemoteQr(url) {
     caption.textContent = "Scan with a phone to connect";
     container.appendChild(caption);
     container.hidden = false;
-  } catch {
+    return true;
+  } catch (error) {
     container.hidden = true; // QR is a convenience; the pairing key field above still works
+    console.warn("QR generation failed:", error);
+    return false;
   }
 }
 async function collectGpuDiagnostics() {
@@ -1256,10 +1259,12 @@ async function ensureHosting() {
     const key = await (await getRemoteLlmPeer()).host();
     remoteKey.value = key;
     document.getElementById("remote-copy").hidden = false;
-    renderRemoteQr(new URL("remote.html?key=" + encodeURIComponent(key), location.href).href);
-    remoteStatus.textContent = modelPending
-      ? "Scan this QR code with your phone to connect. The agent is ready; configure a model before sending a chat message."
-      : "Scan this QR code with your phone to connect. Keep this page open.";
+    const qrReady = await renderRemoteQr(new URL("remote.html?key=" + encodeURIComponent(key), location.href).href);
+    remoteStatus.textContent = !qrReady
+      ? "QR code unavailable. Copy the pairing key and open the Human page on your phone."
+      : modelPending
+        ? "Scan this QR code with your phone to connect. The agent is ready; configure a model before sending a chat message."
+        : "Scan this QR code with your phone to connect. Keep this page open.";
   } catch (error) {
     remoteHostingStarted = false; // allow a retry next time the dialog opens
     remoteStatus.textContent = "Agent failed: " + error.message;
