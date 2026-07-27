@@ -1215,7 +1215,7 @@ document.getElementById("export-project").onclick = async () => {
   await hostBridge.send("vmproject export /root/project project.tar.gz");
   status("project export requested");
 };
-document.getElementById("open-help").onclick = () => { settingsDialog.close(); window.open("docs/guest-tools.md", "_blank", "noopener"); };
+document.getElementById("open-help").onclick = () => { settingsDialog.close(); window.open("docs/guest-tools.html", "_blank", "noopener"); };
 async function importFileIntoVm(file, afterImport = "") {
   if (!file) return;
   if (file.size > 8 * 1024 * 1024) return status("import limited to 8 MiB");

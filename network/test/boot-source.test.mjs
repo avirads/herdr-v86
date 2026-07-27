@@ -32,6 +32,8 @@ test('v86 disk progress describes the selected source rather than the event name
 test('the app shell revalidates without intercepting VM disk ranges', () => {
   assert.match(html, /serviceWorker\.register\("\.\/service-worker\.js", \{ updateViaCache: "none" \}\)/);
   assert.match(serviceWorker, /event\.request\.mode !== "navigate"/);
-  assert.match(serviceWorker, /fetch\(event\.request, \{ cache: "no-cache" \}\)/);
+  assert.match(serviceWorker, /fetch\(source, \{ cache: "no-cache" \}\)/);
   assert.doesNotMatch(serviceWorker, /vm-network-ext4/);
+  assert.match(serviceWorker, /docs\/guest-tools\.md/);
+  assert.match(serviceWorker, /docs\/guest-tools\.html/);
 });
