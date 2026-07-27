@@ -7,6 +7,7 @@ OUTPUT_IMAGE="${OUTPUT_IMAGE:-$PROJECT_DIR/vm-network-ext4.img}"
 DISK_BYTES="${DISK_BYTES:-100663296}"
 MOUNT_DIR="${MOUNT_DIR:-/mnt/herdr-v86-network}"
 RIG_PACKAGE="${RIG_PACKAGE:-$PROJECT_DIR/network/guest/rig-agent-0.1.0-x86.tar.gz}"
+ZEROSTACK_PACKAGE="${ZEROSTACK_PACKAGE:-$PROJECT_DIR/network/guest/zerostack-1.5.0-x86.tar.gz}"
 HERDR_BINARY="${HERDR_BINARY:-}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
@@ -19,6 +20,10 @@ if [[ ! -f "$SOURCE_IMAGE" ]]; then
 fi
 if [[ ! -f "$RIG_PACKAGE" ]]; then
   echo "Rig agent x86 package not found: $RIG_PACKAGE" >&2
+  exit 1
+fi
+if [[ ! -f "$ZEROSTACK_PACKAGE" ]]; then
+  echo "Zerostack x86 package not found: $ZEROSTACK_PACKAGE" >&2
   exit 1
 fi
 if [[ -z "$HERDR_BINARY" || ! -f "$HERDR_BINARY" ]]; then
@@ -50,6 +55,7 @@ mount --bind /dev "$MOUNT_DIR/dev"
 cp /etc/resolv.conf "$MOUNT_DIR/etc/resolv.conf"
 chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc quickjs
 tar -xzf "$RIG_PACKAGE" -C "$MOUNT_DIR"
+tar -xzf "$ZEROSTACK_PACKAGE" -C "$MOUNT_DIR"
 chmod 0755 "$MOUNT_DIR/usr/local/libexec/rig-agent"
 install -m 0755 "$PROJECT_DIR/network/guest/rc.startup" "$MOUNT_DIR/sbin/rc.startup"
 install -m 0755 "$PROJECT_DIR/network/guest/autologin" "$MOUNT_DIR/sbin/autologin"
@@ -65,6 +71,7 @@ install -m 0755 "$PROJECT_DIR/network/guest/vmlang" "$MOUNT_DIR/usr/local/bin/vm
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-poll" "$MOUNT_DIR/usr/local/bin/vmagent-poll"
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/bin/vmagent-rpc"
 install -D -m 0755 "$PROJECT_DIR/network/guest/rig-vm" "$MOUNT_DIR/usr/local/bin/rig"
+install -D -m 0755 "$PROJECT_DIR/network/guest/zerostack-vm" "$MOUNT_DIR/usr/local/bin/zerostack"
 install -D -m 0755 "$PROJECT_DIR/network/guest/mastra-vm" "$MOUNT_DIR/usr/local/bin/vmmastra"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vmjs" "$MOUNT_DIR/usr/local/bin/vmjs"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bin/vmbench"
@@ -84,8 +91,6 @@ rm -f \
   "$MOUNT_DIR/usr/local/libexec/zap" \
   "$MOUNT_DIR/usr/local/bin/pi" \
   "$MOUNT_DIR/usr/local/libexec/pi" \
-  "$MOUNT_DIR/usr/local/bin/zerostack" \
-  "$MOUNT_DIR/usr/local/libexec/zerostack" \
   "$MOUNT_DIR/usr/local/bin/vmagent" \
   "$MOUNT_DIR/usr/local/bin/mastra" \
   "$MOUNT_DIR/sbin/herdr-boot"
@@ -93,6 +98,7 @@ install -m 0755 "$HERDR_BINARY" "$MOUNT_DIR/usr/local/bin/herdr"
 
 chroot "$MOUNT_DIR" /usr/bin/curl --version
 chroot "$MOUNT_DIR" /usr/bin/tmux -V
-chroot "$MOUNT_DIR" /usr/bin/qjs --version
-chroot "$MOUNT_DIR" /bin/sh -c '! command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && test -x /usr/local/libexec/rig-agent'
+chroot "$MOUNT_DIR" /usr/bin/qjs -q
+chroot "$MOUNT_DIR" /usr/local/libexec/zerostack --version
+chroot "$MOUNT_DIR" /bin/sh -c 'command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && test -x /usr/local/libexec/rig-agent'
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"

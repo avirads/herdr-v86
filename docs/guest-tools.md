@@ -223,6 +223,21 @@ one each. It is faster for multi-step tasks but relies on the model producing a
 correct script, so prefer the default loop when a step needs to react to
 intermediate results.
 
+## `zerostack` — native i686 coding agent
+
+`zerostack` runs the native Zerostack 1.5.0 agent inside the 32-bit guest while
+using the configured page-local WebGPU model through the browser bridge.
+
+```sh
+cd /root/project
+zerostack -p 'Summarize this project'
+zerostack --version
+```
+
+While it runs, the launcher temporarily reserves the private RPC serial port
+for an OpenAI-compatible loopback adapter. The normal hidden guest bridge shell
+is restored automatically when Zerostack exits.
+
 ## Security boundary
 
 Trust the page that hosts the VM: it processes bridge requests and can observe
