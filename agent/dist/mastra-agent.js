@@ -256096,23 +256096,42 @@ function parseCompletion(completion, { hasTools = false } = {}) {
   const raw = typeof completion === "string" ? completion : choice2?.message?.content ?? completion?.content ?? "";
   const text10 = typeof raw === "string" ? raw : partsToText(raw);
   if (hasTools) {
-    const value = parseLooseJson(text10);
-    const call = extractToolCall(value);
-    if (call) {
+    const calls = [];
+    for (const line of text10.split(/\r?\n/)) {
+      const lineTrimmed = line.trim();
+      if (!lineTrimmed) continue;
+      const value = parseLooseJson(lineTrimmed);
+      if (!value) continue;
+      const call = extractToolCall(value);
+      if (call) {
+        calls.push({
+          type: "tool-call",
+          toolCallId: newToolCallId(),
+          toolName: call.name,
+          input: stringifyInput(call.arguments)
+        });
+      } else if (typeof value.final === "string") {
+        return { content: [{ type: "text", text: value.final }], finishReason: "stop" };
+      }
+    }
+    if (calls.length) {
+      return { content: calls, finishReason: "tool-calls" };
+    }
+    const fallbackValue = parseLooseJson(text10);
+    const fallbackCall = extractToolCall(fallbackValue);
+    if (fallbackCall) {
       return {
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: newToolCallId(),
-            toolName: call.name,
-            input: stringifyInput(call.arguments)
-          }
-        ],
+        content: [{
+          type: "tool-call",
+          toolCallId: newToolCallId(),
+          toolName: fallbackCall.name,
+          input: stringifyInput(fallbackCall.arguments)
+        }],
         finishReason: "tool-calls"
       };
     }
-    if (value && typeof value.final === "string") {
-      return { content: [{ type: "text", text: value.final }], finishReason: "stop" };
+    if (fallbackValue && typeof fallbackValue.final === "string") {
+      return { content: [{ type: "text", text: fallbackValue.final }], finishReason: "stop" };
     }
   }
   const trimmed = String(text10 ?? "");
