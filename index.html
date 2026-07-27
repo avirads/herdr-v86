@@ -78,6 +78,10 @@
   .provider-actions { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .provider-actions label { flex: 1 1 180px; margin: 0; }
   .provider-actions button { flex: 0 0 auto; }
+  .about-versions { display: grid; grid-template-columns: max-content 1fr; gap: 5px 12px; margin: 10px 0 0; font-size: 12px; }
+  .about-versions dt { color: #8b949e; }
+  .about-versions dd { margin: 0; color: #c9d1d9; overflow-wrap: anywhere; }
+  #diagnostics-output { box-sizing: border-box; max-height: 180px; overflow: auto; margin: 10px 0 0; padding: 9px; color: #c9d1d9; background: #090c10; border: 1px solid #30363d; border-radius: 5px; font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
   #remote-dialog { width: min(560px, calc(100vw - 32px)); }
   #remote-status { display: flex; align-items: center; gap: 8px; }
   .spinner { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin .8s linear infinite; }
@@ -279,6 +283,25 @@
     <div><strong>Remote agent</strong><br><small>Run this model as an agent or chat with a paired agent over WebRTC.</small></div>
     <button id="open-remote" type="button">Remote access</button>
   </div>
+  <section class="provider-section" aria-labelledby="about-settings-title">
+    <h3 id="about-settings-title">About</h3>
+    <small>Version information for this browser application and its bundled runtimes.</small>
+    <dl class="about-versions">
+      <dt>App</dt><dd id="about-app-version">—</dd>
+      <dt>VM image</dt><dd id="about-vm-version">—</dd>
+      <dt>MoonshineJS</dt><dd>0.1.29</dd>
+      <dt>ONNX Runtime</dt><dd>1.22.0</dd>
+    </dl>
+  </section>
+  <section class="provider-section" aria-labelledby="diagnostics-settings-title">
+    <h3 id="diagnostics-settings-title">Diagnostics</h3>
+    <small>Local capability and runtime metrics only. Project files, prompts, and pairing credentials are excluded.</small>
+    <pre id="diagnostics-output" aria-live="polite">Open Settings to collect diagnostics.</pre>
+    <div class="provider-actions">
+      <button id="refresh-diagnostics" type="button">Refresh</button>
+      <button id="download-diagnostics" type="button">Download JSON</button>
+    </div>
+  </section>
   <div class="dialog-actions"><button id="close-settings" type="button">Close</button></div>
 </dialog>
 <dialog id="remote-dialog">
@@ -450,8 +473,11 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
+const APP_VERSION = "2026.07.27.1";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
+document.getElementById("about-app-version").textContent = APP_VERSION;
+document.getElementById("about-vm-version").textContent = DISK_VERSION;
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -1074,9 +1100,134 @@ async function renderRemoteQr(url) {
     container.hidden = true; // QR is a convenience; the pairing key field above still works
   }
 }
+let latestDiagnostics = null;
+async function collectGpuDiagnostics() {
+  if (!navigator.gpu) return { available: false };
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) return { available: true, adapterAvailable: false };
+    let info = adapter.info || null;
+    if (!info && adapter.requestAdapterInfo) {
+      try { info = await adapter.requestAdapterInfo(); } catch {}
+    }
+    const limits = adapter.limits || {};
+    return {
+      available: true,
+      adapterAvailable: true,
+      info: info ? {
+        vendor: info.vendor || null,
+        architecture: info.architecture || null,
+        device: info.device || null,
+        description: info.description || null,
+      } : null,
+      features: [...adapter.features].sort(),
+      limits: {
+        maxBufferSize: limits.maxBufferSize ?? null,
+        maxStorageBufferBindingSize: limits.maxStorageBufferBindingSize ?? null,
+        maxComputeWorkgroupSizeX: limits.maxComputeWorkgroupSizeX ?? null,
+        maxComputeInvocationsPerWorkgroup: limits.maxComputeInvocationsPerWorkgroup ?? null,
+      },
+    };
+  } catch (error) {
+    return { available: true, error: error.message };
+  }
+}
+async function collectDiagnostics() {
+  const [gpu, storage, persistent, cacheNames, cachedModels] = await Promise.all([
+    collectGpuDiagnostics(),
+    navigator.storage?.estimate?.().catch(() => null),
+    navigator.storage?.persisted?.().catch(() => null),
+    globalThis.caches?.keys?.().catch(() => []),
+    webGpuLlmClient?.cachedModelNames?.().catch(() => []),
+  ]);
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const memory = performance.memory;
+  return {
+    capturedAt: new Date().toISOString(),
+    app: {
+      version: APP_VERSION,
+      url: location.origin + location.pathname,
+      secureContext: isSecureContext,
+      crossOriginIsolated,
+    },
+    browser: {
+      userAgent: navigator.userAgent,
+      brands: navigator.userAgentData?.brands || null,
+      mobile: navigator.userAgentData?.mobile ?? mobileBrowser,
+      language: navigator.language,
+      cookiesEnabled: navigator.cookieEnabled,
+    },
+    hardware: {
+      approximateRamGiB: navigator.deviceMemory ?? null,
+      logicalProcessors: navigator.hardwareConcurrency ?? null,
+      maxTouchPoints: navigator.maxTouchPoints ?? null,
+      jsHeap: memory ? {
+        usedBytes: memory.usedJSHeapSize,
+        totalBytes: memory.totalJSHeapSize,
+        limitBytes: memory.jsHeapSizeLimit,
+      } : null,
+    },
+    display: {
+      viewport: { width: innerWidth, height: innerHeight, devicePixelRatio },
+      screen: { width: screen.width, height: screen.height, colorDepth: screen.colorDepth },
+    },
+    webgpu: gpu,
+    webAssembly: typeof WebAssembly === "object",
+    storage: {
+      usageBytes: storage?.usage ?? null,
+      quotaBytes: storage?.quota ?? null,
+      persistent,
+      cacheCount: cacheNames?.length ?? 0,
+    },
+    network: connection ? {
+      effectiveType: connection.effectiveType ?? null,
+      downlinkMbps: connection.downlink ?? null,
+      rttMs: connection.rtt ?? null,
+      saveData: connection.saveData ?? null,
+      online: navigator.onLine,
+    } : { online: navigator.onLine },
+    vm: {
+      diskVersion: DISK_VERSION,
+      imageSource: vmImageSource,
+      compatibilityBoot,
+      bootReady,
+      setupFinished,
+    },
+    providers: {
+      aiModel: webGpuLlmClient?.modelName || null,
+      cachedModels: cachedModels || [],
+      autoBroConnected: autobroReady,
+      voiceLoaded: Boolean(voiceTranscriber || remoteMoonshineModelPromise),
+    },
+  };
+}
+async function refreshDiagnostics() {
+  const output = document.getElementById("diagnostics-output");
+  output.textContent = "Collecting browser and runtime metrics…";
+  try {
+    latestDiagnostics = await collectDiagnostics();
+    output.textContent = JSON.stringify(latestDiagnostics, null, 2);
+  } catch (error) {
+    latestDiagnostics = null;
+    output.textContent = "Diagnostics failed: " + error.message;
+  }
+}
 document.getElementById("open-settings").onclick = () => {
   settingsDialog.showModal();
   refreshCachedModelSelect().catch(error => llmStatus("could not list cached models — " + error.message));
+  refreshDiagnostics();
+};
+document.getElementById("refresh-diagnostics").onclick = refreshDiagnostics;
+document.getElementById("download-diagnostics").onclick = async () => {
+  if (!latestDiagnostics) await refreshDiagnostics();
+  if (!latestDiagnostics) return;
+  const blob = new Blob([JSON.stringify(latestDiagnostics, null, 2) + "\n"], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `herdr-v86-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 document.getElementById("close-settings").onclick = () => settingsDialog.close();
 document.getElementById("open-remote").onclick = openRemoteDialog;
