@@ -43,7 +43,7 @@ mount --bind /dev "$MOUNT_DIR/dev"
 
 # The minimal base image intentionally has no resolv.conf.
 cp /etc/resolv.conf "$MOUNT_DIR/etc/resolv.conf"
-chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc
+chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc quickjs
 tar -xzf "$RIG_PACKAGE" -C "$MOUNT_DIR"
 chmod 0755 "$MOUNT_DIR/usr/local/libexec/rig-agent"
 install -m 0755 "$PROJECT_DIR/network/guest/rc.startup" "$MOUNT_DIR/sbin/rc.startup"
@@ -61,6 +61,7 @@ install -m 0755 "$PROJECT_DIR/network/guest/vmagent-poll" "$MOUNT_DIR/usr/local/
 install -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/bin/vmagent-rpc"
 install -D -m 0755 "$PROJECT_DIR/network/guest/rig-vm" "$MOUNT_DIR/usr/local/bin/rig"
 install -D -m 0755 "$PROJECT_DIR/network/guest/mastra-vm" "$MOUNT_DIR/usr/local/bin/vmmastra"
+install -D -m 0755 "$PROJECT_DIR/network/guest/vmjs" "$MOUNT_DIR/usr/local/bin/vmjs"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bin/vmbench"
 # Agent-facing operating manual for the Mastra tier. A system path rather than
 # /root/project/skills/, so the user's workspace is left untouched; the file
@@ -86,5 +87,6 @@ rm -f \
 
 chroot "$MOUNT_DIR" /usr/bin/curl --version
 chroot "$MOUNT_DIR" /usr/bin/tmux -V
-chroot "$MOUNT_DIR" /bin/sh -c '! command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v vmlang && command -v vmmastra && command -v rig && test -x /usr/local/libexec/rig-agent'
+chroot "$MOUNT_DIR" /usr/bin/qjs --version
+chroot "$MOUNT_DIR" /bin/sh -c '! command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && test -x /usr/local/libexec/rig-agent'
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"

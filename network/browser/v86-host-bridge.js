@@ -105,6 +105,7 @@ export class V86HostBridge extends EventTarget {
     if (operation === "LLM_CHAT") return this.llm(id, "chat", fields[0]);
     if (operation === "LLM_COMPLETION") return this.llm(id, "completion", fields[0]);
     if (operation === "LLM_OPENAI") return this.llm(id, "openai", fields[0]);
+    if (operation === "EVAL") return this.eval(id, fields[0]);
     if (operation.startsWith("AGENT_")) {
       if (!this.agentHandler) throw new Error("vmlang is still initializing");
       if (this.handledAgentRequests.has(id)) return;
@@ -252,6 +253,24 @@ export class V86HostBridge extends EventTarget {
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     await this.reply(id, "END", "0");
+  }
+
+  async eval(id, code64) {
+    const code = decodeText(code64);
+    try {
+      const fn = new Function(code);
+      const result = await fn();
+      const output = result === undefined ? '' :
+        typeof result === 'string' ? result :
+        JSON.stringify(result, null, 2);
+      const encoded = encodeText(output);
+      for (let offset = 0; offset < encoded.length; offset += 64) {
+        await this.reply(id, "DATA", encoded.slice(offset, offset + 64));
+      }
+      await this.reply(id, "END", "0");
+    } catch (error) {
+      await this.reply(id, "ERROR", encodeText(error.stack || error.message));
+    }
   }
 
   destroy() {

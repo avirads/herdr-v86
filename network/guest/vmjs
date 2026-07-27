@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+id="$$-$(date +%s)"
+
+case "${1:-}" in
+  -h|--help|help)
+    echo 'usage: vmjs [code...]'
+    echo 'Evaluate JavaScript in the browser host and print the result.'
+    echo 'With no arguments, reads code from stdin.'
+    ;;
+  *)
+    if [ "$#" -gt 0 ]; then
+      code="$*"
+    else
+      code=$(cat)
+    fi
+    stty -echo; trap 'stty echo' EXIT INT TERM
+    printf '__V86RPC__\tEVAL\t%s\t%s\n' "$id" "$(b64 "$code")" > /dev/tty
+    while IFS="$(printf '\t')" read -r prefix response_id kind value; do
+      [ "$prefix:$response_id" = "__V86RPC_RESPONSE__:$id" ] || continue
+      [ "$kind" = DATA ] && printf %s "$value" | base64 -d
+      [ "$kind" = END ] && break
+      if [ "$kind" = ERROR ]; then printf %s "$value" | base64 -d >&2; exit 1; fi
+    done
+    stty echo; trap - EXIT INT TERM
+    ;;
+esac
