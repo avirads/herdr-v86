@@ -53,7 +53,7 @@ mount --bind /dev "$MOUNT_DIR/dev"
 
 # The minimal base image intentionally has no resolv.conf.
 cp /etc/resolv.conf "$MOUNT_DIR/etc/resolv.conf"
-chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc quickjs
+chroot "$MOUNT_DIR" /sbin/apk add --no-cache curl ca-certificates tmux libgcc quickjs jq
 tar -xzf "$RIG_PACKAGE" -C "$MOUNT_DIR"
 tar -xzf "$ZEROSTACK_PACKAGE" -C "$MOUNT_DIR"
 chmod 0755 "$MOUNT_DIR/usr/local/libexec/rig-agent"
@@ -99,6 +99,7 @@ install -m 0755 "$HERDR_BINARY" "$MOUNT_DIR/usr/local/bin/herdr"
 chroot "$MOUNT_DIR" /usr/bin/curl --version
 chroot "$MOUNT_DIR" /usr/bin/tmux -V
 chroot "$MOUNT_DIR" /usr/bin/qjs -q
+chroot "$MOUNT_DIR" /usr/bin/jq --version
 chroot "$MOUNT_DIR" /usr/local/libexec/zerostack --version
-chroot "$MOUNT_DIR" /bin/sh -c 'command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && test -x /usr/local/libexec/rig-agent'
+chroot "$MOUNT_DIR" /bin/sh -c 'command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && command -v jq && test -x /usr/local/libexec/rig-agent'
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"

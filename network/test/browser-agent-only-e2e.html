@@ -17,10 +17,10 @@ emulator.add_listener('serial0-output-byte',byte=>{
   serial=(serial+String.fromCharCode(byte)).slice(-160000); document.querySelector('#serial').textContent=serial;
   if(!started&&/(?:vm:~#|~\s*[#%])\s*$/.test(serial)){
     started=true;
-    emulator.serial0_send("echo BROWSER_AGENT_TEST_BEGIN; command -v zerostack >/dev/null && echo ZEROSTACK_OK; command -v rig >/dev/null && echo RIG_OK; tmux -V; vmlang --help | grep -q 'vmlang PROMPT' && echo VMLANG_OK; printf 'VMLLM='; vmllm 'reply'; echo; echo BROWSER_AGENT_TEST_END\n");
+    emulator.serial0_send("echo BROWSER_AGENT_TEST_BEGIN; command -v zerostack >/dev/null && echo ZEROSTACK_OK; command -v rig >/dev/null && echo RIG_OK; printf '{\"value\":42}' | jq -e '.value == 42' >/dev/null && echo JQ_OK; tmux -V; vmlang --help | grep -q 'vmlang PROMPT' && echo VMLANG_OK; printf 'VMLLM='; vmllm 'reply'; echo; echo BROWSER_AGENT_TEST_END\n");
   }
   if(/\nBROWSER_AGENT_TEST_END\r?\n/.test(serial)){
-    const ok=serial.includes('ZEROSTACK_OK')&&serial.includes('RIG_OK')&&/tmux 3\.5a/.test(serial)&&serial.includes('VMLANG_OK')&&serial.includes('VMLLM=')&&serial.includes('browser-agent-model-ok')&&hostCalls===1;
+    const ok=serial.includes('ZEROSTACK_OK')&&serial.includes('RIG_OK')&&serial.includes('JQ_OK')&&/tmux 3\.5a/.test(serial)&&serial.includes('VMLANG_OK')&&serial.includes('VMLLM=')&&serial.includes('browser-agent-model-ok')&&hostCalls===1;
     submit(ok,ok?'':'guest agents or browser-side agent tools failed');
   }
 });
