@@ -9,7 +9,14 @@ test('the BusyBox shell starts with editing and command history enabled', () => 
   assert.match(html, /set -o emacs 2>\/dev\/null \|\| true/);
 });
 
-test('vmlang arrow keys navigate input and command history', () => {
+test('plain arrow keys use the shared terminal input path for every guest program', () => {
+  assert.match(html, /const cursorKeys = \{ ArrowUp: "A", ArrowDown: "B", ArrowRight: "C", ArrowLeft: "D" \}/);
+  assert.match(html, /term\.modes\.applicationCursorKeysMode \? "\\x1bO" : "\\x1b\["/);
+  assert.match(html, /handleTerminalData\(prefix \+ suffix\)/);
+  assert.match(html, /for \(const ch of data\) emulator\.serial0_send\(ch\)/);
+});
+
+test('vmlang also provides cursor movement and command history', () => {
   assert.match(html, /data === "\\x1b\[A" \|\| data === "\\x1bOA"/);
   assert.match(html, /recallAgentHistory\(-1\)/);
   assert.match(html, /data === "\\x1b\[B" \|\| data === "\\x1bOB"/);

@@ -497,7 +497,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.10";
+const APP_VERSION = "2026.07.27.11";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
 const bootOptions = new URLSearchParams(location.search);
@@ -651,6 +651,19 @@ term.attachCustomKeyEventHandler(event => {
   // Let the browser dispatch its native paste event. The capture listener
   // above extracts clipboardData without requiring Clipboard API permission.
   if (paste) return true;
+  // Route plain cursor keys through the same input path for the shell and every
+  // guest program. This avoids browser/platform key names leaking as visible
+  // text, while respecting programs that request application-cursor mode.
+  if (!modifier && !event.altKey && !event.shiftKey) {
+    const cursorKeys = { ArrowUp: "A", ArrowDown: "B", ArrowRight: "C", ArrowLeft: "D" };
+    const suffix = cursorKeys[event.key];
+    if (suffix) {
+      event.preventDefault();
+      const prefix = term.modes.applicationCursorKeysMode ? "\x1bO" : "\x1b[";
+      handleTerminalData(prefix + suffix);
+      return false;
+    }
+  }
   return true;
 });
 
