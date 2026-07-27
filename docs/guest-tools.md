@@ -281,6 +281,90 @@ one each. It is faster for multi-step tasks but relies on the model producing a
 correct script, so prefer the default loop when a step needs to react to
 intermediate results.
 
+## Coding-agent tiers and shared facilities
+
+All coding-agent commands use the ready page-local WebGPU model. They operate on
+the directory where the command was invoked, normally `/root/project`, and can
+read the canonical capability reference at
+`/usr/local/share/vm-agent-capabilities.md`.
+
+| Command | Agent foundation | Best suited to |
+|---|---|---|
+| `rig` | [Rig](https://github.com/0xPlaygrounds/rig) compatible compact loop | Low-latency tasks using four focused project tools |
+| `rig --codeact` | Rig-compatible one-script mode | Tasks that can be completed safely by one POSIX shell script |
+| `vmlang` | [DeepAgentsJS](https://github.com/langchain-ai/deepagentsjs) | Planning, filesystem work, persistent conversations, optional browser automation, and multi-step coding |
+| `vmmastra` | [Mastra](https://github.com/mastra-ai/mastra) | Mastra workspace tools, selectable lean/full profiles, and fast batch execution |
+| `vmmastra code` | Mastra-backed persistent coding thread | Interactive code/chat/batch modes with saved browser-side threads |
+| `zerostack` | [Zerostack](https://github.com/gi-dellav/zerostack) | Native i686 coding-agent operation through the browser LLM adapter |
+
+The VM adapters integrate these upstream projects with the browser-hosted model;
+they are not unmodified upstream command-line distributions.
+
+Shared facilities available to the agents include:
+
+- Project file inspection and editing rooted at the invocation directory.
+- BusyBox utilities plus `jq`, `rg`, `git`, `curl`, `tar`, `gzip`, `qjs`,
+  `vmjs`, `shfmt`, `ctags`, `make`, and `patch`.
+- `vmproject import/export` and the matching Settings controls for moving a
+  project into or out of the VM.
+- `vmfetch`, `vmgithub`, `vmclip`, and `vmexport` when ordinary guest networking
+  or direct host integration is unavailable.
+- AutoBro search and browser automation only when the active tier exposes those
+  tools and the extension is connected.
+- Approval controls for mutations and shell execution; YOLO mode bypasses those
+  prompts for the current agent session.
+- Persistent browser-side sessions for `vmlang`, `vmmastra`, and
+  `vmmastra code`, with reset/stop commands for recovery.
+
+Agents must verify executable code before reporting success. JavaScript is
+tested with both `qjs` and `vmjs`, including elapsed time. POSIX shell scripts
+are formatted with `shfmt`, checked with `sh -n`, and executed with
+representative arguments. ShellCheck is not installed in the fixed-size i686
+image.
+
+## `vmmastra` — Mastra workspace agent
+
+`vmmastra` runs a [Mastra](https://github.com/mastra-ai/mastra)-based agent in
+the browser and maps its workspace filesystem and command tools to the current
+VM project directory.
+
+```text
+vmmastra TASK...
+vmmastra run TASK...
+vmmastra batch TASK...
+vmmastra status
+vmmastra tools
+vmmastra tools lean|full
+vmmastra cost
+vmmastra yolo on|off
+vmmastra reset
+vmmastra stop
+```
+
+- Plain `vmmastra` uses a tool loop that can inspect results between steps.
+- `vmmastra batch` asks the model for one POSIX shell script, runs it in one
+  guest round-trip, and falls back to the tool loop if the script fails.
+- `tools lean` keeps the smaller workspace-focused profile; `tools full`
+  includes browser-backed and parity tools. Changing profiles resets the
+  current Mastra session.
+- `status`, `tools`, and `cost` explain model readiness, approvals, active tools,
+  and prompt budget without requiring a model task.
+- `reset` discards a wedged conversation; `stop` aborts the task in flight.
+
+For the persistent coding interface:
+
+```text
+vmmastra code
+vmmastra code TASK...
+vmmastra code threads
+vmmastra code reset
+```
+
+Interactive `vmmastra code` supports `code`, `chat`, and `batch` modes. Threads
+are stored in browser IndexedDB and remain available across page reloads.
+Generated files are written under the directory from which `vmmastra code` was
+started.
+
 ## `zerostack` — native i686 coding agent
 
 `zerostack` runs the native Zerostack 1.5.0 agent inside the 32-bit guest while

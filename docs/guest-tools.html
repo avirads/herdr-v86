@@ -344,6 +344,111 @@ the per-tool model calls and RPC round-trips of the default loop into roughly
 one each. It is faster for multi-step tasks but relies on the model producing a
 correct script, so prefer the default loop when a step needs to react to
 intermediate results.</p>
+<h2 id="coding-agent-tiers-and-shared-facilities">Coding-agent tiers and shared facilities</h2>
+<p>All coding-agent commands use the ready page-local WebGPU model. They operate on
+the directory where the command was invoked, normally <code>/root/project</code>, and can
+read the canonical capability reference at
+<code>/usr/local/share/vm-agent-capabilities.md</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Agent foundation</th>
+<th>Best suited to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rig</code></td>
+<td><a href="https://github.com/0xPlaygrounds/rig">Rig</a> compatible compact loop</td>
+<td>Low-latency tasks using four focused project tools</td>
+</tr>
+<tr>
+<td><code>rig --codeact</code></td>
+<td>Rig-compatible one-script mode</td>
+<td>Tasks that can be completed safely by one POSIX shell script</td>
+</tr>
+<tr>
+<td><code>vmlang</code></td>
+<td><a href="https://github.com/langchain-ai/deepagentsjs">DeepAgentsJS</a></td>
+<td>Planning, filesystem work, persistent conversations, optional browser automation, and multi-step coding</td>
+</tr>
+<tr>
+<td><code>vmmastra</code></td>
+<td><a href="https://github.com/mastra-ai/mastra">Mastra</a></td>
+<td>Mastra workspace tools, selectable lean/full profiles, and fast batch execution</td>
+</tr>
+<tr>
+<td><code>vmmastra code</code></td>
+<td>Mastra-backed persistent coding thread</td>
+<td>Interactive code/chat/batch modes with saved browser-side threads</td>
+</tr>
+<tr>
+<td><code>zerostack</code></td>
+<td><a href="https://github.com/gi-dellav/zerostack">Zerostack</a></td>
+<td>Native i686 coding-agent operation through the browser LLM adapter</td>
+</tr>
+</tbody>
+</table>
+<p>The VM adapters integrate these upstream projects with the browser-hosted model;
+they are not unmodified upstream command-line distributions.</p>
+<p>Shared facilities available to the agents include:</p>
+<ul>
+<li>Project file inspection and editing rooted at the invocation directory.</li>
+<li>BusyBox utilities plus <code>jq</code>, <code>rg</code>, <code>git</code>, <code>curl</code>, <code>tar</code>, <code>gzip</code>, <code>qjs</code>,
+<code>vmjs</code>, <code>shfmt</code>, <code>ctags</code>, <code>make</code>, and <code>patch</code>.</li>
+<li><code>vmproject import/export</code> and the matching Settings controls for moving a
+project into or out of the VM.</li>
+<li><code>vmfetch</code>, <code>vmgithub</code>, <code>vmclip</code>, and <code>vmexport</code> when ordinary guest networking
+or direct host integration is unavailable.</li>
+<li>AutoBro search and browser automation only when the active tier exposes those
+tools and the extension is connected.</li>
+<li>Approval controls for mutations and shell execution; YOLO mode bypasses those
+prompts for the current agent session.</li>
+<li>Persistent browser-side sessions for <code>vmlang</code>, <code>vmmastra</code>, and
+<code>vmmastra code</code>, with reset/stop commands for recovery.</li>
+</ul>
+<p>Agents must verify executable code before reporting success. JavaScript is
+tested with both <code>qjs</code> and <code>vmjs</code>, including elapsed time. POSIX shell scripts
+are formatted with <code>shfmt</code>, checked with <code>sh -n</code>, and executed with
+representative arguments. ShellCheck is not installed in the fixed-size i686
+image.</p>
+<h2 id="vmmastra-mastra-workspace-agent"><code>vmmastra</code> — Mastra workspace agent</h2>
+<p><code>vmmastra</code> runs a <a href="https://github.com/mastra-ai/mastra">Mastra</a>-based agent in
+the browser and maps its workspace filesystem and command tools to the current
+VM project directory.</p>
+<pre><code class="language-text">vmmastra TASK...
+vmmastra run TASK...
+vmmastra batch TASK...
+vmmastra status
+vmmastra tools
+vmmastra tools lean|full
+vmmastra cost
+vmmastra yolo on|off
+vmmastra reset
+vmmastra stop
+</code></pre>
+<ul>
+<li>Plain <code>vmmastra</code> uses a tool loop that can inspect results between steps.</li>
+<li><code>vmmastra batch</code> asks the model for one POSIX shell script, runs it in one
+guest round-trip, and falls back to the tool loop if the script fails.</li>
+<li><code>tools lean</code> keeps the smaller workspace-focused profile; <code>tools full</code>
+includes browser-backed and parity tools. Changing profiles resets the
+current Mastra session.</li>
+<li><code>status</code>, <code>tools</code>, and <code>cost</code> explain model readiness, approvals, active tools,
+and prompt budget without requiring a model task.</li>
+<li><code>reset</code> discards a wedged conversation; <code>stop</code> aborts the task in flight.</li>
+</ul>
+<p>For the persistent coding interface:</p>
+<pre><code class="language-text">vmmastra code
+vmmastra code TASK...
+vmmastra code threads
+vmmastra code reset
+</code></pre>
+<p>Interactive <code>vmmastra code</code> supports <code>code</code>, <code>chat</code>, and <code>batch</code> modes. Threads
+are stored in browser IndexedDB and remain available across page reloads.
+Generated files are written under the directory from which <code>vmmastra code</code> was
+started.</p>
 <h2 id="zerostack-native-i686-coding-agent"><code>zerostack</code> — native i686 coding agent</h2>
 <p><code>zerostack</code> runs the native Zerostack 1.5.0 agent inside the 32-bit guest while
 using the configured page-local WebGPU model through the browser bridge.</p>
