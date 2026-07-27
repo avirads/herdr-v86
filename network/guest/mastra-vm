@@ -7,6 +7,10 @@ usage: vmmastra TASK...              run a task with the Mastra agent tier
        vmmastra run TASK...
        vmmastra batch TASK...        one script, one round-trip; falls back to
                                    the tool loop if the script exits non-zero
+       vmmastra code                 enter the Mastra Code interactive tier
+       vmmastra code TASK...         run a single task in the code tier
+       vmmastra code threads         list saved code threads
+       vmmastra code reset           drop the current code thread
        vmmastra status               model, approvals, tool profile, prompt cost
        vmmastra tools                list the tools currently active
        vmmastra tools lean|full      8 workspace tools, or all 19
@@ -18,6 +22,10 @@ usage: vmmastra TASK...              run a task with the Mastra agent tier
 Runs @mastra/core in the browser page against this guest. One task per
 invocation; there is no follow-up prompt. Configure a model with "Configure
 LLM" in the browser header first. Shares the YOLO setting with vmlang.
+
+The `code` subcommand enters an interactive session with persistent threads,
+slash commands (/exit, /stop, /reset, /help, /mode), and mode switching
+(code|chat|batch).
 EOF
   exit "${1:-2}"
 }
@@ -26,6 +34,7 @@ b64() { printf %s "$1" | base64 | tr -d '\n'; }
 
 operation=MASTRA
 payload=''
+code_subcommand=''
 
 case "${1:-}" in
   -h|--help|help) usage 0 ;;
@@ -33,6 +42,16 @@ case "${1:-}" in
   cost)   operation=MASTRA_COST;   shift ;;
   reset)  operation=MASTRA_RESET;  shift ;;
   stop)   operation=MASTRA_STOP;   shift ;;
+  code)
+    operation=MASTRA_CODE
+    shift
+    case "${1:-}" in
+      threads) code_subcommand='threads'; shift ;;
+      reset)   code_subcommand='reset'; shift ;;
+      '')      ;;
+      *)       code_subcommand="run:$*"
+               set -- ;;
+    esac ;;
   tools)
     operation=MASTRA_TOOLS
     shift
@@ -59,11 +78,28 @@ if [ "$operation" = MASTRA ] || [ "$operation" = MASTRA_BATCH ]; then
   set --
 fi
 
+# code subcommand: the payload carries the sub-command or task string.
+if [ "$operation" = MASTRA_CODE ]; then
+  payload=$code_subcommand
+  set --
+fi
+
+# code subcommand: if no sub-command was given, read one line interactively
+# (matching the vmlang pattern for terminal vs piped input).
+if [ "$operation" = MASTRA_CODE ] && [ "$code_subcommand" = '' ]; then
+  if [ -t 0 ]; then
+    printf 'code> '
+    IFS= read -r line || exit 1
+  else
+    line=$(cat) || exit 1
+  fi
+  [ -n "$line" ] || exit 1
+  payload="run:$line"
+  set --
+fi
+
 [ "$#" -eq 0 ] || usage 2
 
 printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > /dev/ttyS0
 
-case "$operation" in
-  MASTRA|MASTRA_BATCH) echo '[vmmastra] submitted to the ready browser agent.' ;;
-  *)                   echo "[vmmastra] ${operation#MASTRA_} requested." ;;
-esac
+echo '[vmmastra] code tier: request sent.'

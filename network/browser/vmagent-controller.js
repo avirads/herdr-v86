@@ -1,8 +1,9 @@
 export class VmAgentController {
-  constructor({ createAgent, createMastraAgent = null, getLlmClient, getGuest, getBrowserClient = () => null, approveAction, onOutput = () => {}, onActivity = () => {}, onBusy = () => {} }) {
-    Object.assign(this, { createAgent, createMastraAgent, getLlmClient, getGuest, getBrowserClient, approveAction, onOutput, onActivity, onBusy });
+  constructor({ createAgent, createMastraAgent = null, createCodeAgent = null, getLlmClient, getGuest, getBrowserClient = () => null, approveAction, onOutput = () => {}, onActivity = () => {}, onBusy = () => {} }) {
+    Object.assign(this, { createAgent, createMastraAgent, createCodeAgent, getLlmClient, getGuest, getBrowserClient, approveAction, onOutput, onActivity, onBusy });
     this.harness = null;
     this.mastraHarness = null;
+    this.codeHarness = null;
     // Matches what index.html asks for, and switchable at runtime with
     // `vmmastra tools lean|full`.
     this.mastraFullTools = true;
@@ -12,22 +13,26 @@ export class VmAgentController {
     this.completedRuns = new Map();
   }
 
-  resetHarness() { this.harness = null; this.mastraHarness = null; this.completedRuns.clear(); }
+  resetHarness() { this.harness = null; this.mastraHarness = null; this.codeHarness = null; this.completedRuns.clear(); }
 
   // Everything the Mastra harness can do, reachable from `vmmastra` in the guest
   // shell. Subcommands arrive as separate AGENT_MASTRA_* operations, matching
   // how vmlang's status/stop/reset/yolo are routed.
   async handleMastra(command, value) {
-    if (!this.createMastraAgent) return await this.onOutput('[vmmastra] tier is not available in this build.');
-
-    // Cheap, harness-free commands first — these must work before a model is
+    // Cheap, harness-free commands first — these must work before any agent is
     // loaded, otherwise `vmmastra status` cannot tell you why it is not ready.
     if (command === 'mastra_stop') {
-      if (!this.abortController) return await this.onOutput('[vmmastra] no task is running.');
-      this.abortController.abort();
+      // Cancel any in-flight code harness task first
+      this.codeHarness?.stop();
+      if (!this.abortController && !this.codeHarness?.abortController) {
+        return await this.onOutput('[vmmastra] no task is running.');
+      }
+      this.abortController?.abort();
       return await this.onOutput('[vmmastra] stop requested.');
     }
     if (command === 'mastra_reset') {
+      this.codeHarness?.reset();
+      this.codeHarness = null;
       this.mastraHarness = null;
       return await this.onOutput('[vmmastra] session reset; the next run rebuilds it.');
     }
@@ -42,6 +47,7 @@ export class VmAgentController {
       this.mastraHarness?.setYolo?.(this.yolo);
       return await this.onOutput(`[vmmastra] YOLO ${this.yolo ? 'on' : 'off'} (shared with vmlang).`);
     }
+    if (command === 'mastra_code') return await this.handleMastraCode(value);
     if (command === 'mastra_tools' && (value === 'lean' || value === 'full')) {
       const wanted = value === 'full';
       if (wanted !== this.mastraFullTools) {
@@ -98,12 +104,14 @@ export class VmAgentController {
     };
 
     if (command === 'mastra_tools') {
+      if (!this.createMastraAgent) return await this.onOutput('[vmmastra] tier is not available in this build.');
       try {
         const names = await (await harness()).listTools();
         return await this.onOutput([`[vmmastra] ${names.length} tools active:`, ...names.map(name => `  ${name}`)].join('\n'));
       } catch (error) { return await this.onOutput(`Mastra error: ${error.message}`); }
     }
     if (command === 'mastra_cost') {
+      if (!this.createMastraAgent) return await this.onOutput('[vmmastra] tier is not available in this build.');
       try {
         const cost = await (await harness()).systemPromptCost();
         return await this.onOutput(
@@ -113,9 +121,10 @@ export class VmAgentController {
       } catch (error) { return await this.onOutput(`Mastra error: ${error.message}`); }
     }
 
-    // Default: run a task. `vmmastra batch` tries a one-shot script first and
+// Default: run a task. `vmmastra batch` tries a one-shot script first and
     // falls back to the tool loop if it does not exit clean — codeact's speed
     // without codeact's habit of reporting a half-finished script as success.
+    if (!this.createMastraAgent) return await this.onOutput('[vmmastra] tier is not available in this build.');
     if (this.abortController) return await this.onOutput('[vmmastra] another agent task is running.');
     this.abortController = new AbortController();
     await this.onBusy(true);
@@ -124,6 +133,74 @@ export class VmAgentController {
       await this.onOutput(String(output || '').trim() || '[vmmastra] the agent returned no output.');
     } catch (error) {
       await this.onOutput(`Mastra error: ${error.message}`);
+    } finally {
+      this.abortController = null;
+      await this.onBusy(false);
+    }
+  }
+
+  async handleMastraCode(value) {
+    if (!this.createCodeAgent) return await this.onOutput('[vmmastra] code tier is not available in this build.');
+
+    const guest = this.getGuest();
+    if (!guest) return await this.onOutput('[vmmastra] guest bridge is still initializing.');
+    const llmClient = this.getLlmClient();
+    if (!llmClient) return await this.onOutput('[vmmastra] WebGPU LLM is not ready; use Configure LLM in the browser header.');
+
+    const subcmd = String(value ?? '');
+
+    // `vmmastra code threads` — list saved threads
+    if (subcmd === 'threads') {
+      try {
+        this.codeHarness ||= await this.createCodeAgent({
+          guest, llmClient, browserClient: this.getBrowserClient(),
+          yolo: this.yolo, approveAction: this.approveAction,
+          onActivity: e => this.onActivity(e), onOutput: m => this.onOutput(m),
+        });
+        const threads = await this.codeHarness.listThreads();
+        if (!threads.length) return await this.onOutput('[vmmastra-code] no saved threads.');
+        const lines = threads.map(t =>
+          `  ${t.id}  ${t.mode}  ${t.messages.length} msgs  ${new Date(t.updatedAt).toLocaleString()}`);
+        return await this.onOutput(['[vmmastra-code] saved threads:', ...lines].join('\n'));
+      } catch (error) { return await this.onOutput(`[vmmastra-code] error: ${error.message}`); }
+    }
+
+    // `vmmastra code reset` — drop the current thread
+    if (subcmd === 'reset') {
+      try {
+        this.codeHarness ||= await this.createCodeAgent({
+          guest, llmClient, browserClient: this.getBrowserClient(),
+          yolo: this.yolo, approveAction: this.approveAction,
+          onActivity: e => this.onActivity(e), onOutput: m => this.onOutput(m),
+        });
+        await this.codeHarness.reset();
+        return await this.onOutput('[vmmastra-code] current thread reset.');
+      } catch (error) { return await this.onOutput(`[vmmastra-code] error: ${error.message}`); }
+    }
+
+    // `vmmastra code TASK...` — run one task
+    // or `vmmastra code` — read one line interactively in the guest
+    const task = subcmd.startsWith('run:') ? subcmd.slice(4) : subcmd;
+
+    this.codeHarness ||= await this.createCodeAgent({
+      guest, llmClient, browserClient: this.getBrowserClient(),
+      yolo: this.yolo, approveAction: this.approveAction,
+      onActivity: e => this.onActivity(e), onOutput: m => this.onOutput(m),
+    });
+    this.codeHarness.setYolo(this.yolo);
+
+    if (!task) {
+      return await this.onOutput('[vmmastra-code] type a message or use /help for commands.');
+    }
+
+    if (this.abortController) return await this.onOutput('[vmmastra-code] another task is running.');
+    this.abortController = new AbortController();
+    await this.onBusy(true);
+    try {
+      const result = await this.codeHarness.run(task);
+      await this.onOutput(result.content ?? result.message ?? String(result));
+    } catch (error) {
+      await this.onOutput(`[vmmastra-code] error: ${error.message}`);
     } finally {
       this.abortController = null;
       await this.onBusy(false);
@@ -204,6 +281,9 @@ export class VmAgentController {
       this.abortController?.abort();
       this.abortController = null;
       this.harness = null;
+      this.mastraHarness = null;
+      this.codeHarness?.reset();
+      this.codeHarness = null;
       this.completedRuns.clear();
       this.yolo = true;
       this.conversationActive = false;

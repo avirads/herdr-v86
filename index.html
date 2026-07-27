@@ -666,7 +666,7 @@ import("./network/browser/v86-host-bridge.js").then(module => {
           const { createVMAgent } = await import("./agent/dist/agent.js");
           return createVMAgent(options);
         },
-        // Third tier. Imported lazily on first `vmmastra TASK` so its 9.5 MB
+// Third tier. Imported lazily on first `vmmastra TASK` so its 9.5 MB
         // bundle costs nothing for users who never invoke it. The vm*/AutoBro
         // tools are opt-in: they take the system prompt from ~17% to ~35% of a
         // 16k window, which is a real cost on the 2B on-device model.
@@ -688,6 +688,15 @@ import("./network/browser/v86-host-bridge.js").then(module => {
             sandboxOptions: { captureStderr: false },
           });
         },
+        // Mastra Code tier: persistent threads, slash commands, modes.
+        // Lazy-imported on first `vmmastra code`.
+        createCodeAgent: async options => {
+          const { createCodeAgentHarness } = await import("./agent/dist/mastra-code.js");
+          return createCodeAgentHarness({
+            ...options,
+            sandboxOptions: { captureStderr: false },
+          });
+        },
         getLlmClient: () => webGpuLlmClient,
         getGuest: () => guestReadonlyClient,
         getBrowserClient: () => autobroClient,
@@ -699,12 +708,11 @@ import("./network/browser/v86-host-bridge.js").then(module => {
             .join("\n");
           if (clean) await writeAgentTerminal(clean);
         },
-        onBusy: async busy => {
+onBusy: async busy => {
           agentBusy = busy;
-          status(busy ? "vmlang responding — Ctrl-C to stop" : "vmlang conversation active — /exit returns to shell");
+          status(busy ? "agent responding — Ctrl-C to stop" : "agent ready — type a task or /help");
           flushSerialOutput();
           if (busy) term.write("\r\x1b[2K");
-          else if (vmAgentController?.conversationActive) term.write("vmlang> ");
         },
       });
       hostBridge.setAgentHandler((command, value) => vmAgentController.handle(command, value));
