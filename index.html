@@ -480,7 +480,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.8";
+const APP_VERSION = "2026.07.27.9";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
 const bootOptions = new URLSearchParams(location.search);
@@ -697,6 +697,10 @@ let remoteHostingStarted = false;
 let remoteMoonshineModelPromise;
 let agentBusy = false;
 let agentInput = "";
+let agentInputCursor = 0;
+let agentHistoryIndex = -1;
+let agentHistoryDraft = "";
+const agentInputHistory = [];
 let voiceTranscriber;
 let voiceListening = false;
 const hiddenSerialMarkers = ["__V86AGENT_RESPONSE__", "__V86RPC__", "vmagent-rpc agent-"];
@@ -1628,7 +1632,7 @@ emulator.add_listener("serial0-output-byte", (byte) => {
     if (serialHasShellPrompt(recentOutput)) {
       sttySent = true;
       fitTerminal();
-      for (const ch of `stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project && cd /root/project\n`) {
+      for (const ch of `export HISTFILE=/root/.ash_history HISTSIZE=200; set -o emacs 2>/dev/null || true; stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project && cd /root/project\n`) {
         emulator.serial0_send(ch);
       }
       finishBoot();
@@ -1644,11 +1648,56 @@ function handleTerminalData(data) {
     return;
   }
   if (vmAgentController?.conversationActive) {
+    const redrawAgentInput = () => {
+      term.write("\r\x1b[2Kvmlang> " + agentInput);
+      const moveLeft = agentInput.length - agentInputCursor;
+      if (moveLeft) term.write(`\x1b[${moveLeft}D`);
+    };
+    const recallAgentHistory = direction => {
+      if (!agentInputHistory.length) return;
+      if (agentHistoryIndex < 0) {
+        agentHistoryDraft = agentInput;
+        agentHistoryIndex = agentInputHistory.length;
+      }
+      agentHistoryIndex = Math.max(0, Math.min(agentInputHistory.length, agentHistoryIndex + direction));
+      agentInput = agentHistoryIndex === agentInputHistory.length
+        ? agentHistoryDraft
+        : agentInputHistory[agentHistoryIndex];
+      agentInputCursor = agentInput.length;
+      redrawAgentInput();
+    };
+    if (data === "\x1b[A" || data === "\x1bOA") { recallAgentHistory(-1); return; }
+    if (data === "\x1b[B" || data === "\x1bOB") { recallAgentHistory(1); return; }
+    if (data === "\x1b[D" || data === "\x1bOD") {
+      if (agentInputCursor > 0) { agentInputCursor--; term.write("\x1b[D"); }
+      return;
+    }
+    if (data === "\x1b[C" || data === "\x1bOC") {
+      if (agentInputCursor < agentInput.length) { agentInputCursor++; term.write("\x1b[C"); }
+      return;
+    }
+    if (data === "\x1b[H" || data === "\x1bOH") { agentInputCursor = 0; redrawAgentInput(); return; }
+    if (data === "\x1b[F" || data === "\x1bOF") { agentInputCursor = agentInput.length; redrawAgentInput(); return; }
+    if (data === "\x1b[3~") {
+      if (agentInputCursor < agentInput.length) {
+        agentInput = agentInput.slice(0, agentInputCursor) + agentInput.slice(agentInputCursor + 1);
+        redrawAgentInput();
+      }
+      return;
+    }
+    // Ignore unsupported terminal escape sequences instead of printing their
+    // visible suffix (for example "[A") into the conversation input.
+    if (data.startsWith("\x1b")) return;
     for (const ch of data) {
       if (ch === "\r" || ch === "\n") {
         term.write("\r\n");
         const prompt = agentInput.trim();
+        if (prompt && agentInputHistory[agentInputHistory.length - 1] !== agentInput)
+          agentInputHistory.push(agentInput);
         agentInput = "";
+        agentInputCursor = 0;
+        agentHistoryIndex = -1;
+        agentHistoryDraft = "";
         if (!prompt) { term.write("vmlang> "); continue; }
         if (prompt === "/exit" || prompt === "/quit") {
           vmAgentController.closeConversation();
@@ -1659,13 +1708,22 @@ function handleTerminalData(data) {
         }
         vmAgentController.handle("run", prompt);
       } else if (ch === "\x7f" || ch === "\b") {
-        if (agentInput) { agentInput = agentInput.slice(0, -1); term.write("\b \b"); }
+        if (agentInputCursor > 0) {
+          agentInput = agentInput.slice(0, agentInputCursor - 1) + agentInput.slice(agentInputCursor);
+          agentInputCursor--;
+          redrawAgentInput();
+        }
       } else if (ch === "\x03") {
         agentInput = "";
+        agentInputCursor = 0;
+        agentHistoryIndex = -1;
+        agentHistoryDraft = "";
         term.write("^C\r\nvmlang> ");
       } else if (ch >= " ") {
-        agentInput += ch;
-        term.write(ch);
+        agentInput = agentInput.slice(0, agentInputCursor) + ch + agentInput.slice(agentInputCursor);
+        agentInputCursor++;
+        agentHistoryIndex = -1;
+        redrawAgentInput();
       }
     }
     return;
