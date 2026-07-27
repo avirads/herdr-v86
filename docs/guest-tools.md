@@ -17,6 +17,10 @@ The v86 `download-progress` event is emitted for cached XHR reads too, so disk
 progress is labeled from the selected VM source rather than from that event's
 name.
 
+GitHub Pages caches `index.html` for up to ten minutes. The navigation-only
+`service-worker.js` revalidates the small app shell on refresh while deliberately
+ignoring VM image and Range requests, preserving the local disk cache.
+
 This is the canonical command reference for gateway-free services in the
 VM guest. These tools communicate with JavaScript in the hosting browser;
 they do not require a guest network interface or the external TAP gateway.

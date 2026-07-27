@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const html = await readFile(new URL('../../index.html', import.meta.url), 'utf8');
+const serviceWorker = await readFile(new URL('../../service-worker.js', import.meta.url), 'utf8');
 
 test('every long-lived VM startup message includes its source', () => {
   assert.doesNotMatch(html, /Starting VM…/);
@@ -26,4 +27,11 @@ test('v86 disk progress describes the selected source rather than the event name
     /vmImageSource === "local cache" \? "Loading cached VM image" : "Downloading VM image"/,
   );
   assert.match(html, /`\$\{action\} \[\$\{vmImageSource\}\]…`/);
+});
+
+test('the app shell revalidates without intercepting VM disk ranges', () => {
+  assert.match(html, /serviceWorker\.register\("\.\/service-worker\.js", \{ updateViaCache: "none" \}\)/);
+  assert.match(serviceWorker, /event\.request\.mode !== "navigate"/);
+  assert.match(serviceWorker, /fetch\(event\.request, \{ cache: "no-cache" \}\)/);
+  assert.doesNotMatch(serviceWorker, /vm-network-ext4/);
 });

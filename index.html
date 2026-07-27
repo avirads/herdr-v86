@@ -291,6 +291,13 @@
 <script>
 "use strict";
 (async () => {
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" })
+      .catch(error => console.warn("App-shell update check failed:", error));
+  });
+}
+
 const status = (m) => document.getElementById("status").textContent = m;
 const networkStatus = () => {};
 const launchRole = new URLSearchParams(location.search).get("role");
