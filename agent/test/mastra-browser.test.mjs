@@ -50,6 +50,8 @@ test('requires both a guest and an llm client', () => {
 test('default instructions require executable code verification and repair', () => {
   assert.match(DEFAULT_INSTRUCTIONS, /run it or an appropriate syntax checker/i);
   assert.match(DEFAULT_INSTRUCTIONS, /inspect the exit code and output/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /both "qjs FILE" and "vmjs < FILE"/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /each command's exit code and output/i);
   assert.match(DEFAULT_INSTRUCTIONS, /repair the code and rerun verification/i);
   assert.match(DEFAULT_INSTRUCTIONS, /Report success only after verification passes/i);
 });

@@ -25,6 +25,7 @@ export const DEFAULT_INSTRUCTIONS = [
   'The shell runs BusyBox sh, so prefer portable POSIX commands over bash-isms or GNU-only flags.',
   'Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read.',
   'After creating or editing executable code, run it or an appropriate syntax checker and inspect the exit code and output.',
+  'After creating or editing JavaScript, test the completed file with both "qjs FILE" and "vmjs < FILE"; inspect each command\'s exit code and output.',
   'If verification fails, repair the code and rerun verification. Report success only after verification passes.',
 ].join('\n');
 
