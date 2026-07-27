@@ -44,6 +44,9 @@
   .setup-step label { display: grid; gap: 5px; margin: 12px 0; color: #8b949e; font-size: 12px; }
   .setup-step input { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 9px; }
   .setup-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
+  .model-downloads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .model-downloads .tool-link { box-sizing: border-box; min-height: 42px; padding: 8px 10px; display: grid; place-items: center; text-align: center; white-space: normal; background: #21262d; border: 1px solid #30363d; border-radius: 5px; text-decoration: none; }
+  .model-downloads .tool-link:hover, .model-downloads .tool-link:focus-visible { border-color: #58a6ff; outline: none; }
   .setup-status { margin-top: 12px; color: #8b949e; font-size: 12px; min-height: 1.2em; }
   .setup-step ol { color: #8b949e; line-height: 1.5; padding-left: 20px; }
   .setup-step details { margin-top: 16px; color: #8b949e; font-size: 13px; }
@@ -113,6 +116,8 @@
     .setup-card { margin: auto 0; padding: 18px 16px; border-radius: 8px; }
     .setup-actions { align-items: stretch; flex-direction: column; }
     .setup-actions button, .setup-actions .tool-link { box-sizing: border-box; width: 100%; min-height: 42px; display: grid; place-items: center; text-align: center; white-space: normal; }
+    .model-downloads { grid-template-columns: 1fr; }
+    .model-downloads .tool-link { min-height: 48px; }
     button { min-height: 36px; }
     dialog { box-sizing: border-box; max-height: calc(100dvh - 24px); overflow-y: auto; width: calc(100vw - 24px); padding: 16px; }
     .settings-action { align-items: stretch; flex-direction: column; gap: 8px; }
@@ -159,9 +164,13 @@
       <p>Load the page-local LiteRT-LM model used by <code>vmlang</code> and AutoBro. The model remains in this browser.</p>
       <div class="setup-actions">
         <button id="setup-configure-llm" type="button">Choose model file</button>
-        <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download model (~2 GB)</a>
         <button id="setup-connect-remote" type="button">Connect to agent</button>
         <button id="skip-setup-llm" type="button">Skip setup and open shell</button>
+      </div>
+      <div class="model-downloads" aria-label="Download a Gemma 4 LiteRT-LM model">
+        <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download Gemma 4 E2B</a>
+        <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 E4B</a>
+        <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 12B</a>
       </div>
       <div id="setup-llm-status" class="setup-status">Checking for a configured model…</div>
     </section>
@@ -479,7 +488,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.3";
+const APP_VERSION = "2026.07.27.4";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
 document.getElementById("about-app-version").textContent = APP_VERSION;
