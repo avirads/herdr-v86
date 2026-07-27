@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMastraVMAgent } from '../src/mastra-browser.js';
+import { createMastraVMAgent, DEFAULT_INSTRUCTIONS } from '../src/mastra-browser.js';
 
 function guestFake() {
   const files = new Map([['README.md', 'hello\n']]);
@@ -45,6 +45,13 @@ const scripted = replies => {
 test('requires both a guest and an llm client', () => {
   assert.throws(() => createMastraVMAgent({ llmClient: { chat() {} } }), /guest bridge/);
   assert.throws(() => createMastraVMAgent({ guest: guestFake() }), /LLM client/);
+});
+
+test('default instructions require executable code verification and repair', () => {
+  assert.match(DEFAULT_INSTRUCTIONS, /run it or an appropriate syntax checker/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /inspect the exit code and output/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /repair the code and rerun verification/i);
+  assert.match(DEFAULT_INSTRUCTIONS, /Report success only after verification passes/i);
 });
 
 test('trims delete and lsp by default to save prompt tokens', async () => {

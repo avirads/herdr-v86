@@ -257163,6 +257163,14 @@ ${lines.join("\n")}`;
 // src/mastra-browser.js
 var GUEST_RPC_TIMEOUT_MS = 3e4;
 var SANDBOX_TIMEOUT_MS = 25e3;
+var DEFAULT_INSTRUCTIONS = [
+  "You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.",
+  'Workspace paths are ABSOLUTE and rooted at the project directory: use "/README.md", never "README.md" or "./README.md".',
+  "The shell runs BusyBox sh, so prefer portable POSIX commands over bash-isms or GNU-only flags.",
+  "Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read.",
+  "After creating or editing executable code, run it or an appropriate syntax checker and inspect the exit code and output.",
+  "If verification fails, repair the code and rerun verification. Report success only after verification passes."
+].join("\n");
 function createMastraVMAgent({
   guest,
   llmClient,
@@ -257175,12 +257183,7 @@ function createMastraVMAgent({
   // after zero guest calls. Stating the path rule up front is what makes the
   // tier usable with a 2B model. The batching line is here for the same
   // reason: every tool call is one serial round-trip on an emulated CPU.
-  instructions = [
-    "You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.",
-    'Workspace paths are ABSOLUTE and rooted at the project directory: use "/README.md", never "README.md" or "./README.md".',
-    "The shell runs BusyBox sh, so prefer portable POSIX commands over bash-isms or GNU-only flags.",
-    "Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read."
-  ].join("\n"),
+  instructions = DEFAULT_INSTRUCTIONS,
   approveAction = async () => false,
   yolo = true,
   onActivity = () => {
@@ -257357,6 +257360,7 @@ function stripFence(content3) {
 }
 var GUEST_RPC_TIMEOUT_MS_EXPORTED = GUEST_RPC_TIMEOUT_MS;
 export {
+  DEFAULT_INSTRUCTIONS,
   GUEST_RPC_TIMEOUT_MS_EXPORTED,
   createMastraVMAgent
 };
