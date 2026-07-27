@@ -411,10 +411,27 @@ const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
 
-async function rangePreflight() {
+async function hasCachedDiskRange() {
   try {
-    setBootProgress(3, "Checking disk delivery…");
-    status("checking disk delivery…");
+    const response = await fetch(diskURL, {
+      headers: { Range: "bytes=0-0" },
+      cache: "only-if-cached",
+      mode: "same-origin",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function rangePreflight() {
+  const localDiskAvailable = await hasCachedDiskRange();
+  try {
+    const sourceMessage = localDiskAvailable
+      ? "Checking local VM image…"
+      : "Checking remote VM image…";
+    setBootProgress(3, sourceMessage);
+    status(sourceMessage.toLowerCase());
     const response = await fetch(diskURL, {
       headers: { Range: "bytes=0-0" },
       // Revalidate the versioned disk URL. When the server validators say the
@@ -425,7 +442,11 @@ async function rangePreflight() {
     const contentRange = response.headers.get("content-range") || "";
     const valid = response.status === 206 && contentRange === `bytes 0-0/${DISK_SIZE}`;
     await response.arrayBuffer();
-    setBootProgress(8, valid ? "Loading VM…" : "Preparing compatibility boot…");
+    const loadingMessage = localDiskAvailable
+      ? "Loading VM from local cache…"
+      : "Downloading VM from remote…";
+    setBootProgress(8, valid ? loadingMessage : "Preparing compatibility boot from remote…");
+    status(valid ? loadingMessage.toLowerCase() : "preparing compatibility boot from remote…");
     return valid;
   } catch {
     return false;
