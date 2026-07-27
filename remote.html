@@ -113,6 +113,18 @@ let recordingStream;
 let recordingChunks = [];
 let recordingTimer;
 
+function savedPairingKey() {
+  try { return localStorage.getItem(SAVED_PAIRING_KEY) || ''; }
+  catch { return ''; }
+}
+function rememberPairingKey(value) {
+  try { localStorage.setItem(SAVED_PAIRING_KEY, value); }
+  catch { /* Storage can be unavailable in restrictive/private browser modes. */ }
+}
+function restorePairingKey() {
+  if (!key.value.trim()) key.value = savedPairingKey();
+}
+
 function updateSendButton() {
   const ready = Boolean(prompt.value.trim()) && !sendBusy;
   sendButton.disabled = !ready;
@@ -153,7 +165,7 @@ async function connectWithKey(rawKey) {
     });
     await remote.connect(rawKey);
     key.value = rawKey;
-    localStorage.setItem(SAVED_PAIRING_KEY, rawKey);
+    rememberPairingKey(rawKey);
     pairing.hidden = true;
     chat.classList.add('active');
     prompt.focus();
@@ -182,8 +194,12 @@ if (urlKey) {
   key.value = urlKey;
   connectWithKey(urlKey.trim());
 } else {
-  key.value = localStorage.getItem(SAVED_PAIRING_KEY) || '';
+  restorePairingKey();
 }
+window.addEventListener('pageshow', restorePairingKey);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') restorePairingKey();
+});
 
 // In-page scanner: for when this page is already open (e.g. reopened from a
 // bookmark, or after a previous session ended) and there's no native
