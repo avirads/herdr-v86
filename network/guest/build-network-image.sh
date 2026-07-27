@@ -7,6 +7,7 @@ OUTPUT_IMAGE="${OUTPUT_IMAGE:-$PROJECT_DIR/vm-network-ext4.img}"
 DISK_BYTES="${DISK_BYTES:-100663296}"
 MOUNT_DIR="${MOUNT_DIR:-/mnt/herdr-v86-network}"
 RIG_PACKAGE="${RIG_PACKAGE:-$PROJECT_DIR/network/guest/rig-agent-0.1.0-x86.tar.gz}"
+HERDR_BINARY="${HERDR_BINARY:-}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "run as root" >&2
@@ -18,6 +19,10 @@ if [[ ! -f "$SOURCE_IMAGE" ]]; then
 fi
 if [[ ! -f "$RIG_PACKAGE" ]]; then
   echo "Rig agent x86 package not found: $RIG_PACKAGE" >&2
+  exit 1
+fi
+if [[ -z "$HERDR_BINARY" || ! -f "$HERDR_BINARY" ]]; then
+  echo "set HERDR_BINARY to the statically linked i686 Herdr executable" >&2
   exit 1
 fi
 
@@ -84,9 +89,10 @@ rm -f \
   "$MOUNT_DIR/usr/local/bin/vmagent" \
   "$MOUNT_DIR/usr/local/bin/mastra" \
   "$MOUNT_DIR/sbin/herdr-boot"
+install -m 0755 "$HERDR_BINARY" "$MOUNT_DIR/usr/local/bin/herdr"
 
 chroot "$MOUNT_DIR" /usr/bin/curl --version
 chroot "$MOUNT_DIR" /usr/bin/tmux -V
 chroot "$MOUNT_DIR" /usr/bin/qjs --version
-chroot "$MOUNT_DIR" /bin/sh -c '! command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && test -x /usr/local/libexec/rig-agent'
+chroot "$MOUNT_DIR" /bin/sh -c '! command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && test -x /usr/local/libexec/rig-agent'
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"

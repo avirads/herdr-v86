@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/avirads/herdr",
+  "commit": "cf6fcd4d5333b6bc685cedb4699bb4f5b9acd371",
+  "target": "i686-unknown-linux-musl",
+  "sha256": "c73ff29c9143bd33c08617b838f9e0b99ea4046e6b396db061a7d596f4068949"
+}

@@ -235,7 +235,9 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
 - `guest/build-rig-agent-x86.sh` reproducibly builds the static i386 Rig agent
   from the version-pinned source archive included beside its binary package.
 - `guest/build-kernel.sh` and `guest/build-network-image.sh` reproduce the
-  kernel and guest image.
+  kernel and guest image. Set `HERDR_BINARY` to a statically linked i686 Herdr
+  executable when building the guest image. `guest/herdr-source.json` records
+  the source commit, target, and binary checksum used by the tracked image.
 
 ## Automated verification
 
