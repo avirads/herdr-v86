@@ -2,6 +2,49 @@
 // no extension, native process, API key, or guest network is involved.
 const LAST_MODEL_KEY = 'vm.litert.lastModel';
 const MAX_CONTEXT_TOKENS = 16384;
+const STREAM_END_TOKENS = ['<pad>', '<eos>', '<bos>', '<end_of_turn>', '<|end_of_text|>', '<|eot_id|>'];
+const MAX_STREAM_CHARS = 65536;
+
+// LiteRT normally consumes model control tokens internally, but some model /
+// runtime combinations surface them as text and can emit <pad> indefinitely.
+// Retain a possible partial token between chunks so none of it reaches the UI.
+export class StreamingTextFilter {
+  constructor(tokens = STREAM_END_TOKENS) {
+    this.tokens = tokens.map(token => token.toLowerCase());
+    this.pending = '';
+    this.stopped = false;
+  }
+
+  push(value) {
+    if (this.stopped) return { text: '', stop: true };
+    const combined = this.pending + String(value ?? '');
+    const lower = combined.toLowerCase();
+    let terminalAt = -1;
+    for (const token of this.tokens) {
+      const index = lower.indexOf(token);
+      if (index >= 0 && (terminalAt < 0 || index < terminalAt)) terminalAt = index;
+    }
+    if (terminalAt >= 0) {
+      this.pending = '';
+      this.stopped = true;
+      return { text: combined.slice(0, terminalAt), stop: true };
+    }
+    let retained = 0;
+    const max = Math.min(combined.length, Math.max(...this.tokens.map(token => token.length)) - 1);
+    for (let length = 1; length <= max; length++) {
+      const suffix = lower.slice(-length);
+      if (this.tokens.some(token => token.startsWith(suffix))) retained = length;
+    }
+    this.pending = retained ? combined.slice(-retained) : '';
+    return { text: retained ? combined.slice(0, -retained) : combined, stop: false };
+  }
+
+  flush() {
+    const text = this.stopped ? '' : this.pending;
+    this.pending = '';
+    return text;
+  }
+}
 
 function contentToText(content) {
   if (typeof content === 'string') return content;
@@ -311,15 +354,28 @@ export class LiteRtLmClient extends EventTarget {
     const preface = messages.slice(0, -1).map(message => ({ role: message.role, content: contentToText(message.content) }));
     const conversation = await this.engine.createConversation(preface.length ? { preface: { messages: preface } } : {});
     let content = '';
+    const filter = new StreamingTextFilter();
     try {
       const reader = conversation.sendMessageStreaming(contentToText(last.content)).getReader();
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        const delta = contentToText(value?.content);
-        if (!delta) continue;
-        content += delta;
-        await onChunk?.(delta);
+        const filtered = filter.push(contentToText(value?.content));
+        const delta = filtered.text.slice(0, MAX_STREAM_CHARS - content.length);
+        if (delta) {
+          content += delta;
+          await onChunk?.(delta);
+        }
+        const lengthLimitReached = content.length >= MAX_STREAM_CHARS;
+        if (filtered.stop || lengthLimitReached) {
+          await reader.cancel(filtered.stop ? 'model emitted a terminal token' : 'response length limit reached').catch(() => undefined);
+          break;
+        }
+      }
+      const tail = filter.flush();
+      if (tail && content.length < MAX_STREAM_CHARS) {
+        content += tail;
+        await onChunk?.(tail);
       }
       return {
         id: `litertlm-${Date.now()}`,
