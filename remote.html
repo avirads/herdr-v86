@@ -41,7 +41,9 @@
   /* Text input stays available, de-emphasized beneath voice. */
   #chat-form { display: flex; gap: 8px; }
   #prompt { flex: 1; min-width: 0; font-size: 13px; }
-  #send { padding: 6px 14px; font-size: 13px; color: #8b949e; }
+  #send { padding: 8px 14px; font-size: 15px; font-weight: 600; color: #8b949e; transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
+  #send.ready { background: #1f6feb; border-color: #388bfd; color: #fff; box-shadow: 0 0 0 1px rgb(56 139 253 / .18), 0 4px 14px rgb(31 111 235 / .28); }
+  #send.ready:active { background: #388bfd; transform: translateY(1px); }
   a { color: #58a6ff; }
   @media (max-width: 520px) { #chat-form { flex-direction: column; } #send { width: 100%; } }
 </style>
@@ -84,7 +86,7 @@
     </div>
     <form id="chat-form">
       <input id="prompt" required autocomplete="off" placeholder="Or type a message instead">
-      <button id="send" type="submit">Send</button>
+      <button id="send" type="submit" disabled>Send</button>
     </form>
   </section>
 </main>
@@ -100,13 +102,24 @@ const key = document.getElementById('key');
 const connectButton = document.getElementById('connect');
 const log = document.getElementById('log');
 const prompt = document.getElementById('prompt');
+const sendButton = document.getElementById('send');
 const recordButton = document.getElementById('record');
 const voiceStatus = document.getElementById('voice-status');
 let remote;
+let sendBusy = false;
 let recorder;
 let recordingStream;
 let recordingChunks = [];
 let recordingTimer;
+
+function updateSendButton() {
+  const ready = Boolean(prompt.value.trim()) && !sendBusy;
+  sendButton.disabled = !ready;
+  sendButton.classList.toggle('ready', ready);
+  sendButton.setAttribute('aria-label', ready ? 'Send message' : 'Type a message before sending');
+}
+prompt.addEventListener('input', updateSendButton);
+updateSendButton();
 
 // The agent side can end the session at any point — the "Disconnect phone"
 // button, closing the VM page/tab, or a dropped connection. Return to the
@@ -243,10 +256,10 @@ document.getElementById('chat-form').onsubmit = async event => {
   const message = prompt.value.trim();
   if (!message) return;
   prompt.value = '';
+  sendBusy = true;
+  updateSendButton();
   log.textContent += `You: ${message}\n\nAgent: `;
   log.scrollTop = log.scrollHeight;
-  const send = document.getElementById('send');
-  send.disabled = true;
   let streamed = false;
   try {
     const answer = await remote.chat(message, { onChunk: delta => {
@@ -258,7 +271,12 @@ document.getElementById('chat-form').onsubmit = async event => {
     log.textContent += '\n\n';
   }
   catch (error) { log.textContent += `[error: ${error.message}]\n\n`; }
-  finally { send.disabled = false; log.scrollTop = log.scrollHeight; prompt.focus(); }
+  finally {
+    sendBusy = false;
+    updateSendButton();
+    log.scrollTop = log.scrollHeight;
+    prompt.focus();
+  }
 };
 
 function supportedRecordingType() {
@@ -267,7 +285,8 @@ function supportedRecordingType() {
 
 async function submitVoice(blob) {
   recordButton.disabled = true;
-  document.getElementById('send').disabled = true;
+  sendBusy = true;
+  updateSendButton();
   voiceStatus.textContent = 'Sending to agent…';
   log.textContent += 'You (voice): ';
   let streamed = false;
@@ -294,7 +313,8 @@ async function submitVoice(blob) {
     voiceStatus.textContent = 'Voice failed: ' + error.message;
   } finally {
     recordButton.disabled = false;
-    document.getElementById('send').disabled = false;
+    sendBusy = false;
+    updateSendButton();
     log.scrollTop = log.scrollHeight;
   }
 }
