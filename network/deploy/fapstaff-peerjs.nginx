@@ -44,6 +44,12 @@ server {
         try_files $uri =404;
     }
 
+    location = /downloads/moonshine-tiny-quantized-0.1.29.zip {
+        alias /var/www/herdr-v86-downloads/moonshine-tiny-quantized-0.1.29.zip;
+        default_type application/zip;
+        add_header Content-Disposition 'attachment; filename="moonshine-tiny-quantized-0.1.29.zip"';
+    }
+
     location ~ \.mjs$ {
         default_type application/javascript;
         try_files $uri =404;

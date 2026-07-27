@@ -37,3 +37,9 @@ test('Settings offers downloads only for Gemma models missing from the cache', (
   assert.match(html, /link\.hidden = cachedNames\.has\(link\.dataset\.modelFile\.toLowerCase\(\)\)/);
   assert.match(html, /downloads\.hidden = missingCount === 0/);
 });
+
+test('Settings Voice links to the versioned Moonshine Tiny model ZIP on fapstaff', () => {
+  const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
+  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/moonshine-tiny-quantized-0\.1\.29\.zip" download/);
+  assert.match(settings, />Download Moonshine Tiny voice model ZIP<\/a>/);
+});

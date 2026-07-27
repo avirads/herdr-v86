@@ -17,6 +17,12 @@ test('the static app and PeerJS routes remain enabled together', () => {
   assert.match(config, /location \/ \{\s*try_files \$uri \$uri\/ =404;/);
 });
 
+test('the voice model ZIP is served from persistent storage', () => {
+  assert.match(config, /location = \/downloads\/moonshine-tiny-quantized-0\.1\.29\.zip/);
+  assert.match(config, /alias \/var\/www\/herdr-v86-downloads\/moonshine-tiny-quantized-0\.1\.29\.zip/);
+  assert.match(config, /default_type application\/zip/);
+});
+
 test('QR loading bypasses stale MIME cache entries and has a visible fallback', () => {
   assert.match(html, /qrcode-generator-2\.0\.4\.mjs\?v=20260727-js-mime/);
   assert.match(html, /const qrReady = await renderRemoteQr/);
