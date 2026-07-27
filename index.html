@@ -172,6 +172,12 @@
         <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 E4B</a>
         <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 12B</a>
       </div>
+      <details class="model-more-info">
+        <summary>More info</summary>
+        <p>Learn how LiteRT-LM runs fast generative AI directly on the device:
+          <a class="tool-link" href="https://developers.googleblog.com/blazing-fast-on-device-genai-with-litert-lm/" target="_blank" rel="noopener noreferrer">Blazing-fast on-device GenAI with LiteRT-LM</a>.
+        </p>
+      </details>
       <div id="setup-llm-status" class="setup-status">Checking for a configured model…</div>
     </section>
     <section id="setup-step-autobro" class="setup-step" hidden>
@@ -488,7 +494,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.4";
+const APP_VERSION = "2026.07.27.5";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
 document.getElementById("about-app-version").textContent = APP_VERSION;

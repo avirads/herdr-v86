@@ -23,3 +23,10 @@ test('model download choices remain touch-friendly on mobile', () => {
   assert.match(html, /\.model-downloads \{ grid-template-columns: 1fr; \}/);
   assert.match(html, /\.model-downloads \.tool-link \{ min-height: 48px; \}/);
 });
+
+test('VM setup More info links to the LiteRT-LM article in a new tab', () => {
+  const step = html.slice(html.indexOf('id="setup-step-llm"'), html.indexOf('id="setup-step-autobro"'));
+  assert.match(step, /<details class="model-more-info">[\s\S]*<summary>More info<\/summary>/);
+  assert.match(step, /href="https:\/\/developers\.googleblog\.com\/blazing-fast-on-device-genai-with-litert-lm\/"/);
+  assert.match(step, /target="_blank" rel="noopener noreferrer"/);
+});
