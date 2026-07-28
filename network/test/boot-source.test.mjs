@@ -7,8 +7,8 @@ const serviceWorker = await readFile(new URL('../../service-worker.js', import.m
 
 test('every long-lived VM startup message includes its source', () => {
   assert.doesNotMatch(html, /Starting VM…/);
-  assert.match(html, /Starting VM \[\$\{vmImageSource\}\]…/);
-  assert.match(html, /Starting compatibility boot \[\$\{vmImageSource\}\]…/);
+  assert.match(html, /Starting VMVM \[\$\{vmImageSource\}\]…/);
+  assert.match(html, /Starting VMVM \[\$\{vmImageSource\}\] in compatibility mode…/);
 });
 
 test('a successfully booted disk version becomes the local source', () => {
@@ -24,9 +24,11 @@ test('v86 disk progress describes the selected source rather than the event name
   assert.match(html, /isVmDiskDownload\(e\.file_name\)/);
   assert.match(
     html,
-    /vmImageSource === "local cache" \? "Loading cached VM image" : "Downloading VM image"/,
+    /vmImageSource === "local cache" \? "Loading cached VMVM" : "Downloading VMVM"/,
   );
   assert.match(html, /`\$\{action\} \[\$\{vmImageSource\}\]…`/);
+  assert.match(html, /Downloading VMVM \[\$\{vmImageSource\}\]…/);
+  assert.doesNotMatch(html, /Downloading \$\{e\.file_name\}/);
 });
 
 test('the interactive VM shell starts in the project directory', () => {

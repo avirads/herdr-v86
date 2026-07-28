@@ -369,7 +369,7 @@ function setBootProgress(value, message) {
 }
 const bootTicker = setInterval(() => {
   if (bootProgress < 90) {
-    setBootProgress(bootProgress + 1, `Starting VM [${vmImageSource}]…`);
+    setBootProgress(bootProgress + 1, `Starting VMVM [${vmImageSource}]…`);
   }
 }, 700);
 function finishBoot() {
@@ -394,7 +394,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.28.4";
+const APP_VERSION = "2026.07.28.5";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-40-binary-transfer";
 const bootOptions = new URLSearchParams(location.search);
@@ -419,8 +419,8 @@ async function rangePreflight() {
     const contentRange = response.headers.get("content-range") || "";
     const valid = response.status === 206 && contentRange === `bytes 0-0/${DISK_SIZE}`;
     await response.arrayBuffer();
-    const loadingMessage = `Starting VM [${vmImageSource}]…`;
-    const compatibilityMessage = `Preparing compatibility boot [${vmImageSource}]…`;
+    const loadingMessage = `Starting VMVM [${vmImageSource}]…`;
+    const compatibilityMessage = `Starting VMVM [${vmImageSource}] in compatibility mode…`;
     setBootProgress(8, valid ? loadingMessage : compatibilityMessage);
     status((valid ? loadingMessage : compatibilityMessage).toLowerCase());
     return valid;
@@ -1535,8 +1535,8 @@ if (gatewayURL && sessionToken) {
 
 emulator.add_listener("emulator-ready", () => {
   setBootProgress(28, compatibilityBoot
-    ? `Starting compatibility boot [${vmImageSource}]…`
-    : `Starting VM [${vmImageSource}]…`);
+    ? `Starting VMVM [${vmImageSource}] in compatibility mode…`
+    : `Starting VMVM [${vmImageSource}]…`);
   status(`emulator ready — booting${compatibilityBoot ? " in compatibility mode" : ""}… (first boot ~30-90s)`);
 });
 function isVmDiskDownload(fileName) {
@@ -1551,12 +1551,12 @@ emulator.add_listener("download-progress", (e) => {
     const fraction = Math.max(0, Math.min(1, e.loaded / e.total));
     const percent = Math.round(100 * fraction);
     if (isVmDiskDownload(e.file_name)) {
-      const action = vmImageSource === "local cache" ? "Loading cached VM image" : "Downloading VM image";
+      const action = vmImageSource === "local cache" ? "Loading cached VMVM" : "Downloading VMVM";
       setBootProgress(10 + fraction * 55, `${action} [${vmImageSource}]…`);
       status(`${action.toLowerCase()} [${vmImageSource}] ${percent}%`);
     } else {
-      setBootProgress(10 + fraction * 55, `Downloading ${e.file_name}…`);
-      status(`downloading ${e.file_name} ${percent}%`);
+      setBootProgress(10 + fraction * 55, `Downloading VMVM [${vmImageSource}]…`);
+      status(`downloading VMVM [${vmImageSource}] ${percent}%`);
     }
   }
 });
@@ -1591,8 +1591,8 @@ function serialHasShellPrompt(output) {
 emulator.add_listener("serial0-output-byte", (byte) => {
   if (!gotSerial) {
     gotSerial = true;
-    setBootProgress(68, `Starting VM [${vmImageSource}]…`);
-    status(`VM booting [${vmImageSource}] — output live`);
+    setBootProgress(68, `Starting VMVM [${vmImageSource}]…`);
+    status(`VMVM booting [${vmImageSource}] — output live`);
   }
   writeSerialByte(byte);
   if (!compatibilityBoot && !compatibilityRestartScheduled) {
