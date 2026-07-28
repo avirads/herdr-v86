@@ -227,7 +227,7 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
 - `../../vm-network-ext4.img`: Alpine x86 image with automatic DHCP,
   CA certificates, and curl/OpenSSL supporting HTTPS, HTTP/2, WSS, and common
   network protocols. The image also includes tmux 3.5a, QuickJS, `jq`, `git`,
-  ripgrep, shfmt, ctags, make, patch, browser-backed project archive import/export, and the low-latency
+  ripgrep, shfmt, ctags, make, patch, Grafana k6 2.0.0, browser-backed project archive import/export, and the low-latency
   browser-orchestrated `rig` launcher, and the native i686 Zerostack 1.5.0
   agent backed by the browser model. Deep-agent orchestration remains
   browser-side through `vmlang`.
@@ -236,6 +236,8 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
   take around 15–20 minutes with release link-time optimization.
 - `guest/build-rig-agent-x86.sh` reproducibly builds the static i386 Rig agent
   from the version-pinned source archive included beside its binary package.
+- `guest/build-k6-x86.sh` reproducibly builds the patched official Grafana k6
+  v2.0.0 source for Linux/i386 and UPX-compresses it to fit the fixed image.
 - `guest/build-kernel.sh` and `guest/build-network-image.sh` reproduce the
   kernel and guest image. Set `HERDR_BINARY` to a statically linked i686 Herdr
   executable when building the guest image. `guest/herdr-source.json` records

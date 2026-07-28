@@ -3,6 +3,10 @@
 Operating manual for an agent using the `vmmastra` command in this guest without
 a human in the loop. Installed at `/usr/local/share/mastra/SKILL.md`.
 
+Before choosing shell tools, read `/usr/local/share/vm-agent-capabilities.md`.
+It includes the installed Grafana `k6` command for JavaScript HTTP/API
+performance and load testing.
+
 Deep Agents auto-discovers skills under `/root/project/skills/*/SKILL.md`.
 Mastra does **not** read skills or `AGENTS.md` at all — if you are the Mastra
 agent, this file only reaches you when something puts it in your context. To

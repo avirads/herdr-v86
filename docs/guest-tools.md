@@ -131,7 +131,15 @@ rejected. Exports are limited to the browser bridge's 8 MiB compressed-file
 limit.
 
 The guest also includes `git`, `rg` (ripgrep), `jq`, `curl`, `shfmt`, `ctags`,
-`make`, and `patch`. ShellCheck is documented but is not installed because
+`make`, `patch`, and [Grafana k6](https://grafana.com/docs/k6/latest/) 2.0.0.
+Use k6 for JavaScript HTTP/API performance and load tests:
+
+```sh
+k6 new load-test.js
+k6 run --vus 5 --duration 30s load-test.js
+```
+
+ShellCheck is documented but is not installed because
 Alpine 3.22 does not publish an x86 package and this VM image remains fixed-size.
 Remote Git and curl require a default route; without one, use
 `vmgithub archive` or `vmfetch` as appropriate. For shell scripts, run:
@@ -304,7 +312,7 @@ Shared facilities available to the agents include:
 
 - Project file inspection and editing rooted at the invocation directory.
 - BusyBox utilities plus `jq`, `rg`, `git`, `curl`, `tar`, `gzip`, `qjs`,
-  `vmjs`, `shfmt`, `ctags`, `make`, and `patch`.
+  `vmjs`, `shfmt`, `ctags`, `make`, `patch`, and Grafana `k6`.
 - `vmproject import/export` and the matching Settings controls for moving a
   project into or out of the VM.
 - `vmfetch`, `vmgithub`, `vmclip`, and `vmexport` when ordinary guest networking

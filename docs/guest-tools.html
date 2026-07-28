@@ -193,7 +193,12 @@ vmproject export /root/project project.tar.gz
 rejected. Exports are limited to the browser bridge's 8 MiB compressed-file
 limit.</p>
 <p>The guest also includes <code>git</code>, <code>rg</code> (ripgrep), <code>jq</code>, <code>curl</code>, <code>shfmt</code>, <code>ctags</code>,
-<code>make</code>, and <code>patch</code>. ShellCheck is documented but is not installed because
+<code>make</code>, <code>patch</code>, and <a href="https://grafana.com/docs/k6/latest/">Grafana k6</a> 2.0.0.
+Use k6 for JavaScript HTTP/API performance and load tests:</p>
+<pre><code class="language-sh">k6 new load-test.js
+k6 run --vus 5 --duration 30s load-test.js
+</code></pre>
+<p>ShellCheck is documented but is not installed because
 Alpine 3.22 does not publish an x86 package and this VM image remains fixed-size.
 Remote Git and curl require a default route; without one, use
 <code>vmgithub archive</code> or <code>vmfetch</code> as appropriate. For shell scripts, run:</p>
@@ -396,7 +401,7 @@ they are not unmodified upstream command-line distributions.</p>
 <ul>
 <li>Project file inspection and editing rooted at the invocation directory.</li>
 <li>BusyBox utilities plus <code>jq</code>, <code>rg</code>, <code>git</code>, <code>curl</code>, <code>tar</code>, <code>gzip</code>, <code>qjs</code>,
-<code>vmjs</code>, <code>shfmt</code>, <code>ctags</code>, <code>make</code>, and <code>patch</code>.</li>
+<code>vmjs</code>, <code>shfmt</code>, <code>ctags</code>, <code>make</code>, <code>patch</code>, and Grafana <code>k6</code>.</li>
 <li><code>vmproject import/export</code> and the matching Settings controls for moving a
 project into or out of the VM.</li>
 <li><code>vmfetch</code>, <code>vmgithub</code>, <code>vmclip</code>, and <code>vmexport</code> when ordinary guest networking

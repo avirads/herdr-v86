@@ -9,6 +9,7 @@ MOUNT_DIR="${MOUNT_DIR:-/mnt/herdr-v86-network}"
 RIG_PACKAGE="${RIG_PACKAGE:-$PROJECT_DIR/network/guest/rig-agent-0.1.0-x86.tar.gz}"
 ZEROSTACK_PACKAGE="${ZEROSTACK_PACKAGE:-$PROJECT_DIR/network/guest/zerostack-1.5.0-x86.tar.gz}"
 HERDR_BINARY="${HERDR_BINARY:-}"
+K6_BINARY="${K6_BINARY:-$PROJECT_DIR/network/guest/bin/k6}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "run as root" >&2
@@ -28,6 +29,10 @@ if [[ ! -f "$ZEROSTACK_PACKAGE" ]]; then
 fi
 if [[ -z "$HERDR_BINARY" || ! -f "$HERDR_BINARY" ]]; then
   echo "set HERDR_BINARY to the statically linked i686 Herdr executable" >&2
+  exit 1
+fi
+if [[ ! -f "$K6_BINARY" ]]; then
+  echo "k6 linux/386 binary not found: $K6_BINARY" >&2
   exit 1
 fi
 
@@ -76,6 +81,7 @@ install -D -m 0755 "$PROJECT_DIR/network/guest/zerostack-vm" "$MOUNT_DIR/usr/loc
 install -D -m 0755 "$PROJECT_DIR/network/guest/mastra-vm" "$MOUNT_DIR/usr/local/bin/vmmastra"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vmjs" "$MOUNT_DIR/usr/local/bin/vmjs"
 install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bin/vmbench"
+install -D -m 0755 "$K6_BINARY" "$MOUNT_DIR/usr/local/bin/k6"
 # Agent-facing operating manual for the Mastra tier. A system path rather than
 # /root/project/skills/, so the user's workspace is left untouched; the file
 # itself explains the one-line copy that makes Deep Agents auto-discover it.
@@ -110,6 +116,7 @@ chroot "$MOUNT_DIR" /usr/bin/shfmt --version
 chroot "$MOUNT_DIR" /usr/bin/ctags --version
 chroot "$MOUNT_DIR" /usr/bin/make --version
 chroot "$MOUNT_DIR" /usr/bin/patch --version
+chroot "$MOUNT_DIR" /usr/local/bin/k6 version
 chroot "$MOUNT_DIR" /usr/local/libexec/zerostack --version
-chroot "$MOUNT_DIR" /bin/sh -c 'command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && command -v jq && command -v git && command -v rg && command -v shfmt && command -v ctags && command -v make && command -v patch && command -v vmproject && test -x /usr/local/libexec/rig-agent'
+chroot "$MOUNT_DIR" /bin/sh -c 'command -v zerostack && ! command -v vmagent && ! command -v mastra && command -v herdr && command -v vmlang && command -v vmmastra && command -v rig && command -v qjs && command -v jq && command -v git && command -v rg && command -v shfmt && command -v ctags && command -v make && command -v patch && command -v k6 && command -v vmproject && test -x /usr/local/libexec/rig-agent'
 echo "built HTTPS-capable guest image: $OUTPUT_IMAGE"

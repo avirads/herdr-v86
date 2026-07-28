@@ -27,6 +27,9 @@ test('responsive help contains official upstream project links', () => {
     assert.match(markdown, new RegExp(`\\[${name}\\]\\(${url.replaceAll('/', '\\/')}\\)`));
     assert.match(html, new RegExp(`href="${url.replaceAll('/', '\\/')}"`));
   }
+  assert.match(markdown, /\[Grafana k6\]\(https:\/\/grafana\.com\/docs\/k6\/latest\/\)/);
+  assert.match(html, /href="https:\/\/grafana\.com\/docs\/k6\/latest\/"/);
+  assert.match(html, /k6 run --vus 5 --duration 30s/);
 });
 
 test('Deep Agents guide has a responsive generated page', () => {

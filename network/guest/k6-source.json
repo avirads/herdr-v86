@@ -1,0 +1,9 @@
+{
+  "project": "grafana/k6",
+  "version": "v2.0.0",
+  "commit": "8c3be52cc17dee055c9e8757a66fb97d946dd248",
+  "target": "linux/386",
+  "go": "go1.26.2",
+  "compression": "UPX 5.2.0 --best --lzma",
+  "binarySha256": "0f5a48e80b42aacc405b5b36ef7a822c694cfbf4dfce1d2c3507a3b1f671ca22"
+}
