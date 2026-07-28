@@ -4,6 +4,17 @@ This repository ships a 32-bit Alpine Linux guest running in v86. Coding agents
 working in the guest should read `docs/guest-tools.md` before attempting network,
 clipboard, file-transfer, GitHub, or AI operations.
 
+## Deployment policy
+
+- Production deployment is `https://fapstaff.com/`.
+- GitHub Pages for this repository is intentionally disabled by owner request.
+- Do not enable, trigger, rebuild, or deploy GitHub Pages, including through
+  the Pages API or Actions, until the user explicitly says to resume GitHub
+  Pages deployment.
+- Pushing source changes to GitHub does not authorize a GitHub Pages
+  deployment. Deploy website changes only to fapstaff.com unless the user
+  explicitly changes this policy.
+
 ## Guest environment
 
 - Architecture: Linux i386/i586, not x86-64.
