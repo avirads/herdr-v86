@@ -34,24 +34,10 @@
   #mobile-remote-entry { display: block; position: absolute; top: calc(100% + 50px); color: #58a6ff; font-size: 13px; }
   #boot-overlay.error #boot-ring { background: #da3633; }
   #boot-overlay.error #boot-message { color: #ff7b72; max-width: 80vw; text-align: center; }
-  #setup-overlay { box-sizing: border-box; position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 900; display: none; place-items: center; overflow-x: hidden; overflow-y: auto; background: #0d1117; padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
-  #setup-overlay.active { display: grid; }
-  .setup-card { box-sizing: border-box; width: min(520px, 100%); background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 22px; }
-  .setup-card h2 { margin: 0 0 6px; font-size: 20px; }
-  .setup-progress { color: #8b949e; font-size: 12px; margin-bottom: 20px; }
-  .setup-step h3 { margin: 0 0 8px; font-size: 16px; }
-  .setup-step p { color: #8b949e; line-height: 1.45; }
-  .setup-step label { display: grid; gap: 5px; margin: 12px 0; color: #8b949e; font-size: 12px; }
-  .setup-step input { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 9px; }
-  .setup-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
+  .remote-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
   .model-downloads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
   .model-downloads .tool-link { box-sizing: border-box; min-height: 42px; padding: 8px 10px; display: grid; place-items: center; text-align: center; white-space: normal; background: #21262d; border: 1px solid #30363d; border-radius: 5px; text-decoration: none; }
   .model-downloads .tool-link:hover, .model-downloads .tool-link:focus-visible { border-color: #58a6ff; outline: none; }
-  .setup-status { margin-top: 12px; color: #8b949e; font-size: 12px; min-height: 1.2em; }
-  .setup-step ol { color: #8b949e; line-height: 1.5; padding-left: 20px; }
-  .setup-step details { margin-top: 16px; color: #8b949e; font-size: 13px; }
-  .setup-step details summary { cursor: pointer; color: #58a6ff; }
-  .setup-step details form { margin-top: 12px; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
   #tools button { min-height: 44px; min-width: 52px; padding: 9px 12px; font-size: 14px; touch-action: manipulation; }
@@ -118,10 +104,8 @@
     #boot-ring { width: 96px; height: 96px; }
     #boot-loader { height: 96px; }
     #boot-percent { font-size: 21px; }
-    #setup-overlay { place-items: start center; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
-    .setup-card { margin: auto 0; padding: 18px 16px; border-radius: 8px; }
-    .setup-actions { align-items: stretch; flex-direction: column; }
-    .setup-actions button, .setup-actions .tool-link { box-sizing: border-box; width: 100%; min-height: 42px; display: grid; place-items: center; text-align: center; white-space: normal; }
+    .remote-actions { align-items: stretch; flex-direction: column; }
+    .remote-actions button, .remote-actions .tool-link { box-sizing: border-box; width: 100%; min-height: 42px; display: grid; place-items: center; text-align: center; white-space: normal; }
     .model-downloads { grid-template-columns: 1fr; }
     .model-downloads .tool-link { min-height: 48px; }
     button { min-height: 36px; }
@@ -159,78 +143,6 @@
     <div id="boot-ring"><span id="boot-percent">1%</span></div>
     <div id="boot-message">Preparing VM…</div>
     <a id="mobile-remote-entry" href="remote.html">Connect to an agent instead</a>
-  </div>
-</div>
-<div id="setup-overlay" role="dialog" aria-modal="true" aria-labelledby="setup-title">
-  <div class="setup-card">
-    <h2 id="setup-title">Set up VM</h2>
-    <div id="setup-progress" class="setup-progress">Step 1 of 2</div>
-    <section id="setup-step-llm" class="setup-step">
-      <h3>Configure local AI model</h3>
-      <p>Load the page-local LiteRT-LM model used by <code>vmlang</code> and AutoBro. The model remains in this browser.</p>
-      <div class="setup-actions">
-        <button id="setup-configure-llm" type="button">Choose model file</button>
-        <button id="setup-connect-remote" type="button">Connect to agent</button>
-        <button id="skip-setup-llm" type="button">Skip setup and open shell</button>
-      </div>
-      <div class="model-downloads" aria-label="Download a Gemma 4 LiteRT-LM model">
-        <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download Gemma 4 E2B</a>
-        <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 E4B</a>
-        <a class="tool-link" href="https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 12B</a>
-      </div>
-      <details class="model-more-info">
-        <summary>More info</summary>
-        <p>Learn how LiteRT-LM runs fast generative AI directly on the device:
-          <a class="tool-link" href="https://developers.googleblog.com/blazing-fast-on-device-genai-with-litert-lm/" target="_blank" rel="noopener noreferrer">Blazing-fast on-device GenAI with LiteRT-LM</a>.
-        </p>
-      </details>
-      <div id="setup-llm-status" class="setup-status">Checking for a configured model…</div>
-    </section>
-    <section id="setup-step-autobro" class="setup-step" hidden>
-      <h3>Connect AutoBro</h3>
-      <p id="autobro-intro">Checking whether the AutoBro extension is installed…</p>
-      <div id="autobro-unavailable" class="setup-status" hidden>
-        Chrome extensions are not supported in this mobile browser. You can continue without AutoBro; VM commands and <code>vmlang</code> remain available, but browser automation will not work.
-      </div>
-      <div id="autobro-not-installed" hidden>
-        <ol>
-          <li>Download and extract the extension.</li>
-          <li>Open <code>chrome://extensions</code>, enable Developer mode, then Load unpacked and select the extracted folder.</li>
-          <li>On Windows, download and extract the helper ZIP, then double-click <code>Install AutoBro Helper.cmd</code>. It installs for the current user without administrator rights or PowerShell.</li>
-          <li>Come back here and click "Check again."</li>
-        </ol>
-        <div class="setup-actions">
-          <a class="tool-link" href="downloads/autobro-web-bridge-0.4.0.zip" download>Download AutoBro</a>
-          <a class="tool-link" href="downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
-          <button id="autobro-recheck" type="button">Check again</button>
-        </div>
-      </div>
-      <div id="autobro-installed" hidden>
-        <p>Full local VM networking also requires the optional per-user native helper.</p>
-        <div class="setup-actions">
-          <a class="tool-link" href="downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
-          <button id="autobro-connect" type="button">Connect AutoBro</button>
-        </div>
-      </div>
-      <details id="autobro-manual">
-        <summary>Enter extension ID and pairing token manually instead</summary>
-        <form id="setup-autobro-form">
-          <label>Extension ID
-            <input id="setup-autobro-extension-id" required autocomplete="off" spellcheck="false" placeholder="Chrome extension ID">
-          </label>
-          <label>Pairing token
-            <input id="setup-autobro-token" type="password" required autocomplete="off" spellcheck="false" placeholder="Token from the AutoBro panel">
-          </label>
-          <div class="setup-actions">
-            <button type="submit">Connect manually</button>
-          </div>
-        </form>
-      </details>
-      <div class="setup-actions">
-        <button id="skip-autobro" type="button">Skip setup and open shell</button>
-      </div>
-      <div id="setup-autobro-status" class="setup-status">AutoBro is not connected.</div>
-    </section>
   </div>
 </div>
 <header>
@@ -279,10 +191,16 @@
         <a class="tool-link" data-model-file="gemma-4-E4B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 E4B</a>
         <a class="tool-link" data-model-file="gemma-4-12B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 12B</a>
       </div>
+      <details class="model-more-info">
+        <summary>More info</summary>
+        <p>Learn how LiteRT-LM runs fast generative AI directly on the device:
+          <a class="tool-link" href="https://developers.googleblog.com/blazing-fast-on-device-genai-with-litert-lm/" target="_blank" rel="noopener noreferrer">Blazing-fast on-device GenAI with LiteRT-LM</a>.
+        </p>
+      </details>
     </section>
     <section class="provider-section" aria-labelledby="autobro-settings-title">
       <h3 id="autobro-settings-title">AutoBro</h3>
-      <small>Connect browser automation or forget the current pairing.</small>
+      <small id="settings-autobro-status" role="status" aria-live="polite">Connect browser automation or forget the current pairing.</small>
       <div class="provider-actions">
         <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-0.4.0.zip" download>Download AutoBro Chrome extension</a>
         <a class="tool-link" href="https://fapstaff.com/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
@@ -355,7 +273,7 @@
     </div>
   </label>
   <div id="remote-qr" hidden></div>
-  <div class="setup-actions">
+  <div class="remote-actions">
     <button id="remote-disconnect" type="button" hidden>Disconnect phone</button>
   </div>
   <details open>
@@ -434,7 +352,6 @@ const bootOverlay = document.getElementById("boot-overlay");
 const bootRing = document.getElementById("boot-ring");
 const bootPercent = document.getElementById("boot-percent");
 const bootMessage = document.getElementById("boot-message");
-const setupOverlay = document.getElementById("setup-overlay");
 // Pinned via the AutoBro extension's manifest "key", so its ID is the same on
 // every machine that loads the packaged zip — no more copying an ID that
 // otherwise varies per install path.
@@ -442,45 +359,7 @@ const AUTOBRO_EXTENSION_ID = "aaigkodgcmkbipbacijelgebhchknkln";
 let bootReady = false;
 let llmReady = false;
 let autobroReady = false;
-let autobroSkipped = localStorage.getItem("vm.autobroSkipped") === "true";
-let setupSkipped = localStorage.getItem("vm.setupSkipped") === "true";
-let requestedSetupStep = null;
-let llmCheckComplete = false;
-let autobroCheckComplete = false;
-let autobroProbed = false;
-let setupFinished = false;
-function updateSetupWizard() {
-  if (!bootReady || setupFinished) return;
-  if (!llmCheckComplete || !autobroCheckComplete) {
-    setBootProgress(100, "Restoring configuration…");
-    status("restoring configuration…");
-    return;
-  }
-  bootOverlay.classList.add("done");
-  if ((llmReady && autobroReady) || (setupSkipped && !requestedSetupStep)) {
-    setupFinished = true;
-    setupOverlay.classList.remove("active");
-    document.getElementById("term").style.visibility = "visible";
-    status("Shell ready");
-    term.focus();
-    return;
-  }
-  setupOverlay.classList.add("active");
-  const onAutoBro = requestedSetupStep ? requestedSetupStep === "autobro" : llmReady;
-  document.getElementById("setup-step-llm").hidden = onAutoBro;
-  document.getElementById("setup-step-autobro").hidden = !onAutoBro;
-  document.getElementById("setup-progress").textContent = onAutoBro ? "Step 2 of 2" : "Step 1 of 2";
-  status(onAutoBro ? "Setup: connect AutoBro" : "Setup: configure local AI model");
-  if (onAutoBro && !autobroProbed && !autobroReady) {
-    autobroProbed = true;
-    if (extensionMessagingUnavailable) {
-      document.getElementById("autobro-intro").textContent = "Automatic detection isn't available in this browser. Use manual entry below, or open this page in a Chromium-based desktop browser with AutoBro installed.";
-      document.getElementById("autobro-manual").open = true;
-    } else {
-      refreshAutoBroAvailability();
-    }
-  }
-}
+let shellReady = false;
 let bootProgress = 1;
 function setBootProgress(value, message) {
   bootProgress = Math.max(bootProgress, Math.min(100, Math.round(value)));
@@ -498,13 +377,16 @@ function finishBoot() {
   localStorage.setItem("vm.diskVersion", DISK_VERSION);
   bootOverlay.classList.remove("error");
   setBootProgress(100, "Ready");
-  status("Setup required");
   setTimeout(() => {
     term.clear();
     term.write("\x1b[2J\x1b[H");
     emulator.serial0_send("\n");
     bootReady = true;
-    updateSetupWizard();
+    shellReady = true;
+    bootOverlay.classList.add("done");
+    document.getElementById("term").style.visibility = "visible";
+    status("Shell ready");
+    term.focus();
   }, 300);
 }
 function failBoot(message) {
@@ -512,7 +394,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.28.2";
+const APP_VERSION = "2026.07.28.3";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-40-binary-transfer";
 const bootOptions = new URLSearchParams(location.search);
@@ -891,7 +773,7 @@ function showModelProgress(percent, message, { error = false } = {}) {
   modelProgress.setAttribute("aria-busy", String(!error && value < 100));
 }
 function setModelLoadControlsBusy(busy) {
-  for (const id of ["setup-configure-llm", "configure-llm-later"]) {
+  for (const id of ["configure-llm-later"]) {
     const button = document.getElementById(id);
     button.disabled = busy;
     button.textContent = busy ? "Loading…" : "Load";
@@ -1092,50 +974,30 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
     localStorage.setItem("vm.autobroPairingToken", token.trim());
     browserStatus(`connected — bridge v${health.bridgeVersion || "?"}`);
     autobroReady = true;
-    autobroCheckComplete = true;
-    requestedSetupStep = null;
-    document.getElementById("setup-autobro-status").textContent = `Connected — bridge v${health.bridgeVersion || "?"}`;
+    document.getElementById("settings-autobro-status").textContent = `Connected — bridge v${health.bridgeVersion || "?"}.`;
+    document.getElementById("configure-autobro-later").textContent = "Connected";
     await connectAutoBroUserspaceNetwork(client);
-    updateSetupWizard();
     return true;
   } catch (error) {
     browserStatus("error — " + error.message);
     autobroReady = false;
-    autobroCheckComplete = true;
-    document.getElementById("setup-autobro-status").textContent = "Connection failed: " + error.message;
-    updateSetupWizard();
+    document.getElementById("settings-autobro-status").textContent = "Connection failed: " + error.message;
+    document.getElementById("configure-autobro-later").textContent = "Connect";
     return false;
   }
 }
-async function refreshAutoBroAvailability() {
-  const introEl = document.getElementById("autobro-intro");
-  const notInstalledEl = document.getElementById("autobro-not-installed");
-  const installedEl = document.getElementById("autobro-installed");
-  introEl.textContent = "Checking whether the AutoBro extension is installed…";
-  notInstalledEl.hidden = true;
-  installedEl.hidden = true;
-  const { probeAutoBro } = await import("./network/browser/autobro-client.js");
-  const installed = await probeAutoBro(AUTOBRO_EXTENSION_ID);
-  if (installed) {
-    introEl.textContent = "AutoBro is installed.";
-    installedEl.hidden = false;
-  } else {
-    introEl.textContent = "AutoBro isn't installed in this browser yet.";
-    notInstalledEl.hidden = false;
-  }
-}
-async function oneClickConnectAutoBro() {
-  document.getElementById("setup-autobro-status").textContent = "Waiting for approval — check your browser for a notification…";
+async function oneClickConnectAutoBro(statusElement = document.getElementById("settings-autobro-status")) {
+  statusElement.textContent = "Waiting for approval — check your browser for a notification…";
   try {
     const { requestAutoBroPairing } = await import("./network/browser/autobro-client.js");
     const token = await requestAutoBroPairing(AUTOBRO_EXTENSION_ID);
-    await connectAutoBro({ extensionId: AUTOBRO_EXTENSION_ID, token });
+    const connected = await connectAutoBro({ extensionId: AUTOBRO_EXTENSION_ID, token });
+    return connected;
   } catch (error) {
-    document.getElementById("setup-autobro-status").textContent = "Pairing failed: " + error.message;
+    statusElement.textContent = "Pairing failed: " + error.message;
+    return false;
   }
 }
-document.getElementById("autobro-recheck").onclick = refreshAutoBroAvailability;
-document.getElementById("autobro-connect").onclick = oneClickConnectAutoBro;
 const settingsDialog = document.getElementById("settings-dialog");
 const remoteDialog = document.getElementById("remote-dialog");
 const remoteStatus = document.getElementById("remote-status");
@@ -1313,7 +1175,7 @@ async function collectDiagnostics() {
       imageSource: vmImageSource,
       compatibilityBoot,
       bootReady,
-      setupFinished,
+      shellReady,
     },
     providers: {
       aiModel: webGpuLlmClient?.modelName || null,
@@ -1344,7 +1206,6 @@ document.getElementById("open-settings").onclick = () => {
 };
 document.getElementById("close-settings").onclick = () => settingsDialog.close();
 document.getElementById("open-remote").onclick = openRemoteDialog;
-document.getElementById("setup-connect-remote").onclick = () => { location.href = "remote.html"; };
 document.getElementById("close-remote").onclick = () => remoteDialog.close();
 // Hosting starts automatically as soon as the dialog opens — there's nothing
 // to click. host() tears down any existing session (see RemoteLlmPeer.host),
@@ -1354,7 +1215,7 @@ async function ensureHosting() {
   remoteHostingStarted = true;
   remoteStatus.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Starting secure WebRTC agent…</span>';
   try {
-    if (!bootReady || !setupFinished) throw new Error("wait for the VM shell to be ready first");
+    if (!bootReady || !shellReady) throw new Error("wait for the VM shell to be ready first");
     const modelPending = !llmReady;
     const key = await (await getRemoteLlmPeer()).host();
     remoteKey.value = key;
@@ -1383,38 +1244,23 @@ document.getElementById("remote-disconnect").onclick = async () => {
   (await getRemoteLlmPeer()).disconnectPhone();
   remoteStatus.textContent = "Disconnecting phone…";
 };
-function returnToSetup() {
-  setupSkipped = false;
-  requestedSetupStep = null;
-  localStorage.removeItem("vm.setupSkipped");
-  setupFinished = false;
-  document.getElementById("term").style.visibility = "hidden";
-  updateSetupWizard();
-}
-function openSetupStep(step) {
-  requestedSetupStep = step;
-  setupFinished = false;
-  settingsDialog.close();
-  document.getElementById("term").style.visibility = "hidden";
-  updateSetupWizard();
-}
-function skipSetupAndOpenShell() {
-  setupSkipped = true;
-  requestedSetupStep = null;
-  setupFinished = true;
-  localStorage.setItem("vm.setupSkipped", "true");
-  setupOverlay.classList.remove("active");
-  document.getElementById("term").style.visibility = "visible";
-  status("Shell ready — providers can be configured in Settings");
-  term.focus();
-}
 document.getElementById("configure-llm-later").onclick = () => llmFileInput.click();
-document.getElementById("configure-autobro-later").onclick = () => openSetupStep("autobro");
+document.getElementById("configure-autobro-later").onclick = async () => {
+  const button = document.getElementById("configure-autobro-later");
+  const statusElement = document.getElementById("settings-autobro-status");
+  button.disabled = true;
+  button.textContent = "Connecting…";
+  try {
+    await oneClickConnectAutoBro(statusElement);
+  } finally {
+    button.disabled = false;
+    button.textContent = autobroReady ? "Connected" : "Connect";
+  }
+};
 document.getElementById("load-voice").onclick = () => {
   settingsDialog.close();
   startVoiceInput();
 };
-document.getElementById("skip-setup-llm").onclick = skipSetupAndOpenShell;
 async function refreshCachedModelSelect() {
   const row = document.getElementById("cached-model-row");
   const select = document.getElementById("cached-model-select");
@@ -1446,7 +1292,6 @@ document.getElementById("cached-model-select").onchange = async event => {
     await webGpuLlmClient.loadCachedModel(name);
     llmReady = true;
     vmAgentController?.resetHarness();
-    document.getElementById("setup-llm-status").textContent = `Ready — ${name}`;
     await refreshCachedModelSelect();
   } catch (error) {
     llmStatus("model switch failed — " + error.message);
@@ -1462,13 +1307,9 @@ document.getElementById("reset-llm").onclick = async () => {
   try {
     await webGpuLlmClient?.reset();
     llmReady = false;
-    llmCheckComplete = true;
     vmAgentController?.resetHarness();
     llmStatus("reset — configure a model");
-    document.getElementById("setup-llm-status").textContent = "Choose a .litertlm or .task model file.";
     await refreshCachedModelSelect();
-    settingsDialog.close();
-    returnToSetup();
   } catch (error) {
     llmStatus("reset failed — " + error.message);
   } finally {
@@ -1484,19 +1325,12 @@ document.getElementById("reset-autobro").onclick = () => {
     window.v86Network = null;
   }
   autobroReady = false;
-  autobroCheckComplete = true;
-  autobroSkipped = false;
   localStorage.removeItem("vm.autobroExtensionId");
-  localStorage.removeItem("vm.autobroSkipped");
   localStorage.removeItem("vm.autobroPairingToken");
-  document.getElementById("setup-autobro-extension-id").value = "";
-  document.getElementById("setup-autobro-token").value = "";
-  document.getElementById("setup-autobro-status").textContent = "AutoBro is not connected.";
-  autobroProbed = false;
+  document.getElementById("settings-autobro-status").textContent = "AutoBro pairing reset.";
+  document.getElementById("configure-autobro-later").textContent = "Connect";
   vmAgentController?.resetHarness();
   browserStatus("not connected");
-  settingsDialog.close();
-  returnToSetup();
 };
 document.getElementById("reset-voice").onclick = async () => {
   if (!confirm("Stop voice input, clear Moonshine model caches, and reload the VM?")) return;
@@ -1508,36 +1342,8 @@ document.getElementById("reset-voice").onclick = async () => {
   localStorage.removeItem("vm.voiceMode");
   location.reload();
 };
-document.getElementById("setup-autobro-form").onsubmit = event => {
-  event.preventDefault();
-  const extensionId = document.getElementById("setup-autobro-extension-id").value.trim();
-  const token = document.getElementById("setup-autobro-token").value.trim();
-  if (!extensionId || !token) return;
-  document.getElementById("setup-autobro-status").textContent = "Pairing…";
-  connectAutoBro({ extensionId, token });
-};
-const extensionMessagingUnavailable = !globalThis.chrome?.runtime?.sendMessage;
-const mobileBrowser = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-if (mobileBrowser && extensionMessagingUnavailable) {
-  document.getElementById("autobro-unavailable").hidden = false;
-  document.getElementById("setup-autobro-form").querySelectorAll("input, button[type=submit]").forEach(element => { element.disabled = true; });
-}
-document.getElementById("skip-autobro").onclick = () => {
-  autobroSkipped = true;
-  localStorage.setItem("vm.autobroSkipped", "true");
-  browserStatus("skipped — unavailable on mobile");
-  skipSetupAndOpenShell();
-};
-document.getElementById("setup-autobro-extension-id").value = localStorage.getItem("vm.autobroExtensionId") || "";
-document.getElementById("setup-autobro-token").value = localStorage.getItem("vm.autobroPairingToken") || "";
 if (localStorage.getItem("vm.autobroExtensionId") && localStorage.getItem("vm.autobroPairingToken")) connectAutoBro();
-else if (mobileBrowser && extensionMessagingUnavailable && autobroSkipped) {
-  autobroReady = true;
-  autobroCheckComplete = true;
-  browserStatus("skipped — unavailable on mobile");
-} else autobroCheckComplete = true;
 const llmFileInput = document.getElementById("llm-file-input");
-document.getElementById("setup-configure-llm").onclick = () => llmFileInput.click();
 try {
   const { LiteRtLmClient } = await import("./network/browser/litert-lm-client.js");
   const client = new LiteRtLmClient();
@@ -1548,7 +1354,6 @@ try {
     if (!(modelLoadUiActive && event.detail.message.startsWith("caching "))) {
       llmStatus(event.detail.message);
     }
-    document.getElementById("setup-llm-status").textContent = event.detail.message;
     updateModelProgressFromActivity(event.detail);
   });
   hostBridge?.setLlmClient(client);
@@ -1558,15 +1363,9 @@ try {
     hostBridge?.setLlmClient(client);
     llmStatus(result.modelName ? `ready — ${result.modelName}` : "ready — choose Configure model to load a model");
     llmReady = Boolean(result.modelName);
-    llmCheckComplete = true;
-    document.getElementById("setup-llm-status").textContent = result.modelName ? `Ready — ${result.modelName}` : "Choose a .litertlm or .task model file.";
     refreshCachedModelSelect().catch(error => llmStatus("could not list cached models — " + error.message));
-    updateSetupWizard();
   }).catch(error => {
     llmStatus("unavailable — " + error.message);
-    llmCheckComplete = true;
-    document.getElementById("setup-llm-status").textContent = "Local AI model unavailable: " + error.message;
-    updateSetupWizard();
   });
   llmFileInput.onchange = async () => {
     const file = llmFileInput.files[0];
@@ -1581,15 +1380,11 @@ try {
       hostBridge?.setLlmClient(client);
       llmStatus(`ready — ${client.modelName}`);
       llmReady = true;
-      requestedSetupStep = null;
-      document.getElementById("setup-llm-status").textContent = `Ready — ${client.modelName}`;
       await refreshCachedModelSelect();
-      updateSetupWizard();
       finishModelProgress(`Ready — ${client.modelName}`);
     } catch (error) {
       llmStatus("error — " + error.message);
       llmReady = false;
-      document.getElementById("setup-llm-status").textContent = "Model error: " + error.message;
       showModelProgress(modelProgressBar.value, "Model error: " + error.message, { error: true });
     } finally {
       modelLoadUiActive = false;
@@ -1599,9 +1394,6 @@ try {
   };
 } catch (error) {
   llmStatus("unavailable — " + error.message);
-  llmCheckComplete = true;
-  document.getElementById("setup-llm-status").textContent = "Local AI model unavailable: " + error.message;
-  updateSetupWizard();
 }
 
 const fileInput = document.getElementById("file-input");
@@ -1900,7 +1692,7 @@ function handleTerminalData(data) {
     return;
   }
   for (const ch of data) emulator.serial0_send(ch);
-  if (setupFinished) status("Shell ready");
+  if (shellReady) status("Shell ready");
 }
 term.onData(handleTerminalData);
 term.focus();
