@@ -101,6 +101,7 @@ export class V86HostBridge extends EventTarget {
     if (operation === "CLIPBOARD_READ") return this.clipboardRead(id);
     if (operation === "CLIPBOARD_WRITE") return this.clipboardWrite(id, fields[0]);
     if (operation === "EXPORT") return this.exportFile(id, fields);
+    if (operation === "EXPORT9P") return this.exportSharedFile(id, fields);
     if (operation === "LLM_STATUS") return this.llm(id, "status");
     if (operation === "LLM_MODELS") return this.llm(id, "models");
     if (operation === "LLM_CHAT") return this.llm(id, "chat", fields[0]);
@@ -261,6 +262,20 @@ export class V86HostBridge extends EventTarget {
   async exportFile(id, [name64, data64]) {
     const name = decodeText(name64).replace(/[\\/:*?"<>|]/g, "_") || "guest-file";
     const data = Uint8Array.from(atob(data64), c => c.charCodeAt(0));
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([data]));
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    await this.reply(id, "END", "0");
+  }
+
+  async exportSharedFile(id, [name64, sharedName64]) {
+    const name = decodeText(name64).replace(/[\\/:*?"<>|]/g, "_") || "guest-file";
+    const sharedName = decodeText(sharedName64);
+    if (!/^[A-Za-z0-9._-]+$/.test(sharedName)) throw new Error("invalid shared export name");
+    const data = await this.emulator.read_file(`/${sharedName}`);
+    if (data.byteLength > 8 << 20) throw new Error("export exceeds 8 MiB");
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([data]));
     link.download = name;

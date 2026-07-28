@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<pre id="serial"></pre>
+<div id="screen_container"><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+import { V86HostBridge } from '../browser/v86-host-bridge.js';
+import { V86GuestReadonlyClient } from '../browser/v86-guest-readonly.js';
+
+let serial = '';
+let serial1 = '';
+let started = false;
+const startedAt = performance.now();
+const finish = result => fetch('/__result', {
+  method: 'POST',
+  body: JSON.stringify({ ...result, serial }),
+});
+setTimeout(() => finish({ ok: false, error: 'binary transfer timed out' }), 90000);
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 256 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet',
+  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 },
+  filesystem: {},
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+const bridge = new V86HostBridge(emulator, { rpcSerial: 1 });
+const guest = new V86GuestReadonlyClient(emulator, bridge, { rpcSerial: 1, timeoutMs: 60000 });
+let resolveDownload;
+const downloaded = new Promise(resolve => { resolveDownload = resolve; });
+HTMLAnchorElement.prototype.click = async function() {
+  if (!this.download || !this.href.startsWith('blob:')) return;
+  resolveDownload(new Uint8Array(await (await fetch(this.href)).arrayBuffer()));
+};
+
+emulator.add_listener('serial0-output-byte', byte => {
+  serial = (serial + String.fromCharCode(byte)).slice(-100000);
+  document.querySelector('#serial').textContent = serial;
+});
+emulator.add_listener('serial1-output-byte', byte => {
+  serial1 = (serial1 + String.fromCharCode(byte)).slice(-4096);
+  if (started || !/(?:#|%)\s*$/.test(serial1)) return;
+  started = true;
+  (async () => {
+    const size = 1 << 20;
+    const input = new Uint8Array(size);
+    for (let index = 0; index < input.length; index++) input[index] = (index * 31 + 7) & 255;
+    const transferStarted = performance.now();
+    await emulator.create_file('/input.bin', input);
+    await guest.execute(
+      "mount | grep -q ' /mnt/host-transfer '; " +
+      "cp /mnt/host-transfer/input.bin /root/roundtrip.bin; " +
+      "cp /root/roundtrip.bin /mnt/host-transfer/output.bin"
+    );
+    const output = await emulator.read_file('/output.bin');
+    let equal = output.byteLength === input.byteLength;
+    for (let index = 0; equal && index < input.length; index++) equal = input[index] === output[index];
+    await guest.execute('vmexport /root/roundtrip.bin');
+    const terminalExport = await Promise.race([
+      downloaded,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('vmexport download timed out')), 15000)),
+    ]);
+    let terminalEqual = terminalExport.byteLength === input.byteLength;
+    for (let index = 0; terminalEqual && index < input.length; index++) {
+      terminalEqual = input[index] === terminalExport[index];
+    }
+    await guest.execute('rm -f /mnt/host-transfer/input.bin /mnt/host-transfer/output.bin /root/roundtrip.bin');
+    await finish({
+      ok: equal && terminalEqual,
+      bytes: output.byteLength,
+      terminalExportBytes: terminalExport.byteLength,
+      transferMs: Math.round(performance.now() - transferStarted),
+      bootAndTransferMs: Math.round(performance.now() - startedAt),
+    });
+  })().catch(error => finish({ ok: false, error: error.stack || String(error) }));
+});
+</script>

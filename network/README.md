@@ -1,10 +1,10 @@
 # v86 network gateway
 
 This component gives the VM guest a normal IPv4 network by transporting raw
-Ethernet frames over an authenticated binary WebSocket to a Linux TAP or a
-native Windows Wintun adapter. The host supplies routing, connection tracking,
-and NAT; the Windows backend also supplies the Ethernet, ARP, and DHCP shim
-needed by Wintun's layer-3 interface.
+Ethernet frames over an authenticated binary WebSocket. By default, a pure-Go
+gVisor userspace stack supplies DHCP, DNS, routing, and NAT through ordinary
+host TCP/UDP sockets. It needs no TAP/Wintun adapter, administrator/root
+rights, firewall changes, or system service.
 TLS remains end-to-end between applications in the guest and internet hosts.
 
 It is independent of the AutoBro Chrome extension. The page hosting v86 is
@@ -13,25 +13,50 @@ the WebSocket client; the guest uses v86's emulated NE2000 or VirtIO NIC.
 ## Data path
 
 ```text
-guest TCP/IP -> v86 NIC -> net0-send -> WSS -> Go gateway -> TAP
-             <- net0-receive <- WSS <-              <- Linux NAT
+guest TCP/IP -> v86 NIC -> net0-send -> WSS -> Go gateway -> userspace NAT
+             <- net0-receive <- WSS <-              <- host sockets
 ```
 
-On Windows, `TAP` in this diagram is the Herdr Wintun adapter and WinNAT.
+The optional native high-performance backend replaces userspace NAT with a
+Linux TAP or Windows Wintun adapter and host NAT.
 
 Each binary WebSocket message contains exactly one Ethernet frame. Text
 messages and frames shorter than an Ethernet header are ignored. The gateway
-allows one VM per TAP interface and limits messages to 65,535 bytes.
+allows one VM per connection and limits messages to 65,535 bytes.
 
-## Secure Linux gateway setup
+## Default userspace setup
 
-Requirements: Linux, Go 1.24+, `iproute2`, `nftables`, and `dnsmasq`.
+Run the gateway as the current user on Windows or Linux:
+
+```sh
+export V86NET_ADMIN_TOKEN="$(openssl rand -hex 32)"
+go run ./cmd/v86net-gateway -listen 127.0.0.1:8086
+```
+
+`-backend userspace` is implicit. No setup or teardown script is needed.
+Outbound TCP, UDP, DHCP, and DNS are handled in-process. Native inbound port
+forwarding, raw host-network integration, and maximum throughput require the
+optional native backend.
+
+### AutoBro per-user helper
+
+An HTTPS-hosted Herdr portal can carry the same Ethernet frames through the
+AutoBro extension and Chrome Native Messaging, avoiding localhost mixed-content
+and certificate problems. Build `v86net-gateway`, then use the per-user
+installer under `autobro-extension-0.4.0/native/`. The helper runs
+`-native-messaging`, opens the userspace backend directly, and exits when the
+extension connection closes. Installation uses HKCU on Windows or the current
+user's browser configuration on Linux and does not require elevation.
+
+## Optional native high-performance Linux backend
+
+Requirements: Linux, Go 1.25+, `iproute2`, `nftables`, and `dnsmasq`.
 
 ```bash
 cd web-bridge/v86-network
 sudo ./scripts/setup-linux.sh
 export V86NET_ADMIN_TOKEN="$(openssl rand -hex 32)"
-go run ./cmd/v86net-gateway -listen 127.0.0.1:8086 -tap v86tap0
+go run ./cmd/v86net-gateway -backend native -listen 127.0.0.1:8086 -tap v86tap0
 ```
 
 For a browser on another machine, terminate TLS in Caddy/nginx and proxy a
@@ -40,6 +65,7 @@ over a network. Restrict the browser origin in production:
 
 ```bash
 go run ./cmd/v86net-gateway \
+  -backend native \
   -listen 127.0.0.1:8086 \
   -tap v86tap0 \
   -allow-origin https://vm.example.com
@@ -72,7 +98,7 @@ sudo NETWORK_NAME=vm2 TAP_NAME=v86tap2 \
   ./scripts/setup-linux.sh
 
 V86NET_ADMIN_TOKEN=... ./v86net-gateway \
-  -listen 127.0.0.1:8087 -tap v86tap2 -guest-network 10.78.0.0/24
+  -backend native -listen 127.0.0.1:8087 -tap v86tap2 -guest-network 10.78.0.0/24
 ```
 
 ### Explicit inbound forwarding
@@ -86,7 +112,7 @@ sudo PORT_FORWARDS='2222:10.77.0.15:22/tcp,8080:10.77.0.15:80/tcp' \
 
 The scripts intentionally do not run automatically.
 
-## Native Windows gateway (Wintun)
+## Optional native high-performance Windows backend (Wintun)
 
 Windows 10/11 x64 is supported without WSL. Setup needs Administrator rights
 once because Windows restricts adapter, route, WinNAT, and scheduled-task

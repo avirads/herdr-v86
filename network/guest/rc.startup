@@ -6,6 +6,11 @@ mkdir -p /dev/pts /dev/shm
 mount -t devpts devpts /dev/pts 2>/dev/null
 mount -t tmpfs -o mode=1777 tmpfs /tmp 2>/dev/null
 mount -t tmpfs tmpfs /run 2>/dev/null
+mkdir -p /mnt/host-transfer
+# v86's empty host-backed VirtIO 9P filesystem is the binary file-transfer
+# channel. Boot remains compatible with builds that omit the device.
+mount -t 9p host9p /mnt/host-transfer \
+  -o trans=virtio,version=9p2000.L,cache=loose 2>/dev/null || true
 hostname vm
 # Level 4 keeps KERN_ERR visible on the console: the browser page watches
 # serial output for "lost interrupt" / "I/O error" to auto-restart into

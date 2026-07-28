@@ -196,15 +196,19 @@
         <ol>
           <li>Download and extract the extension.</li>
           <li>Open <code>chrome://extensions</code>, enable Developer mode, then Load unpacked and select the extracted folder.</li>
+          <li>For full VM networking on Windows, download the helper and run <code>native\install-windows.ps1 -GatewayExe PATH</code> from the extracted folder. This installs only for your user and needs no administrator rights.</li>
           <li>Come back here and click "Check again."</li>
         </ol>
         <div class="setup-actions">
           <a class="tool-link" href="downloads/autobro-web-bridge-0.4.0.zip" download>Download AutoBro</a>
+          <a class="tool-link" href="downloads/v86net-gateway-windows-amd64.exe" download>Download Windows networking helper</a>
           <button id="autobro-recheck" type="button">Check again</button>
         </div>
       </div>
       <div id="autobro-installed" hidden>
+        <p>Full local VM networking also requires the optional per-user native helper.</p>
         <div class="setup-actions">
+          <a class="tool-link" href="downloads/v86net-gateway-windows-amd64.exe" download>Download Windows networking helper</a>
           <button id="autobro-connect" type="button">Connect AutoBro</button>
         </div>
       </div>
@@ -387,7 +391,10 @@ if ("serviceWorker" in navigator) {
 }
 
 const status = (m) => document.getElementById("status").textContent = m;
-const networkStatus = () => {};
+const networkStatus = message => {
+  console.info("[vm-network]", message);
+  if (/^(?:connected|error|disconnected)/.test(String(message))) status(`network: ${message}`);
+};
 const launchRole = new URLSearchParams(location.search).get("role");
 if (launchRole !== "agent" && launchRole !== "host") {
   document.getElementById("choose-host").onclick = () => {
@@ -505,7 +512,7 @@ function failBoot(message) {
 }
 const APP_VERSION = "2026.07.28.2";
 const DISK_SIZE = 100663296;
-const DISK_VERSION = "vm-shell-39-k6";
+const DISK_VERSION = "vm-shell-40-binary-transfer";
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -709,6 +716,10 @@ const emulator = new V86({
   bios: { url: "seabios.bin" },
   vga_bios: { url: "vgabios.bin" },
   bzimage: { url: "bzImage-network" },
+  // Empty host-backed VirtIO 9P share used as the dedicated binary
+  // import/export channel. It is mounted inside the guest at
+  // /mnt/host-transfer; file payloads never pass through a serial console.
+  filesystem: {},
   // Perf: the emulated CPU has no speculative-execution bugs, so CPU
   // vulnerability mitigations (retpolines, PTI) are pure overhead; KASLR and
   // heap/mmap randomization only defeat v86's JIT page reuse. quiet/loglevel
@@ -1082,6 +1093,7 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
     autobroCheckComplete = true;
     requestedSetupStep = null;
     document.getElementById("setup-autobro-status").textContent = `Connected — bridge v${health.bridgeVersion || "?"}`;
+    await connectAutoBroUserspaceNetwork(client);
     updateSetupWizard();
     return true;
   } catch (error) {
@@ -1221,6 +1233,19 @@ async function collectGpuDiagnostics() {
     };
   } catch (error) {
     return { available: true, error: error.message };
+  }
+}
+async function connectAutoBroUserspaceNetwork(client) {
+  if (window.v86Network || new URLSearchParams(location.hash.slice(1)).get("gateway")) return;
+  try {
+    const { V86AutoBroNetwork } = await import("./network/browser/v86-autobro-network.js");
+    window.v86Network = new V86AutoBroNetwork(emulator, {
+      extensionId: client.extensionId,
+      token: client.token,
+      onStatus: networkStatus,
+    }).start();
+  } catch (error) {
+    networkStatus("local userspace network unavailable — " + error.message);
   }
 }
 async function collectDiagnostics() {
@@ -1452,6 +1477,10 @@ document.getElementById("reset-autobro").onclick = () => {
   if (!confirm("Disconnect AutoBro and forget its pairing configuration?")) return;
   autobroClient?.disconnect?.();
   autobroClient = null;
+  if (window.v86Network?.transport === "autobro-userspace") {
+    window.v86Network.close();
+    window.v86Network = null;
+  }
   autobroReady = false;
   autobroCheckComplete = true;
   autobroSkipped = false;
@@ -1575,14 +1604,44 @@ try {
 
 const fileInput = document.getElementById("file-input");
 const projectFileInput = document.getElementById("project-file-input");
+const MAX_TRANSFER_BYTES = 8 * 1024 * 1024;
+const transferShellQuote = value => `'${String(value).replaceAll("'", "'\\''")}'`;
+const transferName = suffix => `transfer-${crypto.randomUUID().replaceAll("-", "")}-${suffix.replace(/[^A-Za-z0-9._-]/g, "_")}`;
+
+async function runGuestTransferCommand(command) {
+  if (!guestReadonlyClient) throw new Error("guest file-transfer service is still loading");
+  return guestReadonlyClient.execute(command);
+}
+
+function downloadTransfer(name, bytes) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([bytes]));
+  link.download = name.replace(/[\\/:*?"<>|]/g, "_") || "guest-file";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
 document.getElementById("import-file").onclick = () => { settingsDialog.close(); fileInput.click(); };
 document.getElementById("import-project").onclick = () => { settingsDialog.close(); projectFileInput.click(); };
 document.getElementById("export-project").onclick = async () => {
   settingsDialog.close();
-  if (!hostBridge) return status("agent bridge is still loading");
-  status("packing /root/project…");
-  await hostBridge.send("vmproject export /root/project project.tar.gz");
-  status("project export requested");
+  const sharedName = transferName("project.tar.gz");
+  const sharedPath = `/mnt/host-transfer/${sharedName}`;
+  status("packing /root/project into the binary transfer channel…");
+  try {
+    await runGuestTransferCommand(
+      `vmproject pack /root/project ${transferShellQuote(sharedPath)} >/dev/null && ` +
+      `size=$(wc -c < ${transferShellQuote(sharedPath)}) && ` +
+      `[ "$size" -le ${MAX_TRANSFER_BYTES} ] || { rm -f ${transferShellQuote(sharedPath)}; echo "compressed project exceeds 8 MiB" >&2; exit 1; }`
+    );
+    status("reading project archive from VM…");
+    const bytes = await emulator.read_file(`/${sharedName}`);
+    downloadTransfer("project.tar.gz", bytes);
+    await runGuestTransferCommand(`rm -f ${transferShellQuote(sharedPath)}`);
+    status(`exported project.tar.gz (${bytes.byteLength.toLocaleString()} bytes)`);
+  } catch (error) {
+    status("project export failed — " + error.message);
+  }
 };
 document.getElementById("export-file").onclick = async () => {
   const guestPath = prompt("Enter the VM file path to download (maximum 8 MiB):", "/root/project/");
@@ -1591,12 +1650,21 @@ document.getElementById("export-file").onclick = async () => {
   if (!path) return status("file export requires a VM path");
   if (/[\r\n\0]/.test(path)) return status("invalid file export path");
   settingsDialog.close();
-  if (!hostBridge) return status("agent bridge is still loading");
-  const quotedPath = `'${path.replaceAll("'", "'\\''")}'`;
+  const quotedPath = transferShellQuote(path);
+  const downloadName = path.split("/").filter(Boolean).pop() || "guest-file";
+  const sharedName = transferName(downloadName);
+  const sharedPath = `/mnt/host-transfer/${sharedName}`;
   status(`exporting ${path}…`);
   try {
-    await hostBridge.send(`vmexport ${quotedPath}`);
-    status("file export requested");
+    await runGuestTransferCommand(
+      `[ -f ${quotedPath} ] || { echo "not a regular file" >&2; exit 1; }; ` +
+      `size=$(wc -c < ${quotedPath}) && [ "$size" -le ${MAX_TRANSFER_BYTES} ] || { echo "file exceeds 8 MiB" >&2; exit 1; }; ` +
+      `cp ${quotedPath} ${transferShellQuote(sharedPath)}`
+    );
+    const bytes = await emulator.read_file(`/${sharedName}`);
+    downloadTransfer(downloadName, bytes);
+    await runGuestTransferCommand(`rm -f ${transferShellQuote(sharedPath)}`);
+    status(`exported ${downloadName} (${bytes.byteLength.toLocaleString()} bytes)`);
   } catch (error) {
     status("file export failed — " + error.message);
   }
@@ -1604,24 +1672,24 @@ document.getElementById("export-file").onclick = async () => {
 document.getElementById("open-help").onclick = () => { settingsDialog.close(); window.open("docs/guest-tools.html", "_blank", "noopener"); };
 async function importFileIntoVm(file, afterImport = "") {
   if (!file) return;
-  if (file.size > 8 * 1024 * 1024) return status("import limited to 8 MiB");
+  if (file.size > MAX_TRANSFER_BYTES) return status("import limited to 8 MiB");
   const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_") || "imported-file";
   const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 0x8000)
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  const encoded = btoa(binary);
-  status(`importing ${safeName}…`);
-  if (!hostBridge) return status("agent bridge is still loading");
-  const staging = `/tmp/${safeName}.b64`;
-  await hostBridge.send(`: > '${staging}'`);
-  // Keep each shell line below the guest TTY's canonical-input limit.
-  for (let offset = 0; offset < encoded.length; offset += 2048) {
-    await hostBridge.send(`printf %s '${encoded.slice(offset, offset + 2048)}' >> '${staging}'`);
+  const sharedName = transferName(safeName);
+  const sharedPath = `/mnt/host-transfer/${sharedName}`;
+  status(`writing ${safeName} to the binary transfer channel…`);
+  try {
+    await emulator.create_file(`/${sharedName}`, bytes);
+    status(`copying ${safeName} into the VM…`);
+    await runGuestTransferCommand(
+      `cp ${transferShellQuote(sharedPath)} ${transferShellQuote(`/root/${safeName}`)} && ` +
+      `rm -f ${transferShellQuote(sharedPath)}${afterImport}`
+    );
+    status(`imported /root/${safeName} (${bytes.byteLength.toLocaleString()} bytes)`);
+    return safeName;
+  } catch (error) {
+    status("file import failed — " + error.message);
   }
-  await hostBridge.send(`base64 -d '${staging}' > '/root/${safeName}' && rm -f '${staging}'${afterImport}`);
-  status(`imported /root/${safeName}`);
-  return safeName;
 }
 fileInput.onchange = async () => {
   await importFileIntoVm(fileInput.files[0]);
@@ -1733,7 +1801,7 @@ emulator.add_listener("serial0-output-byte", (byte) => {
     if (serialHasShellPrompt(recentOutput)) {
       sttySent = true;
       fitTerminal();
-      for (const ch of `export HISTFILE=/root/.ash_history HISTSIZE=200; set -o emacs 2>/dev/null || true; stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project && cd /root/project\n`) {
+      for (const ch of `export HISTFILE=/root/.ash_history HISTSIZE=200; set -o emacs 2>/dev/null || true; stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project /mnt/host-transfer; mount | grep -q ' /mnt/host-transfer ' || mount -t 9p host9p /mnt/host-transfer -o trans=virtio,version=9p2000.L,cache=loose; cd /root/project\n`) {
         emulator.serial0_send(ch);
       }
       finishBoot();

@@ -6,12 +6,14 @@
 import * as externalMessaging from './src/transports/external-messaging.js';
 import * as websocketRelay from './src/transports/websocket-relay.js';
 import * as webgpuLlm from './src/llm/webgpu-proxy.js';
+import * as nativeNetwork from './src/transports/native-network.js';
 import { execute, health } from './src/router.js';
 import { loadSkills } from './src/skills.js';
 
 externalMessaging.start();
 websocketRelay.start(); // no-op until relayUrl/relaySession are configured
 webgpuLlm.start();      // accepts the authenticated Herdr page LLM provider
+nativeNetwork.start();  // optional per-user helper; unavailable until installed
 
 // Toolbar button opens the merged panel as a draggable / resizable / closable
 // popup window (a real OS window: title bar drags, edges resize, X closes).

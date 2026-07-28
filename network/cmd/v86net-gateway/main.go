@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -45,7 +46,8 @@ type gateway struct {
 }
 
 func main() {
-	backend := flag.String("backend", "native", "packet backend: native or userspace")
+	backend := flag.String("backend", "userspace", "packet backend: userspace (default, unprivileged) or native (optional high-performance TAP/Wintun)")
+	nativeMessaging := flag.Bool("native-messaging", false, "run as the AutoBro Chrome Native Messaging userspace-network helper")
 	listen := flag.String("listen", "127.0.0.1:8086", "HTTP/WebSocket listen address")
 	tapName := flag.String("tap", "v86tap0", "existing TAP interface")
 	legacyToken := flag.String("token", os.Getenv("V86NET_TOKEN"), "optional legacy static token")
@@ -64,6 +66,13 @@ func main() {
 	maxSessionBytes := flag.Uint64("max-session-bytes", 1<<30, "maximum combined bytes per WebSocket session; 0 disables")
 	flag.Parse()
 
+	executableName := strings.ToLower(filepath.Base(os.Args[0]))
+	if *nativeMessaging || strings.HasPrefix(executableName, "v86net-native-host") {
+		if err := runNativeMessaging(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
 		log.Fatalf("the packet gateway requires Linux or Windows; got %s", runtime.GOOS)
 	}
@@ -114,7 +123,7 @@ func main() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok": true, "tap": g.tapName, "active": g.active.Load(),
+			"ok": true, "backend": g.backend, "tap": g.tapName, "active": g.active.Load(),
 			"sessions": g.sessions.count(), "bytesFromGuest": g.bytesFromGuest.Load(),
 			"bytesToGuest": g.bytesToGuest.Load(), "framesDropped": g.framesDropped.Load(),
 		})
@@ -146,7 +155,11 @@ func main() {
 		_ = server.Shutdown(shutdown)
 	}()
 
-	log.Printf("v86 network gateway listening on %s (tap %s)", *listen, *tapName)
+	if *backend == "userspace" {
+		log.Printf("v86 network gateway listening on %s (userspace, no administrator rights required)", *listen)
+	} else {
+		log.Printf("v86 network gateway listening on %s (native high-performance backend, interface %s)", *listen, *tapName)
+	}
 	var serveErr error
 	if *tlsCert != "" || *tlsKey != "" {
 		if *tlsCert == "" || *tlsKey == "" {

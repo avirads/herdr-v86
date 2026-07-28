@@ -175,8 +175,10 @@ can be unavailable in embedded frames, non-secure origins, or some mobile browse
 <pre><code class="language-sh">tar czf project.tar.gz project/
 vmexport project.tar.gz
 </code></pre>
-<p>The browser opens its normal download flow. Maximum file size is 8 MiB. Export
-only regular files; directories should first be archived.</p>
+<p>The browser opens its normal download flow. File bytes travel through the
+dedicated binary VirtIO 9P channel rather than Base64 over the terminal.
+Maximum file size is 8 MiB. Export only regular files; directories should
+first be archived.</p>
 <h2 id="vmproject-import-and-export-projects"><code>vmproject</code> — import and export projects</h2>
 <pre><code class="language-text">vmproject import ARCHIVE.tar.gz [DESTINATION]
 vmproject pack [PROJECT_DIR] [OUTPUT.tar.gz]
@@ -190,8 +192,9 @@ vmproject export /root/project project.tar.gz
 <p>The browser Settings dialog provides matching <strong>Import project</strong> and
 <strong>Export project</strong> controls. Imports merge a <code>.tar.gz</code> or <code>.tgz</code> archive into
 <code>/root/project</code>; archive entries with absolute paths or <code>..</code> traversal are
-rejected. Exports are limited to the browser bridge's 8 MiB compressed-file
-limit.</p>
+rejected. Exports are limited to 8 MiB compressed. Settings imports and exports
+use a dedicated binary VirtIO 9P channel; their payloads do not pass through
+the interactive terminal or use Base64.</p>
 <p>The guest also includes <code>git</code>, <code>rg</code> (ripgrep), <code>jq</code>, <code>curl</code>, <code>shfmt</code>, <code>ctags</code>,
 <code>make</code>, <code>patch</code>, and <a href="https://grafana.com/docs/k6/latest/">Grafana k6</a> 2.0.0.
 Use k6 for JavaScript HTTP/API performance and load tests:</p>
@@ -278,7 +281,8 @@ or having no model loaded causes a clear command error.</p>
 sha256sum /root/SAFE_FILENAME
 </code></pre>
 <p>Unsafe filename characters are replaced with underscores. Import uses the
-interactive serial console; avoid typing while a large file is being imported.</p>
+dedicated binary VirtIO 9P channel, so terminal input remains responsive during
+the transfer.</p>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <table>
 <thead>

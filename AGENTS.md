@@ -9,7 +9,9 @@ clipboard, file-transfer, GitHub, or AI operations.
 - Architecture: Linux i386/i586, not x86-64.
 - Shell: BusyBox `sh`.
 - Working directory for imported files: `/root`.
-- Full IPv4 networking requires the external WebSocket-to-TAP gateway.
+- Full IPv4 networking requires either the AutoBro per-user userspace helper
+  or the external WebSocket gateway. TAP/Wintun is only an optional native
+  high-performance backend.
 - Without that gateway, use the browser-backed `vm*` commands documented below.
 - Browser-backed commands are host RPC operations, not normal Linux networking.
 

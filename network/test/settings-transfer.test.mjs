@@ -22,6 +22,12 @@ test('file import and export share a separate Settings section', () => {
 test('file export validates and shell-quotes the selected VM path', () => {
   assert.match(html, /file export requires a VM path/);
   assert.match(html, /if \(\/\[\\r\\n\\0\]\/\.test\(path\)\)/);
-  assert.match(html, /path\.replaceAll\("'", "'\\\\''"\)/);
-  assert.match(html, /hostBridge\.send\(`vmexport \$\{quotedPath\}`\)/);
+  assert.match(html, /transferShellQuote = value =>/);
+  assert.match(html, /emulator\.read_file\(`\/\$\{sharedName\}`\)/);
+});
+
+test('imports use the dedicated binary 9p channel without Base64 shell chunks', () => {
+  assert.match(html, /filesystem: \{\}/);
+  assert.match(html, /emulator\.create_file\(`\/\$\{sharedName\}`, bytes\)/);
+  assert.doesNotMatch(html, /encoded\.slice\(offset, offset \+ 2048\)/);
 });

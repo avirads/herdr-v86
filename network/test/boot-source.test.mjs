@@ -32,7 +32,7 @@ test('v86 disk progress describes the selected source rather than the event name
 test('the interactive VM shell starts in the project directory', () => {
   assert.match(
     html,
-    /stty rows \$\{term\.rows\} cols \$\{term\.cols\}; mkdir -p \/root\/project && cd \/root\/project\\n/,
+    /stty rows \$\{term\.rows\} cols \$\{term\.cols\};[\s\S]*?cd \/root\/project\\n/,
   );
 });
 

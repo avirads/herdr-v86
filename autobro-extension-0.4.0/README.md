@@ -29,3 +29,28 @@ external messaging. In herdr, click **Connect AutoBro**, enter this extension's
 ID and the pairing token shown in the panel, then use the Deep Agents UI. Herdr
 uses its own page-local LiteRT-LM runtime for inference; this extension supplies
 only authenticated bridge-v3 browser automation.
+
+## Optional local VM networking
+
+AutoBro can connect Herdr's v86 guest through the `v86net-gateway` userspace
+stack. A helper must be installed once for the current user, but installation
+does not require administrator/root rights, TAP/Wintun, firewall changes, or a
+background system service.
+
+Windows PowerShell:
+
+```powershell
+.\native\install-windows.ps1 -GatewayExe ..\network\v86net-gateway.exe
+```
+
+Linux:
+
+```sh
+./native/install-linux.sh ../network/v86net-gateway
+```
+
+Restart Chrome or Edge afterward. Pair AutoBro from Herdr normally; the portal
+then starts local userspace networking automatically. The helper runs only
+while the extension connection is open. Native Messaging is restricted to
+AutoBro's pinned extension ID, and the portal connection still requires the
+user's AutoBro pairing token.

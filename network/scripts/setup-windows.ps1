@@ -64,6 +64,7 @@ New-VMToken | Set-Content -LiteralPath $browserTokenPath -NoNewline -Encoding as
 & icacls.exe $InstallDirectory /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" | Out-Null
 
 $arguments = @(
+    '-backend', 'native',
     '-listen', $ListenAddress,
     '-tap', $AdapterName,
     '-admin-token-file', ('"' + $adminTokenPath + '"'),

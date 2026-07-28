@@ -105,8 +105,10 @@ tar czf project.tar.gz project/
 vmexport project.tar.gz
 ```
 
-The browser opens its normal download flow. Maximum file size is 8 MiB. Export
-only regular files; directories should first be archived.
+The browser opens its normal download flow. File bytes travel through the
+dedicated binary VirtIO 9P channel rather than Base64 over the terminal.
+Maximum file size is 8 MiB. Export only regular files; directories should
+first be archived.
 
 ## `vmproject` — import and export projects
 
@@ -127,8 +129,9 @@ vmproject export /root/project project.tar.gz
 The browser Settings dialog provides matching **Import project** and
 **Export project** controls. Imports merge a `.tar.gz` or `.tgz` archive into
 `/root/project`; archive entries with absolute paths or `..` traversal are
-rejected. Exports are limited to the browser bridge's 8 MiB compressed-file
-limit.
+rejected. Exports are limited to 8 MiB compressed. Settings imports and exports
+use a dedicated binary VirtIO 9P channel; their payloads do not pass through
+the interactive terminal or use Base64.
 
 The guest also includes `git`, `rg` (ripgrep), `jq`, `curl`, `shfmt`, `ctags`,
 `make`, `patch`, and [Grafana k6](https://grafana.com/docs/k6/latest/) 2.0.0.
@@ -250,7 +253,8 @@ sha256sum /root/SAFE_FILENAME
 ```
 
 Unsafe filename characters are replaced with underscores. Import uses the
-interactive serial console; avoid typing while a large file is being imported.
+dedicated binary VirtIO 9P channel, so terminal input remains responsive during
+the transfer.
 
 ## Troubleshooting
 
