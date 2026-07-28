@@ -43,11 +43,11 @@ Windows PowerShell:
 .\native\install-windows.ps1 -GatewayExe ..\network\v86net-gateway.exe
 ```
 
-For the guided Windows setup, double-click **Install AutoBro.cmd** instead. It
-finds or downloads the matching helper, verifies its SHA-256, installs it for
-the current user, copies this extension folder to the clipboard, and opens
-`chrome://extensions`. Chrome still requires the user to enable Developer mode
-and click **Load unpacked**.
+The Herdr Settings → AutoBro section provides a separate guided Windows
+installer. It downloads and verifies this ZIP and the matching helper, installs
+the helper for the current user, copies the extracted extension path to the
+clipboard, and opens `chrome://extensions`. Chrome still requires the user to
+enable Developer mode and click **Load unpacked**.
 
 Linux:
 
