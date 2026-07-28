@@ -196,20 +196,19 @@
         <ol>
           <li>Download and extract the extension.</li>
           <li>Open <code>chrome://extensions</code>, enable Developer mode, then Load unpacked and select the extracted folder.</li>
-          <li>On Windows, use the guided installer link below. It downloads and verifies AutoBro and its helper, then opens Chrome's extension page.</li>
+          <li>On Windows, download and extract the helper ZIP, then double-click <code>Install AutoBro Helper.cmd</code>. It installs for the current user without administrator rights or PowerShell.</li>
           <li>Come back here and click "Check again."</li>
         </ol>
         <div class="setup-actions">
           <a class="tool-link" href="downloads/autobro-web-bridge-0.4.0.zip" download>Download AutoBro</a>
-          <a class="tool-link" href="downloads/Install-AutoBro.cmd" download>Guided Windows installer</a>
-          <a class="tool-link" href="downloads/v86net-gateway-windows-amd64.exe" download>Download Windows networking helper</a>
+          <a class="tool-link" href="downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
           <button id="autobro-recheck" type="button">Check again</button>
         </div>
       </div>
       <div id="autobro-installed" hidden>
         <p>Full local VM networking also requires the optional per-user native helper.</p>
         <div class="setup-actions">
-          <a class="tool-link" href="downloads/v86net-gateway-windows-amd64.exe" download>Download Windows networking helper</a>
+          <a class="tool-link" href="downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
           <button id="autobro-connect" type="button">Connect AutoBro</button>
         </div>
       </div>
@@ -286,7 +285,7 @@
       <small>Connect browser automation or forget the current pairing.</small>
       <div class="provider-actions">
         <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-0.4.0.zip" download>Download AutoBro Chrome extension</a>
-        <a class="tool-link" href="https://fapstaff.com/downloads/Install-AutoBro.cmd" download>Guided Windows installer</a>
+        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
         <button id="configure-autobro-later" type="button">Connect</button>
         <button id="reset-autobro" type="button">Reset</button>
       </div>

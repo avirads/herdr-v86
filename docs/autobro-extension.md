@@ -3,7 +3,9 @@
 Download the packaged Manifest V3 extension:
 
 - [AutoBro Web Bridge 0.4.0](../downloads/autobro-web-bridge-0.4.0.zip)
-- SHA-256: `FF26C4FE73423AF3E163C152B13E628C4596A76F32124B8B7FB8A8CCD12AA938`
+- SHA-256: `F7A8738EEE32289C7AF044263CA6124A95859383340FDF24852EF315A893EE56`
+- [Windows networking helper with source](../downloads/autobro-helper-windows-amd64.zip)
+- SHA-256: `ABBC3961A2549F7AC81D875FEA8B0F8E905A3F55CEC14969DD27AF0455302835`
 
 ## Install in Chrome or Chromium
 
@@ -47,3 +49,9 @@ LLM-backed actions.
 The extension works in desktop Chromium-based browsers that support unpacked
 Manifest V3 extensions. Mobile Chrome does not support installing this
 extension.
+
+The Windows networking helper is a separate ZIP and is not bundled in the
+extension. Extract it and double-click `Install AutoBro Helper.cmd` to install
+the Native Messaging host for the current user. The archive includes the exact
+Go source used to build its binary. Installation uses HKCU and
+`%LOCALAPPDATA%`, so it needs neither administrator rights nor PowerShell.

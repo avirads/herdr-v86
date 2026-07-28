@@ -37,17 +37,12 @@ stack. A helper must be installed once for the current user, but installation
 does not require administrator/root rights, TAP/Wintun, firewall changes, or a
 background system service.
 
-Windows PowerShell:
-
-```powershell
-.\native\install-windows.ps1 -GatewayExe ..\network\v86net-gateway.exe
-```
-
-The Herdr Settings → AutoBro section provides a separate guided Windows
-installer. It downloads and verifies this ZIP and the matching helper, installs
-the helper for the current user, copies the extracted extension path to the
-clipboard, and opens `chrome://extensions`. Chrome still requires the user to
-enable Developer mode and click **Load unpacked**.
+On Windows, use the separate **Download Windows networking helper** link in
+Herdr Settings → AutoBro. Extract the ZIP and double-click
+`Install AutoBro Helper.cmd`. It copies the native host to the current user's
+local application-data directory and registers it under HKCU. It does not
+require administrator rights or PowerShell. The helper binary, installer, and
+PowerShell scripts are not included in this extension package.
 
 Linux:
 

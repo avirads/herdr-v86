@@ -1,41 +1,56 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import test from 'node:test';
 
 const root = new URL('../../', import.meta.url);
-const command = await readFile(new URL('downloads/Install-AutoBro.cmd', root), 'utf8');
-const installer = await readFile(new URL('downloads/install-autobro.ps1', root), 'utf8');
 
-test('guided AutoBro installer remains per-user and verifies the helper', () => {
-  assert.match(command, /ExecutionPolicy Bypass/);
-  assert.match(command, /%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe/);
-  assert.match(command, /%ProgramFiles%\\PowerShell\\7\\pwsh\.exe/);
-  assert.doesNotMatch(command, /^powershell\.exe /m);
-  assert.match(command, /https:\/\/fapstaff\.com\/downloads\/install-autobro\.ps1/);
-  assert.match(installer, /Get-FileHash/);
-  assert.match(installer, /bc633b2a04a5aa16575222010dc98e5bad53211f849b83fe28ebe9a2a3acd51d/);
-  assert.doesNotMatch(installer, /__EXTENSION_ZIP_SHA256__/);
+test('Windows helper is distributed as a ZIP with source', async () => {
+  const helperUrl = new URL('downloads/autobro-helper-windows-amd64.zip', root);
+  const helper = await readFile(helperUrl);
+  assert.equal(helper.subarray(0, 2).toString('ascii'), 'PK');
+  assert.ok((await stat(helperUrl)).size > 1_000_000);
+  const listing = helper.toString('latin1');
+  for (const expected of [
+    'Install AutoBro Helper.cmd',
+    'Uninstall AutoBro Helper.cmd',
+    'v86net-native-host.exe',
+    'source/go.mod',
+    'source/go.sum',
+    'source/cmd/v86net-gateway/main.go',
+  ]) {
+    assert.ok(listing.includes(expected), `missing ${expected}`);
+  }
+});
+
+test('CMD helper installer is per-user and needs no PowerShell or elevation', async () => {
+  const installer = await readFile(new URL('network/helper-package/Install AutoBro Helper.cmd', root), 'utf8');
   assert.match(installer, /LOCALAPPDATA/);
-  assert.doesNotMatch(installer, /Start-Process[^\r\n]*-Verb\s+RunAs/i);
+  assert.match(installer, /HKCU\\/);
+  assert.match(installer, /v86net-native-host\.exe/);
+  assert.doesNotMatch(installer, /powershell|RunAs|HKLM/i);
 });
 
-test('guided installer opens the unpacked-extension confirmation', () => {
-  assert.match(installer, /Set-Clipboard/);
-  assert.match(installer, /chrome:\/\/extensions\//);
-  assert.match(installer, /Load unpacked/);
-});
-
-test('Settings links the standalone installer beside the extension', async () => {
+test('Settings links the helper ZIP beside the extension', async () => {
   const html = await readFile(new URL('index.html', root), 'utf8');
   assert.match(html, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-0\.4\.0\.zip" download>Download AutoBro Chrome extension/);
-  assert.match(html, /href="https:\/\/fapstaff\.com\/downloads\/Install-AutoBro\.cmd" download>Guided Windows installer/);
+  assert.match(html, /href="https:\/\/fapstaff\.com\/downloads\/autobro-helper-windows-amd64\.zip" download>Download Windows networking helper/);
+  assert.doesNotMatch(html, /Install-AutoBro\.cmd|install-autobro\.ps1/);
 });
 
-test('bootstrap hashes match the published PowerShell and extension ZIP', async () => {
+test('extension source contains no Windows executable or PowerShell script', async () => {
+  const walk = async (url) => {
+    const entries = await readdir(url, { withFileTypes: true });
+    const paths = [];
+    for (const entry of entries) {
+      const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, url);
+      if (entry.isDirectory()) paths.push(...await walk(child));
+      else paths.push(child.pathname);
+    }
+    return paths;
+  };
+  const files = await walk(new URL('autobro-extension-0.4.0/', root));
+  assert.deepEqual(files.filter((name) => /\.(?:exe|ps1)$/i.test(name)), []);
   const zip = await readFile(new URL('downloads/autobro-web-bridge-0.4.0.zip', root));
-  const scriptHash = createHash('sha256').update(installer).digest('hex');
-  const zipHash = createHash('sha256').update(zip).digest('hex');
-  assert.match(command, new RegExp(scriptHash));
-  assert.match(installer, new RegExp(zipHash));
+  const listing = zip.toString('latin1');
+  assert.doesNotMatch(listing, /\.(?:exe|ps1)(?:[/"\0]|$)/i);
 });
