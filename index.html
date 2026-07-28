@@ -503,7 +503,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.27.19";
+const APP_VERSION = "2026.07.28.1";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-38-dev-tools";
 const bootOptions = new URLSearchParams(location.search);
@@ -1512,7 +1512,11 @@ try {
   const client = new LiteRtLmClient();
   webGpuLlmClient = client;
   client.addEventListener("activity", event => {
-    llmStatus(event.detail.message);
+    // Detailed cache byte/progress text belongs in the prominent progress
+    // card; duplicating it in the main-page header makes the UI look noisy.
+    if (!(modelLoadUiActive && event.detail.message.startsWith("caching "))) {
+      llmStatus(event.detail.message);
+    }
     document.getElementById("setup-llm-status").textContent = event.detail.message;
     updateModelProgressFromActivity(event.detail);
   });
@@ -1538,6 +1542,7 @@ try {
     if (!file) return;
     modelLoadUiActive = true;
     setModelLoadControlsBusy(true);
+    llmStatus("loading model…");
     showModelProgress(1, `Preparing ${file.name}…`);
     try {
       await initialization;

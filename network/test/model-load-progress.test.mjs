@@ -25,3 +25,8 @@ test('file selection shows progress and loading controls recover after completio
   assert.match(html, /showModelProgress\(modelProgressBar\.value,[\s\S]*\{ error: true \}/);
   assert.match(html, /finally \{[\s\S]*modelLoadUiActive = false;[\s\S]*setModelLoadControlsBusy\(false\)/);
 });
+
+test('cache progress is not duplicated in the main-page model status', () => {
+  assert.match(html, /if \(!\(modelLoadUiActive && event\.detail\.message\.startsWith\("caching "\)\)\) \{[\s\S]*llmStatus\(event\.detail\.message\)/);
+  assert.match(html, /modelLoadUiActive = true;[\s\S]*llmStatus\("loading model…"\);[\s\S]*showModelProgress\(1,/);
+});
