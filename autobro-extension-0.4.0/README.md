@@ -44,11 +44,9 @@ local application-data directory and registers it under HKCU. It does not
 require administrator rights or PowerShell. The helper binary, installer, and
 PowerShell scripts are not included in this extension package.
 
-Linux:
-
-```sh
-./native/install-linux.sh ../network/v86net-gateway
-```
+Linux helper setup is documented separately in the repository's
+`network/README.md`; no native installers or binaries are shipped inside the
+Chrome extension.
 
 Restart Chrome or Edge afterward. Pair AutoBro from Herdr normally; the portal
 then starts local userspace networking automatically. The helper runs only

@@ -54,7 +54,6 @@ for %%B in ("Google\Chrome" "Microsoft\Edge" "Chromium") do (
 echo.
 echo AutoBro networking helper installed successfully.
 echo Restart Chrome or Edge, then reconnect AutoBro in fapstaff.com.
-echo No administrator rights were used.
 echo.
 pause
 exit /b 0

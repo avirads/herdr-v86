@@ -50,7 +50,10 @@ test('extension source contains no Windows executable or PowerShell script', asy
   };
   const files = await walk(new URL('autobro-extension-0.4.0/', root));
   assert.deepEqual(files.filter((name) => /\.(?:exe|ps1)$/i.test(name)), []);
+  const rootEntries = await readdir(new URL('autobro-extension-0.4.0/', root));
+  assert.ok(!rootEntries.includes('native'), 'extension must not contain a native directory');
   const zip = await readFile(new URL('downloads/autobro-web-bridge-0.4.0.zip', root));
   const listing = zip.toString('latin1');
   assert.doesNotMatch(listing, /\.(?:exe|ps1)(?:[/"\0]|$)/i);
+  assert.ok(!listing.includes('native/'), 'extension ZIP must not contain a native directory');
 });
