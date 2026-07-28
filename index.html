@@ -152,7 +152,7 @@
   <div id="browser-status">AutoBro: not connected</div>
   <div id="voice-status">Voice: ready to load</div>
   <div id="tools">
-    <button id="copy-terminal" type="button" title="Copy selected terminal text (Ctrl+Shift+C)">Copy</button>
+    <button id="copy-terminal" type="button" title="Copy selected text, or the visible terminal when nothing is selected (Ctrl+Shift+C)">Copy</button>
     <button id="paste-terminal" type="button" title="Paste clipboard text into the shell (Ctrl+Shift+V)">Paste</button>
     <button id="voice-button" type="button" title="Dictate locally with Moonshine">🎙 Voice</button>
     <button id="open-settings" title="Reset model or AutoBro configuration">Settings</button>
@@ -394,7 +394,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.28.3";
+const APP_VERSION = "2026.07.28.4";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-40-binary-transfer";
 const bootOptions = new URLSearchParams(location.search);
@@ -444,10 +444,25 @@ const term = new Terminal({
 });
 term.open(document.getElementById("term"));
 
+function visibleTerminalText() {
+  const buffer = term.buffer.active;
+  const start = buffer.viewportY;
+  const end = Math.min(buffer.length, start + term.rows);
+  let text = "";
+  for (let index = start; index < end; index++) {
+    const line = buffer.getLine(index);
+    if (!line) continue;
+    if (index > start && !line.isWrapped) text += "\n";
+    text += line.translateToString(true);
+  }
+  return text.replace(/\n+$/, "");
+}
 async function copyTerminalSelection() {
   const selection = term.getSelection();
-  if (!selection) {
-    status("Select terminal text before copying");
+  const text = selection || visibleTerminalText();
+  const successMessage = selection ? "Terminal selection copied" : "Visible terminal copied";
+  if (!text) {
+    status("No terminal text to copy");
     term.focus();
     return false;
   }
@@ -455,7 +470,7 @@ async function copyTerminalSelection() {
   // path for keyboard gestures and embedded browsers. Trying it before an
   // asynchronous permission request preserves the transient user activation.
   const textarea = document.createElement("textarea");
-  textarea.value = selection;
+  textarea.value = text;
   textarea.setAttribute("readonly", "");
   textarea.style.cssText = "position:fixed;left:-9999px;top:0";
   document.body.appendChild(textarea);
@@ -463,17 +478,17 @@ async function copyTerminalSelection() {
   const copiedSynchronously = document.execCommand("copy");
   textarea.remove();
   if (copiedSynchronously) {
-    status("Terminal selection copied");
+    status(successMessage);
     term.focus();
     return true;
   }
   try {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(selection);
+      await navigator.clipboard.writeText(text);
     } else {
       throw new Error("Clipboard API unavailable");
     }
-    status("Terminal selection copied");
+    status(successMessage);
     term.focus();
     return true;
   } catch {

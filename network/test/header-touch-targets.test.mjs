@@ -16,3 +16,11 @@ test('the enlarged tool group contains the four requested controls', () => {
     assert.match(tools, new RegExp(`id="${id}"`));
   }
 });
+
+test('Copy falls back to visible terminal text when touch selection is unavailable', () => {
+  assert.match(html, /function visibleTerminalText\(\)/);
+  assert.match(html, /const buffer = term\.buffer\.active/);
+  assert.match(html, /const text = selection \|\| visibleTerminalText\(\)/);
+  assert.match(html, /Visible terminal copied/);
+  assert.doesNotMatch(html, /Select terminal text before copying/);
+});
