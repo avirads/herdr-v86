@@ -6,9 +6,12 @@ const html = await readFile(new URL('../../index.html', import.meta.url), 'utf8'
 const serviceWorker = await readFile(new URL('../../service-worker.js', import.meta.url), 'utf8');
 
 test('every long-lived VM startup message includes its source', () => {
+  assert.match(html, /Preparing VMVM…/);
+  assert.match(html, /Checking VMVM \[\$\{vmImageSource\}\]…/);
   assert.doesNotMatch(html, /Starting VM…/);
   assert.match(html, /Starting VMVM \[\$\{vmImageSource\}\]…/);
   assert.match(html, /Starting VMVM \[\$\{vmImageSource\}\] in compatibility mode…/);
+  assert.doesNotMatch(html, /(?:Preparing|Checking) VM(?:…| \[)/);
 });
 
 test('a successfully booted disk version becomes the local source', () => {

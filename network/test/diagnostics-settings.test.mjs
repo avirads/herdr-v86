@@ -27,7 +27,8 @@ test('diagnostics capture useful local metrics and exclude sensitive content', (
     'cachedModelNames',
     'vmImageSource',
   ]) assert.ok(html.includes(signal), `missing diagnostic signal: ${signal}`);
-  assert.match(html, /Project files, prompts, and pairing credentials are excluded/);
+  assert.match(html, /Project files, AI prompts, and pairing credentials are excluded/);
+  assert.match(html, /runtimeFault: lastRuntimeFault/);
   const collectorStart = html.indexOf('async function collectDiagnostics()');
   const collector = html.slice(collectorStart, html.indexOf('document.getElementById("copy-diagnostics")', collectorStart));
   assert.doesNotMatch(collector, /autobroPairingToken|setup-autobro-token|agentInput|remoteKey/);

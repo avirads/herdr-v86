@@ -58,6 +58,11 @@
   #model-progress.error #model-progress-percent { color: #ff7b72; }
   #model-progress progress { display: block; width: 100%; height: 10px; accent-color: #58a6ff; }
   #model-progress-message { display: block; margin-top: 7px; color: #8b949e; font-size: 12px; line-height: 1.35; }
+  #vm-runtime-warning { box-sizing: border-box; flex: 0 0 auto; margin: 0 8px 8px; padding: 10px 12px; display: flex; align-items: center; gap: 12px; color: #f0f6fc; background: #2d1b0e; border: 1px solid #d29922; border-radius: 7px; }
+  #vm-runtime-warning[hidden] { display: none; }
+  #vm-runtime-warning strong { display: block; color: #e3b341; }
+  #vm-runtime-warning-message { display: block; margin-top: 2px; color: #c9d1d9; font-size: 12px; }
+  #vm-runtime-warning-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 7px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
   .tool-link { color: #58a6ff; align-self: center; font-size: 12px; white-space: nowrap; }
   dialog { color: #c9d1d9; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 18px; width: min(420px, calc(100vw - 48px)); }
@@ -116,6 +121,9 @@
     .provider-actions label, .provider-actions button { box-sizing: border-box; width: 100%; }
     .role-options { grid-template-columns: 1fr; }
     .role-card { min-height: 145px; }
+    #vm-runtime-warning { align-items: stretch; flex-direction: column; }
+    #vm-runtime-warning-actions { margin-left: 0; }
+    #vm-runtime-warning-actions button { flex: 1 1 auto; min-height: 44px; }
   }
 </style>
 </head>
@@ -141,7 +149,7 @@
 <div id="boot-overlay" role="status" aria-live="polite">
   <div id="boot-loader">
     <div id="boot-ring"><span id="boot-percent">1%</span></div>
-    <div id="boot-message">Preparing VM…</div>
+    <div id="boot-message">Preparing VMVM…</div>
     <a id="mobile-remote-entry" href="remote.html">Connect to an agent instead</a>
   </div>
 </div>
@@ -158,6 +166,16 @@
     <button id="open-settings" title="Reset model or AutoBro configuration">Settings</button>
   </div>
 </header>
+<div id="vm-runtime-warning" role="alert" hidden>
+  <div>
+    <strong>VM runtime fault detected</strong>
+    <span id="vm-runtime-warning-message">The VM was kept open so the error can be inspected.</span>
+  </div>
+  <div id="vm-runtime-warning-actions">
+    <button id="restart-compatibility" type="button">Restart in compatibility mode</button>
+    <button id="dismiss-runtime-warning" type="button">Dismiss</button>
+  </div>
+</div>
 <div id="voice-progress" role="status" aria-live="assertive" aria-atomic="true" hidden>
   <span class="spinner" aria-hidden="true"></span>
   <div>
@@ -250,7 +268,7 @@
   </div>
   <section class="provider-section" aria-labelledby="diagnostics-settings-title">
     <h3 id="diagnostics-settings-title">Diagnostics</h3>
-    <small>Local capability and runtime metrics only. Project files, prompts, and pairing credentials are excluded.</small>
+    <small>Local capability and runtime metrics only. Project files, AI prompts, and pairing credentials are excluded. A retained VM fault may include bounded serial context and the last shell command.</small>
     <div id="diagnostics-status" role="status" aria-live="polite"></div>
     <div class="provider-actions">
       <button id="copy-diagnostics" type="button">Copy diagnostics</button>
@@ -394,9 +412,54 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.28.5";
+const APP_VERSION = "2026.07.28.7";
 const DISK_SIZE = 100663296;
 const DISK_VERSION = "vm-shell-40-binary-transfer";
+const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
+let pendingShellCommand = "";
+let lastSubmittedShellCommand = "";
+let serialFaultContext = "";
+let lastRuntimeFault = null;
+try {
+  lastRuntimeFault = JSON.parse(localStorage.getItem(RUNTIME_FAULT_KEY) || "null");
+} catch {
+  localStorage.removeItem(RUNTIME_FAULT_KEY);
+}
+const runtimeWarning = document.getElementById("vm-runtime-warning");
+const runtimeWarningMessage = document.getElementById("vm-runtime-warning-message");
+function showRuntimeFault(fault, previous = false) {
+  if (!fault) return;
+  const time = new Date(fault.capturedAt).toLocaleTimeString();
+  runtimeWarningMessage.textContent = `${previous ? "Previous" : "Current"} ${fault.kind} at ${time}: ${fault.message}`;
+  runtimeWarning.hidden = false;
+}
+function recordRuntimeFault(kind, message) {
+  lastRuntimeFault = {
+    capturedAt: new Date().toISOString(),
+    kind,
+    message: String(message).slice(0, 500),
+    command: lastSubmittedShellCommand.slice(0, 500) || null,
+    serialContext: serialFaultContext.slice(-2048),
+    compatibilityBoot,
+  };
+  try {
+    localStorage.setItem(RUNTIME_FAULT_KEY, JSON.stringify(lastRuntimeFault));
+  } catch {}
+  showRuntimeFault(lastRuntimeFault);
+  status("VM runtime fault captured — inspect Diagnostics or restart in compatibility mode");
+}
+document.getElementById("restart-compatibility").onclick = () => {
+  const next = new URL(location.href);
+  next.searchParams.set("compat", "1");
+  location.assign(next.href);
+};
+document.getElementById("dismiss-runtime-warning").onclick = () => {
+  runtimeWarning.hidden = true;
+  lastRuntimeFault = null;
+  localStorage.removeItem(RUNTIME_FAULT_KEY);
+  status(shellReady ? "Shell ready" : "Starting VMVM…");
+};
+if (lastRuntimeFault) showRuntimeFault(lastRuntimeFault, true);
 const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
 const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
@@ -406,7 +469,7 @@ const vmImageSource = localStorage.getItem("vm.diskVersion") === DISK_VERSION
 
 async function rangePreflight() {
   try {
-    const sourceMessage = `Checking VM [${vmImageSource}]…`;
+    const sourceMessage = `Checking VMVM [${vmImageSource}]…`;
     setBootProgress(3, sourceMessage);
     status(sourceMessage.toLowerCase());
     const response = await fetch(diskURL, {
@@ -1152,7 +1215,7 @@ async function collectDiagnostics() {
     browser: {
       userAgent: navigator.userAgent,
       brands: navigator.userAgentData?.brands || null,
-      mobile: navigator.userAgentData?.mobile ?? mobileBrowser,
+      mobile: navigator.userAgentData?.mobile ?? /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent),
       language: navigator.language,
       cookiesEnabled: navigator.cookieEnabled,
     },
@@ -1191,6 +1254,7 @@ async function collectDiagnostics() {
       compatibilityBoot,
       bootReady,
       shellReady,
+      runtimeFault: lastRuntimeFault,
     },
     providers: {
       aiModel: webGpuLlmClient?.modelName || null,
@@ -1567,6 +1631,10 @@ emulator.add_listener("download-error", (e) => {
 });
 window.onerror = (msg, source) => {
   if (source && !source.startsWith(location.origin)) return;
+  if (shellReady) {
+    recordRuntimeFault("browser-side VM error", msg);
+    return true;
+  }
   status("JS ERROR: " + msg);
   failBoot("Startup error: " + msg);
 };
@@ -1577,6 +1645,7 @@ setTimeout(() => { if (!gotSerial) { const message = "No VM output after 120 sec
 let recentOutput = "";
 let diskErrorOutput = "";
 let compatibilityRestartScheduled = false;
+let runtimePanicCaptured = false;
 function serialHasShellPrompt(output) {
   // Do not require one exact hostname/cwd. Network startup and terminal control
   // sequences can be interleaved with the prompt, especially over a live WSS
@@ -1589,6 +1658,8 @@ function serialHasShellPrompt(output) {
   return /(?:^|\n)[^\n]{0,200}[#$] $/.test(plain);
 }
 emulator.add_listener("serial0-output-byte", (byte) => {
+  const serialCharacter = String.fromCharCode(byte);
+  serialFaultContext = (serialFaultContext + serialCharacter).slice(-2048);
   if (!gotSerial) {
     gotSerial = true;
     setBootProgress(68, `Starting VMVM [${vmImageSource}]…`);
@@ -1596,14 +1667,22 @@ emulator.add_listener("serial0-output-byte", (byte) => {
   }
   writeSerialByte(byte);
   if (!compatibilityBoot && !compatibilityRestartScheduled) {
-    diskErrorOutput = (diskErrorOutput + String.fromCharCode(byte)).slice(-256);
+    diskErrorOutput = (diskErrorOutput + serialCharacter).slice(-256);
     if (diskErrorOutput.includes("lost interrupt") || diskErrorOutput.includes("I/O error, dev sda")) {
       compatibilityRestartScheduled = true;
-      status("virtual disk DMA failed — restarting in compatibility mode…");
-      const next = new URL(location.href);
-      next.searchParams.set("compat", "1");
-      setTimeout(() => location.replace(next.href), 1500);
+      if (shellReady) {
+        recordRuntimeFault("virtual disk error", "ATA/DMA error detected; automatic reload was suppressed");
+      } else {
+        status("virtual disk DMA failed during boot — restarting in compatibility mode…");
+        const next = new URL(location.href);
+        next.searchParams.set("compat", "1");
+        setTimeout(() => location.replace(next.href), 1500);
+      }
     }
+  }
+  if (shellReady && !runtimePanicCaptured && serialFaultContext.includes("Kernel panic - not syncing")) {
+    runtimePanicCaptured = true;
+    recordRuntimeFault("kernel panic", "The guest kernel stopped; automatic reload was suppressed");
   }
   if (!sttySent) {
     recentOutput = (recentOutput + String.fromCharCode(byte)).slice(-1024);
@@ -1617,6 +1696,22 @@ emulator.add_listener("serial0-output-byte", (byte) => {
     }
   }
 });
+function trackShellCommand(data) {
+  if (data.startsWith("\x1b")) return;
+  for (const character of data) {
+    if (character === "\r" || character === "\n") {
+      const command = pendingShellCommand.trim();
+      if (command) lastSubmittedShellCommand = command;
+      pendingShellCommand = "";
+    } else if (character === "\x7f" || character === "\b") {
+      pendingShellCommand = pendingShellCommand.slice(0, -1);
+    } else if (character === "\x15" || character === "\x03") {
+      pendingShellCommand = "";
+    } else if (character >= " ") {
+      pendingShellCommand = (pendingShellCommand + character).slice(-500);
+    }
+  }
+}
 function handleTerminalData(data) {
   // xterm answers terminal status/cursor queries internally. Those replies are
   // protocol traffic, not chat input, and must never appear at `vmlang>`.
@@ -1706,6 +1801,7 @@ function handleTerminalData(data) {
     }
     return;
   }
+  trackShellCommand(data);
   for (const ch of data) emulator.serial0_send(ch);
   if (shellReady) status("Shell ready");
 }
