@@ -53,3 +53,15 @@ then starts local userspace networking automatically. The helper runs only
 while the extension connection is open. Native Messaging is restricted to
 AutoBro's pinned extension ID, and the portal connection still requires the
 user's AutoBro pairing token.
+
+## External skill packs
+
+Use **Skill packs → Load Skills** in the extension panel to import a ZIP. A
+pack must contain one `index.json` file and a `skills/` directory. The index is
+a JSON array of paths relative to `skills/`. The ZIP may contain those files at
+its root or inside one top-level directory.
+
+The Guidewire PolicyCenter pack is distributed separately as
+`skills/guidewire-policycenter.zip` and is not bundled with the extension.
+The same panel lists installed skills and can add an individual Markdown file,
+view or update its contents, and delete a selected skill.

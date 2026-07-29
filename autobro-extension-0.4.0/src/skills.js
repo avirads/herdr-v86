@@ -26,9 +26,20 @@ async function skillsRoot(create = false) {
   return root.getDirectoryHandle(SKILLS_DIR, { create });
 }
 
+function skillParts(path) {
+  const normalized = String(path || '').replaceAll('\\', '/').replace(/^\/+/, '')
+    .replace(new RegExp(`^${SKILLS_DIR}/`), '');
+  const parts = normalized.split('/');
+  if (!normalized.toLowerCase().endsWith('.md') ||
+      parts.some(part => !part || part === '.' || part === '..')) {
+    throw new Error('Skill path must be a safe relative .md path');
+  }
+  return parts;
+}
+
 export async function importSkill(path, content) {
   const dir = await skillsRoot(true);
-  const parts = path.split('/');
+  const parts = skillParts(path);
   let current = dir;
   for (const part of parts.slice(0, -1)) {
     current = await current.getDirectoryHandle(part, { create: true });
@@ -37,6 +48,29 @@ export async function importSkill(path, content) {
   const writable = await file.createWritable();
   await writable.write(content);
   await writable.close();
+}
+
+export async function getSkill(path) {
+  const parts = skillParts(path);
+  let current = await skillsRoot();
+  for (const part of parts.slice(0, -1)) {
+    current = await current.getDirectoryHandle(part);
+  }
+  const handle = await current.getFileHandle(parts.at(-1));
+  return {
+    path: `${SKILLS_DIR}/${parts.join('/')}`,
+    content: await (await handle.getFile()).text()
+  };
+}
+
+export async function deleteSkill(path) {
+  const parts = skillParts(path);
+  let current = await skillsRoot();
+  for (const part of parts.slice(0, -1)) {
+    current = await current.getDirectoryHandle(part);
+  }
+  await current.removeEntry(parts.at(-1));
+  return { path: `${SKILLS_DIR}/${parts.join('/')}`, deleted: true };
 }
 
 export async function loadSkills(query = '', limit = 4, maxChars = 6000) {

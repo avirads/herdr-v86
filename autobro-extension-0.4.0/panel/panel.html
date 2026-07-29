@@ -10,7 +10,7 @@
     fieldset { border: 1px solid #8884; border-radius: 8px; margin-bottom: .75rem; padding: .5rem .75rem; }
     legend { font-weight: 600; }
     input, textarea, button, select { font: inherit; }
-    input[type=url], textarea { width: 100%; box-sizing: border-box; }
+    input[type=url], input[type=text], textarea, select { width: 100%; box-sizing: border-box; }
     textarea { font-family: ui-monospace, monospace; }
     pre { background: #8881; padding: .6rem; border-radius: 8px; overflow: auto; max-height: 300px; font-size: 12px; }
     .row { display: flex; gap: .4rem; align-items: center; margin: .4rem 0; flex-wrap: wrap; }
@@ -62,9 +62,29 @@
   <fieldset>
     <legend>Skill packs</legend>
     <div class="row">
-      <button id="loadGuidewireSkills">Load Guidewire PolicyCenter skills</button>
+      <input id="skillPackFile" type="file" accept=".zip,application/zip" hidden />
+      <input id="skillFile" type="file" accept=".md,text/markdown,text/plain" hidden />
+      <button id="loadSkills">Load Skills</button>
+      <button id="addSkillFile">Add Markdown file</button>
+      <button id="refreshSkills">Refresh list</button>
     </div>
-    <div id="skillStatus">Guidewire skills not loaded</div>
+    <small>Select a skill-pack ZIP containing <code>index.json</code> and a <code>skills/</code> folder.</small>
+    <div id="skillStatus">No external skill pack loaded</div>
+    <div class="row">
+      <select id="skillList" aria-label="Installed skills">
+        <option value="">No skills installed</option>
+      </select>
+      <button id="viewSkill">View</button>
+      <button id="deleteSkill">Delete</button>
+    </div>
+    <label for="skillPath">Skill path</label>
+    <input id="skillPath" type="text" placeholder="localhost/my-skill.md" />
+    <label for="skillContent">Skill content</label>
+    <textarea id="skillContent" rows="8" placeholder="# Skill name"></textarea>
+    <div class="row">
+      <button id="saveSkill">Add / update skill</button>
+      <button id="clearSkillEditor">Clear editor</button>
+    </div>
   </fieldset>
 
   <fieldset>

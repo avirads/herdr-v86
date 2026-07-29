@@ -4,7 +4,7 @@
 //
 // Talks to the service worker via internal messaging (source 'web-bridge-ui')
 // — extension pages are trusted, so no pairing token is involved. Skill packs
-// are bundled extension assets. The authenticated Herdr provider handles chat
+// are loaded from user-selected ZIP files. The authenticated Herdr provider handles chat
 // and automation planning.
 
 import { startDictation } from './voice.js';
@@ -25,7 +25,6 @@ const TAB_SCOPED_COMMANDS = new Set([
   'waitNetworkIdle', 'gotoUrl'
 ]);
 const RISKY_ACTION_RE = /\b(Update|Save|Add|Remove|New|Create|Edit|Quote|Bind|Issue|Cancel|Close|Withdraw|Delete|Deactivate|Import|Export)\b/i;
-const SKILL_PACK_BASE = chrome.runtime.getURL('skill-packs/guidewire-policycenter');
 
 let plannedAutomation = null;
 let riskyRunArmed = false;
@@ -96,28 +95,199 @@ async function refreshHealth() {
 
 // --- skill packs -------------------------------------------------------------
 
-async function fetchText(path) {
-  const response = await fetch(path);
-  if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
-  return await response.text();
+function findZipEnd(view) {
+  const minimum = Math.max(0, view.byteLength - 65557);
+  for (let offset = view.byteLength - 22; offset >= minimum; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) return offset;
+  }
+  throw new Error('Invalid ZIP: end-of-directory record not found');
 }
 
-$('loadGuidewireSkills').addEventListener('click', async () => {
+async function unzipSkillPack(file) {
+  const buffer = await file.arrayBuffer();
+  const view = new DataView(buffer);
+  const decoder = new TextDecoder();
+  const end = findZipEnd(view);
+  const entryCount = view.getUint16(end + 10, true);
+  let offset = view.getUint32(end + 16, true);
+  const entries = new Map();
+
+  for (let entry = 0; entry < entryCount; entry += 1) {
+    if (view.getUint32(offset, true) !== 0x02014b50) {
+      throw new Error('Invalid ZIP: central-directory entry not found');
+    }
+    const method = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const uncompressedSize = view.getUint32(offset + 24, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localOffset = view.getUint32(offset + 42, true);
+    const name = decoder.decode(new Uint8Array(buffer, offset + 46, nameLength)).replaceAll('\\', '/');
+
+    if (!name.endsWith('/')) {
+      if (view.getUint32(localOffset, true) !== 0x04034b50) {
+        throw new Error(`Invalid ZIP local entry: ${name}`);
+      }
+      const localNameLength = view.getUint16(localOffset + 26, true);
+      const localExtraLength = view.getUint16(localOffset + 28, true);
+      const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
+      const compressed = new Uint8Array(buffer, dataOffset, compressedSize);
+      let bytes;
+      if (method === 0) {
+        bytes = compressed;
+      } else if (method === 8) {
+        const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+      } else {
+        throw new Error(`Unsupported ZIP compression method ${method}: ${name}`);
+      }
+      if (bytes.byteLength !== uncompressedSize) throw new Error(`Corrupt ZIP entry: ${name}`);
+      entries.set(name.replace(/^\.?\//, ''), decoder.decode(bytes));
+    }
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function locatePackRoot(entries) {
+  const indexes = [...entries.keys()].filter(path => path === 'index.json' || path.endsWith('/index.json'));
+  if (indexes.length !== 1) throw new Error('ZIP must contain exactly one index.json');
+  return indexes[0].slice(0, -'index.json'.length);
+}
+
+$('loadSkills').addEventListener('click', () => $('skillPackFile').click());
+
+$('skillPackFile').addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
   try {
-    const index = JSON.parse(await fetchText(`${SKILL_PACK_BASE}/index.json`));
+    setSkillStatus(`Reading ${file.name}…`);
+    const entries = await unzipSkillPack(file);
+    const root = locatePackRoot(entries);
+    const index = JSON.parse(entries.get(`${root}index.json`));
+    if (!Array.isArray(index) || index.some(path => typeof path !== 'string')) {
+      throw new Error('index.json must be an array of skill paths');
+    }
     let imported = 0;
     for (const path of index) {
-      setSkillStatus(`Loading Guidewire PolicyCenter: ${imported + 1}/${index.length}`);
-      const content = await fetchText(`${SKILL_PACK_BASE}/skills/${path}`);
+      const normalized = path.replaceAll('\\', '/').replace(/^\/+/, '');
+      if (normalized.includes('../')) throw new Error(`Unsafe skill path: ${path}`);
+      const content = entries.get(`${root}skills/${normalized}`);
+      if (content === undefined) throw new Error(`Missing ZIP entry: skills/${normalized}`);
+      setSkillStatus(`Loading ${file.name}: ${imported + 1}/${index.length}`);
       await send({ command: 'skillsImport', path, content });
       imported += 1;
     }
-    guidewireSkillsLoaded = true;
-    localStorage.setItem('webBridge.guidewireSkillsLoaded', 'true');
-    setSkillStatus(`Guidewire PolicyCenter skills loaded: ${imported}`);
+    const guidewire = [...entries.entries()].some(([path, content]) =>
+      /policycenter|guidewire/i.test(`${path}\n${content}`)
+    );
+    if (guidewire) {
+      guidewireSkillsLoaded = true;
+      localStorage.setItem('webBridge.guidewireSkillsLoaded', 'true');
+    }
+    setSkillStatus(`${file.name} loaded: ${imported} skills`);
+    await refreshSkillList();
   } catch (error) {
-    setSkillStatus(`Guidewire skill load failed: ${error.message}`);
+    setSkillStatus(`Skill load failed: ${error.message}`);
+  } finally {
+    event.target.value = '';
   }
+});
+
+function skillDisplayPath(path) {
+  return String(path || '').replace(/^domain-skills\//, '');
+}
+
+async function refreshSkillList() {
+  const select = $('skillList');
+  const skills = await send({ command: 'skills', q: '', limit: 10000, maxChars: 0 });
+  select.replaceChildren();
+  for (const skill of skills) {
+    const option = document.createElement('option');
+    option.value = skill.path;
+    option.textContent = skillDisplayPath(skill.path);
+    select.append(option);
+  }
+  if (!skills.length) {
+    select.append(new Option('No skills installed', ''));
+  }
+  guidewireSkillsLoaded = skills.some(skill => /(^|\/)policycenter-[^/]+\.md$/i.test(skill.path));
+  localStorage.setItem('webBridge.guidewireSkillsLoaded', String(guidewireSkillsLoaded));
+  setSkillStatus(`${skills.length} skill${skills.length === 1 ? '' : 's'} installed`);
+  return skills;
+}
+
+$('refreshSkills').addEventListener('click', () => {
+  refreshSkillList().catch(error => setSkillStatus(`Could not list skills: ${error.message}`));
+});
+
+$('viewSkill').addEventListener('click', async () => {
+  const path = $('skillList').value;
+  if (!path) return setSkillStatus('Select a skill to view');
+  try {
+    const skill = await send({ command: 'skillsGet', path });
+    $('skillPath').value = skillDisplayPath(skill.path);
+    $('skillContent').value = skill.content;
+    setSkillStatus(`Viewing ${skillDisplayPath(skill.path)}`);
+  } catch (error) {
+    setSkillStatus(`Could not view skill: ${error.message}`);
+  }
+});
+
+$('deleteSkill').addEventListener('click', async () => {
+  const path = $('skillList').value;
+  if (!path) return setSkillStatus('Select a skill to delete');
+  const displayPath = skillDisplayPath(path);
+  if (!confirm(`Delete ${displayPath}?`)) return;
+  try {
+    await send({ command: 'skillsDelete', path });
+    if ($('skillPath').value === displayPath) {
+      $('skillPath').value = '';
+      $('skillContent').value = '';
+    }
+    await refreshSkillList();
+    setSkillStatus(`Deleted ${displayPath}`);
+  } catch (error) {
+    setSkillStatus(`Could not delete skill: ${error.message}`);
+  }
+});
+
+$('saveSkill').addEventListener('click', async () => {
+  const path = $('skillPath').value.trim();
+  const content = $('skillContent').value;
+  if (!path || !content.trim()) return setSkillStatus('Enter a .md path and skill content');
+  try {
+    await send({ command: 'skillsImport', path, content });
+    await refreshSkillList();
+    $('skillList').value = `domain-skills/${path.replaceAll('\\', '/').replace(/^\/+/, '')}`;
+    setSkillStatus(`Saved ${path}`);
+  } catch (error) {
+    setSkillStatus(`Could not save skill: ${error.message}`);
+  }
+});
+
+$('addSkillFile').addEventListener('click', () => $('skillFile').click());
+
+$('skillFile').addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const content = await file.text();
+    await send({ command: 'skillsImport', path: file.name, content });
+    await refreshSkillList();
+    $('skillList').value = `domain-skills/${file.name}`;
+    setSkillStatus(`Added ${file.name}`);
+  } catch (error) {
+    setSkillStatus(`Could not add skill: ${error.message}`);
+  } finally {
+    event.target.value = '';
+  }
+});
+
+$('clearSkillEditor').addEventListener('click', () => {
+  $('skillPath').value = '';
+  $('skillContent').value = '';
 });
 
 // --- automation planner (same logic as the external controller) --------------
@@ -740,5 +910,6 @@ pollPendingPairing();
 setInterval(pollPendingPairing, 1000);
 
 refreshHealth();
+refreshSkillList().catch(error => setSkillStatus(`Could not list skills: ${error.message}`));
 showPairingToken().catch(error => { $('pairingToken').value = `error: ${error.message}`; });
 setInterval(refreshHealth, 15000);

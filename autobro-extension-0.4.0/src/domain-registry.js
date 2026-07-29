@@ -14,9 +14,13 @@ export async function loadDomainCommandState() {
 }
 
 export async function enableGuidewireCommands() {
-  guidewireCommandsEnabled = true;
+  await setGuidewireCommandsEnabled(true);
+}
+
+export async function setGuidewireCommandsEnabled(enabled) {
+  guidewireCommandsEnabled = enabled === true;
   loaded = true;
-  await storageSet({ [GUIDEWIRE_ENABLED_KEY]: true });
+  await storageSet({ [GUIDEWIRE_ENABLED_KEY]: guidewireCommandsEnabled });
 }
 
 export async function guidewireCommandsAreEnabled() {

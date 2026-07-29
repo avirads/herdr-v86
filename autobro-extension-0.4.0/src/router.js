@@ -6,8 +6,8 @@
 // {type:"result", id} frames.
 
 import { handleCommand } from './commands.js';
-import { enableGuidewireCommands, isGuidewireSkillPath } from './domain-registry.js';
-import { loadSkills, importSkill } from './skills.js';
+import { enableGuidewireCommands, isGuidewireSkillPath, setGuidewireCommandsEnabled } from './domain-registry.js';
+import { deleteSkill, getSkill, loadSkills, importSkill } from './skills.js';
 
 export const BRIDGE_VERSION = 3;
 
@@ -40,6 +40,21 @@ async function bridgeCommand(payload) {
       const guidewireCommandsEnabled = isGuidewireSkillPath(payload.path);
       if (guidewireCommandsEnabled) await enableGuidewireCommands();
       return { ok: true, path: payload.path, bytes: payload.content.length, guidewireCommandsEnabled };
+    }
+    case 'skillsGet': {
+      if (typeof payload.path !== 'string' || !payload.path) {
+        throw new Error('skillsGet requires {path}');
+      }
+      return await getSkill(payload.path);
+    }
+    case 'skillsDelete': {
+      if (typeof payload.path !== 'string' || !payload.path) {
+        throw new Error('skillsDelete requires {path}');
+      }
+      const result = await deleteSkill(payload.path);
+      const remaining = await loadSkills('', 10000, 0);
+      await setGuidewireCommandsEnabled(remaining.some(skill => isGuidewireSkillPath(skill.path)));
+      return result;
     }
     default:
       return undefined;
