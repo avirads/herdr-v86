@@ -66,7 +66,7 @@ foreach ($directory in @("agent\dist", "network\browser", "llm\vendor", "vendor\
     Copy-Item (Join-Path $repository $directory) $destination -Recurse
 }
 
-$extensionZip = Join-Path $repository "downloads\autobro-web-bridge-2026.07.29.6.zip"
+$extensionZip = Join-Path $repository "downloads\autobro-web-bridge-2026.07.29.7.zip"
 Expand-Archive -LiteralPath $extensionZip -DestinationPath (Join-Path $stage "extension")
 
 $chromeZip = Join-Path $cache "chrome-for-testing-$chromeVersion-win64.zip"

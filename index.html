@@ -220,7 +220,7 @@
       <h3 id="autobro-settings-title">AutoBro</h3>
       <small id="settings-autobro-status" role="status" aria-live="polite">Connect browser automation or forget the current pairing.</small>
       <div class="provider-actions">
-        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.6.zip" download>Download AutoBro Chrome extension 2026.07.29.6</a>
+        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.7.zip" download>Download AutoBro Chrome extension 2026.07.29.7</a>
         <a class="tool-link" href="https://fapstaff.com/skills/guidewire-policycenter-1.0.0.zip" download>Download Guidewire PolicyCenter skills 1.0.0</a>
         <a class="tool-link" href="https://fapstaff.com/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
         <button id="configure-autobro-later" type="button">Connect</button>
@@ -1056,6 +1056,9 @@ async function oneClickConnectAutoBro(statusElement = document.getElementById("s
     const connected = await connectAutoBro({ extensionId: AUTOBRO_EXTENSION_ID, token });
     return connected;
   } catch (error) {
+    autobroClient?.disconnect?.();
+    autobroClient = null;
+    autobroReady = false;
     statusElement.textContent = "Pairing failed: " + error.message;
     return false;
   }
@@ -1311,14 +1314,15 @@ document.getElementById("configure-llm-later").onclick = () => llmFileInput.clic
 document.getElementById("configure-autobro-later").onclick = async () => {
   const button = document.getElementById("configure-autobro-later");
   const statusElement = document.getElementById("settings-autobro-status");
+  let connected = false;
   button.disabled = true;
   button.textContent = "Connecting…";
   try {
-    const connected = await oneClickConnectAutoBro(statusElement);
+    connected = await oneClickConnectAutoBro(statusElement);
     if (connected) settingsDialog.close();
   } finally {
     button.disabled = false;
-    button.textContent = autobroReady ? "Connected" : "Connect";
+    button.textContent = connected ? "Connected" : "Connect";
   }
 };
 document.getElementById("load-voice").onclick = () => {

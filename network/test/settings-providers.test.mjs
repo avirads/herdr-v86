@@ -17,8 +17,8 @@ test('provider controls are grouped at the top of Settings', () => {
   assert.match(settings, /id="configure-autobro-later"[^>]*>Connect</);
   assert.match(settings, /id="reset-autobro"[^>]*>Reset</);
   assert.match(settings, /id="settings-autobro-status"[^>]*role="status"/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.6\.zip" download/);
-  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.6<\/a>/);
+  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.7\.zip" download/);
+  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.7<\/a>/);
   assert.match(settings, /href="https:\/\/fapstaff\.com\/skills\/guidewire-policycenter-1\.0\.0\.zip" download/);
   assert.match(settings, />Download Guidewire PolicyCenter skills 1\.0\.0<\/a>/);
   assert.match(settings, /id="load-voice"[^>]*>Load</);
@@ -48,9 +48,17 @@ test('Settings connects AutoBro in place without opening VM setup', () => {
 
 test('AutoBro Connect closes Settings after pairing succeeds', () => {
   assert.match(html, /configure-autobro-later"\)\.textContent = "Connected"/);
-  assert.match(html, /const connected = await oneClickConnectAutoBro\(statusElement\);[\s\S]*if \(connected\) settingsDialog\.close\(\)/);
-  assert.match(html, /button\.textContent = autobroReady \? "Connected" : "Connect"/);
+  assert.match(html, /let connected = false;[\s\S]*connected = await oneClickConnectAutoBro\(statusElement\);[\s\S]*if \(connected\) settingsDialog\.close\(\)/);
+  assert.match(html, /button\.textContent = connected \? "Connected" : "Connect"/);
   assert.doesNotMatch(html, /autobroClient\.command\("openPanelWindow"\)/);
+});
+
+test('failed AutoBro pairing clears stale connected state', () => {
+  const pairing = html.slice(
+    html.indexOf('async function oneClickConnectAutoBro'),
+    html.indexOf('const settingsDialog'),
+  );
+  assert.match(pairing, /catch \(error\) \{[\s\S]*autobroClient = null;[\s\S]*autobroReady = false;[\s\S]*return false/);
 });
 
 test('the cached-model selector uses the real OPFS model list', () => {
