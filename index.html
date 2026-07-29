@@ -81,6 +81,7 @@
   .provider-actions { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .provider-actions label { flex: 1 1 180px; margin: 0; }
   .provider-actions button { flex: 0 0 auto; }
+  #vm-image-description { display: block; margin-top: 8px; color: #8b949e; }
   .autobro-install-help { margin-top: 10px; padding: 10px 12px; color: #c9d1d9; background: #2d1b0e; border: 1px solid #d29922; border-radius: 6px; font-size: 12px; line-height: 1.45; }
   .autobro-install-help[hidden] { display: none; }
   .autobro-install-help strong { color: #e3b341; }
@@ -198,6 +199,17 @@
 <dialog id="settings-dialog">
   <h2>Settings</h2>
   <div class="provider-settings">
+    <section class="provider-section" aria-labelledby="vm-image-settings-title">
+      <h3 id="vm-image-settings-title">VMVM Image</h3>
+      <small>Select a cumulative guest image. Changing it restarts VMVM; each image has an independent guest filesystem.</small>
+      <div class="provider-actions">
+        <label>Image
+          <select id="vm-image-tier" aria-label="VMVM image tier"></select>
+        </label>
+        <button id="apply-vm-image" type="button">Apply &amp; restart</button>
+      </div>
+      <small id="vm-image-description"></small>
+    </section>
     <section class="provider-section" aria-labelledby="ai-model-settings-title">
       <h3 id="ai-model-settings-title">AI Model</h3>
       <small>Load a LiteRT-LM model into this browser or clear all cached models.</small>
@@ -376,6 +388,33 @@ const bootMessage = document.getElementById("boot-message");
 // every machine that loads the packaged zip — no more copying an ID that
 // otherwise varies per install path.
 const AUTOBRO_EXTENSION_ID = "aaigkodgcmkbipbacijelgebhchknkln";
+const VM_IMAGE_FALLBACK = {
+  defaultTier: "ai-tools",
+  tiers: {
+    "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "vm-barebones-i386-ext4.img", size: 67108864, version: "2026.07.29.1" },
+    "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "vm-essentials-i386-ext4.img", size: 83886080, version: "2026.07.29.1" },
+    "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.07.29.1" },
+    "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.07.29.1" },
+  },
+};
+let vmImageManifest = VM_IMAGE_FALLBACK;
+try {
+  const response = await fetch("./vm-images.json", { cache: "no-cache" });
+  if (response.ok) vmImageManifest = await response.json();
+} catch {}
+const bootOptions = new URLSearchParams(location.search);
+const requestedVmTier = bootOptions.get("tier") || localStorage.getItem("vm.imageTier") || vmImageManifest.defaultTier;
+const vmImageTier = vmImageManifest.tiers[requestedVmTier] ? requestedVmTier : vmImageManifest.defaultTier;
+const vmImage = vmImageManifest.tiers[vmImageTier];
+localStorage.setItem("vm.imageTier", vmImageTier);
+const DISK_SIZE = vmImage.size;
+const DISK_VERSION = `${vmImageTier}-${vmImage.version}`;
+const diskURL = `${vmImage.url}?v=${encodeURIComponent(vmImage.version)}`;
+const diskCacheKey = `vm.diskVersion.${vmImageTier}`;
+const vmImageSource = localStorage.getItem(diskCacheKey) === DISK_VERSION
+  ? "local cache"
+  : "remote";
+const vmImageDisplaySource = `${vmImage.name} · ${vmImageSource}`;
 let bootReady = false;
 let llmReady = false;
 let autobroReady = false;
@@ -389,12 +428,12 @@ function setBootProgress(value, message) {
 }
 const bootTicker = setInterval(() => {
   if (bootProgress < 90) {
-    setBootProgress(bootProgress + 1, `Starting VMVM [${vmImageSource}]…`);
+    setBootProgress(bootProgress + 1, `Starting VMVM [${vmImageDisplaySource}]…`);
   }
 }, 700);
 function finishBoot() {
   clearInterval(bootTicker);
-  localStorage.setItem("vm.diskVersion", DISK_VERSION);
+  localStorage.setItem(diskCacheKey, DISK_VERSION);
   bootOverlay.classList.remove("error");
   setBootProgress(100, "Ready");
   setTimeout(() => {
@@ -414,9 +453,7 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
-const APP_VERSION = "2026.07.28.7";
-const DISK_SIZE = 100663296;
-const DISK_VERSION = "vm-shell-40-binary-transfer";
+const APP_VERSION = "2026.07.29.1";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -462,16 +499,11 @@ document.getElementById("dismiss-runtime-warning").onclick = () => {
   status(shellReady ? "Shell ready" : "Starting VMVM…");
 };
 if (lastRuntimeFault) showRuntimeFault(lastRuntimeFault, true);
-const bootOptions = new URLSearchParams(location.search);
 let compatibilityBoot = bootOptions.get("compat") === "1";
-const diskURL = `vm-network-ext4.img?v=${encodeURIComponent(DISK_VERSION)}`;
-const vmImageSource = localStorage.getItem("vm.diskVersion") === DISK_VERSION
-  ? "local cache"
-  : "remote";
 
 async function rangePreflight() {
   try {
-    const sourceMessage = `Checking VMVM [${vmImageSource}]…`;
+    const sourceMessage = `Checking VMVM [${vmImageDisplaySource}]…`;
     setBootProgress(3, sourceMessage);
     status(sourceMessage.toLowerCase());
     const response = await fetch(diskURL, {
@@ -484,8 +516,8 @@ async function rangePreflight() {
     const contentRange = response.headers.get("content-range") || "";
     const valid = response.status === 206 && contentRange === `bytes 0-0/${DISK_SIZE}`;
     await response.arrayBuffer();
-    const loadingMessage = `Starting VMVM [${vmImageSource}]…`;
-    const compatibilityMessage = `Starting VMVM [${vmImageSource}] in compatibility mode…`;
+    const loadingMessage = `Starting VMVM [${vmImageDisplaySource}]…`;
+    const compatibilityMessage = `Starting VMVM [${vmImageDisplaySource}] in compatibility mode…`;
     setBootProgress(8, valid ? loadingMessage : compatibilityMessage);
     status((valid ? loadingMessage : compatibilityMessage).toLowerCase());
     return valid;
@@ -496,7 +528,7 @@ async function rangePreflight() {
 
 if (!compatibilityBoot && !await rangePreflight()) {
   compatibilityBoot = true;
-  status(`Range delivery unavailable — compatibility boot [${vmImageSource}]`);
+  status(`Range delivery unavailable — compatibility boot [${vmImageDisplaySource}]`);
 }
 
 const term = new Terminal({
@@ -671,7 +703,7 @@ window.addEventListener("resize", scheduleTerminalFit, { passive: true });
 requestAnimationFrame(() => requestAnimationFrame(fitTerminal));
 
 if (compatibilityBoot) {
-  status(`compatibility boot [${vmImageSource}] — loading full 96 MiB disk…`);
+  status(`compatibility boot [${vmImageDisplaySource}] — loading full ${Math.round(DISK_SIZE / 1048576)} MiB disk…`);
 }
 const emulator = new V86({
   wasm_path: "v86-network.wasm",
@@ -1090,6 +1122,37 @@ async function oneClickConnectAutoBro(statusElement = document.getElementById("s
   }
 }
 const settingsDialog = document.getElementById("settings-dialog");
+const vmImageTierSelect = document.getElementById("vm-image-tier");
+const vmImageDescription = document.getElementById("vm-image-description");
+for (const [tier, image] of Object.entries(vmImageManifest.tiers)) {
+  const option = document.createElement("option");
+  option.value = tier;
+  option.textContent = image.name;
+  vmImageTierSelect.appendChild(option);
+}
+vmImageTierSelect.value = vmImageTier;
+function updateVmImageDescription() {
+  const selected = vmImageManifest.tiers[vmImageTierSelect.value];
+  const cumulative = {
+    barebones: "Tier 1",
+    essentials: "Tier 2 · includes Barebones",
+    "ai-tools": "Tier 3 · includes Essentials",
+    performance: "Tier 4 · includes AI Tools",
+  };
+  vmImageDescription.textContent = `${cumulative[vmImageTierSelect.value]} — ${selected.description} (${Math.round(selected.size / 1048576)} MiB)`;
+  document.getElementById("apply-vm-image").disabled = vmImageTierSelect.value === vmImageTier;
+}
+vmImageTierSelect.onchange = updateVmImageDescription;
+updateVmImageDescription();
+document.getElementById("apply-vm-image").onclick = () => {
+  const nextTier = vmImageTierSelect.value;
+  if (nextTier === vmImageTier) return;
+  if (!confirm("Restart VMVM with the selected image? Each image has an independent guest filesystem; export any files you need first.")) return;
+  localStorage.setItem("vm.imageTier", nextTier);
+  const next = new URL(location.href);
+  next.searchParams.set("tier", nextTier);
+  location.assign(next.href);
+};
 const remoteDialog = document.getElementById("remote-dialog");
 const remoteStatus = document.getElementById("remote-status");
 const remoteKey = document.getElementById("remote-key");
@@ -1262,6 +1325,10 @@ async function collectDiagnostics() {
       online: navigator.onLine,
     } : { online: navigator.onLine },
     vm: {
+      imageTier: vmImageTier,
+      imageName: vmImage.name,
+      imageUrl: vmImage.url,
+      imageSizeBytes: DISK_SIZE,
       diskVersion: DISK_VERSION,
       imageSource: vmImageSource,
       compatibilityBoot,
@@ -1614,15 +1681,15 @@ if (gatewayURL && sessionToken) {
 
 emulator.add_listener("emulator-ready", () => {
   setBootProgress(28, compatibilityBoot
-    ? `Starting VMVM [${vmImageSource}] in compatibility mode…`
-    : `Starting VMVM [${vmImageSource}]…`);
+    ? `Starting VMVM [${vmImageDisplaySource}] in compatibility mode…`
+    : `Starting VMVM [${vmImageDisplaySource}]…`);
   status(`emulator ready — booting${compatibilityBoot ? " in compatibility mode" : ""}… (first boot ~30-90s)`);
 });
 function isVmDiskDownload(fileName) {
   try {
-    return new URL(fileName, location.href).pathname.endsWith("/vm-network-ext4.img");
+    return new URL(fileName, location.href).pathname.endsWith(`/${vmImage.url}`);
   } catch {
-    return String(fileName).includes("vm-network-ext4.img");
+    return String(fileName).includes(vmImage.url);
   }
 }
 emulator.add_listener("download-progress", (e) => {
@@ -1631,11 +1698,11 @@ emulator.add_listener("download-progress", (e) => {
     const percent = Math.round(100 * fraction);
     if (isVmDiskDownload(e.file_name)) {
       const action = vmImageSource === "local cache" ? "Loading cached VMVM" : "Downloading VMVM";
-      setBootProgress(10 + fraction * 55, `${action} [${vmImageSource}]…`);
-      status(`${action.toLowerCase()} [${vmImageSource}] ${percent}%`);
+      setBootProgress(10 + fraction * 55, `${action} [${vmImageDisplaySource}]…`);
+      status(`${action.toLowerCase()} [${vmImageDisplaySource}] ${percent}%`);
     } else {
-      setBootProgress(10 + fraction * 55, `Downloading VMVM [${vmImageSource}]…`);
-      status(`downloading VMVM [${vmImageSource}] ${percent}%`);
+      setBootProgress(10 + fraction * 55, `Downloading VMVM [${vmImageDisplaySource}]…`);
+      status(`downloading VMVM [${vmImageDisplaySource}] ${percent}%`);
     }
   }
 });
@@ -1677,8 +1744,8 @@ emulator.add_listener("serial0-output-byte", (byte) => {
   serialFaultContext = (serialFaultContext + serialCharacter).slice(-2048);
   if (!gotSerial) {
     gotSerial = true;
-    setBootProgress(68, `Starting VMVM [${vmImageSource}]…`);
-    status(`VMVM booting [${vmImageSource}] — output live`);
+    setBootProgress(68, `Starting VMVM [${vmImageDisplaySource}]…`);
+    status(`VMVM booting [${vmImageDisplaySource}] — output live`);
   }
   writeSerialByte(byte);
   if (!compatibilityBoot && !compatibilityRestartScheduled) {

@@ -5,12 +5,14 @@ Every coding-agent tier can read the canonical in-guest capability reference at
 content as its global `AGENTS.md`, so newly started agents discover it
 automatically.
 
-The main page revalidates its versioned VM image URL at boot. If the hosted
-image is not newer, the browser loads the existing local HTTP-cache entry.
-Change `DISK_VERSION` in `index.html` whenever `vm-network-ext4.img` changes.
-After a VM version boots successfully, the page records that version locally.
+The main page revalidates the selected tier's versioned VM image URL at boot.
+If the hosted image is not newer, the browser loads the existing local
+HTTP-cache entry. Image URLs, sizes, versions, and checksums live in
+`vm-images.json`; update the selected image's version and checksum whenever it
+changes. After an image boots successfully, the page records that version
+locally under a tier-specific cache key.
 Every long-lived startup message then includes `[local cache]` for that same
-version or `[remote]` for a new version. The source is not inferred from a
+version or `[remote]` for a new version, together with the tier name. The source is not inferred from a
 one-byte Range cache probe because browsers do not reliably expose cached
 partial responses through `only-if-cached`.
 The v86 `download-progress` event is emitted for cached XHR reads too, so disk

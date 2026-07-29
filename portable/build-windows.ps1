@@ -57,7 +57,9 @@ Copy-Item (Join-Path $wintunExtract "wintun\LICENSE.txt") (Join-Path $stage "gat
 $appFiles = @(
     "index.html", "remote.html", "README.md", "llms.txt", "xterm.js", "xterm.css",
     "libv86-network.js", "v86-network.wasm", "seabios.bin", "vgabios.bin",
-    "bzImage-network", "vm-network-ext4.img"
+    "bzImage-network", "vm-images.json",
+    "vm-barebones-i386-ext4.img", "vm-essentials-i386-ext4.img",
+    "vm-ai-tools-i386-ext4.img", "vm-performance-i386-ext4.img"
 )
 foreach ($relative in $appFiles) { Copy-Item (Join-Path $repository $relative) (Join-Path $stage "app\$relative") }
 foreach ($directory in @("agent\dist", "network\browser", "llm\vendor", "vendor\moonshine", "docs")) {

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "defaultTier": "ai-tools",
+  "tiers": {
+    "barebones": {
+      "name": "Barebones",
+      "description": "Minimal Alpine i386 and BusyBox shell.",
+      "url": "vm-barebones-i386-ext4.img",
+      "size": 67108864,
+      "version": "2026.07.29.1",
+      "sha256": "9480274b976bb8220569ac72b592cc45839168bbab153cdfbde3af6eed7e7ab9"
+    },
+    "essentials": {
+      "name": "Essentials",
+      "description": "Barebones plus networking, browser transport, curl, jq and QuickJS.",
+      "url": "vm-essentials-i386-ext4.img",
+      "size": 83886080,
+      "version": "2026.07.29.1",
+      "sha256": "aa53f5b6baec1285af66fa959c5b0847f8f3d0e152673b33b3fe275c496274f2"
+    },
+    "ai-tools": {
+      "name": "AI Tools",
+      "description": "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.",
+      "url": "vm-ai-tools-i386-ext4.img",
+      "size": 92274688,
+      "version": "2026.07.29.1",
+      "sha256": "f833daa65f45b83c384b4719e64b06d70caec6b51b348e85705d657806f5b92f"
+    },
+    "performance": {
+      "name": "Performance testing",
+      "description": "AI Tools plus Grafana k6.",
+      "url": "vm-performance-i386-ext4.img",
+      "size": 96468992,
+      "version": "2026.07.29.1",
+      "sha256": "2046d4193142ceedd050ffbe56bdee21debb42a619dca2a385b97e8bcfd6e528"
+    }
+  }
+}

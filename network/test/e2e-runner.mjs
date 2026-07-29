@@ -61,7 +61,12 @@ const server = createServer((request, response) => {
 });
 await new Promise((resolve, reject) => server.listen(port, '127.0.0.1', error => error ? reject(error) : resolve()));
 
-const fragment = new URLSearchParams({ ...(gateway ? { gateway } : {}), ...(token ? { token } : {}), pingTarget });
+const fragment = new URLSearchParams({
+  ...(gateway ? { gateway } : {}),
+  ...(token ? { token } : {}),
+  ...(args['--tier'] ? { tier: args['--tier'] } : {}),
+  pingTarget,
+});
 const url = `http://127.0.0.1:${port}/network/test/${encodeURIComponent(page)}#${fragment}`;
 const profile = mkdtempSync(join(tmpdir(), 'vm-e2e-'));
 const child = spawn(chrome, [

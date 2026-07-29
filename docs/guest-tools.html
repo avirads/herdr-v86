@@ -99,12 +99,14 @@
 <code>/usr/local/share/vm-agent-capabilities.md</code>. Zerostack also receives the same
 content as its global <code>AGENTS.md</code>, so newly started agents discover it
 automatically.</p>
-<p>The main page revalidates its versioned VM image URL at boot. If the hosted
-image is not newer, the browser loads the existing local HTTP-cache entry.
-Change <code>DISK_VERSION</code> in <code>index.html</code> whenever <code>vm-network-ext4.img</code> changes.
-After a VM version boots successfully, the page records that version locally.
+<p>The main page revalidates the selected tier's versioned VM image URL at boot.
+If the hosted image is not newer, the browser loads the existing local
+HTTP-cache entry. Image URLs, sizes, versions, and checksums live in
+<code>vm-images.json</code>; update the selected image's version and checksum whenever it
+changes. After an image boots successfully, the page records that version
+locally under a tier-specific cache key.
 Every long-lived startup message then includes <code>[local cache]</code> for that same
-version or <code>[remote]</code> for a new version. The source is not inferred from a
+version or <code>[remote]</code> for a new version, together with the tier name. The source is not inferred from a
 one-byte Range cache probe because browsers do not reliably expose cached
 partial responses through <code>only-if-cached</code>.
 The v86 <code>download-progress</code> event is emitted for cached XHR reads too, so disk

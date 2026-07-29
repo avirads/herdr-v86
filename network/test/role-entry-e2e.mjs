@@ -54,17 +54,22 @@ async function load(path, waitMs) {
 try {
   const undecided = await load('', 2500);
   const host = await load('?role=agent', 6000);
+  const barebones = await load('?role=agent&tier=barebones', 6000);
   const guest = await load('?role=human', 2500);
-  const expensive = path => /vm-network-ext4\.img|\.litertlm$/i.test(path);
+  const vmDisk = path => /vm-(?:barebones|essentials|ai-tools|performance)-i386-ext4\.img/i.test(path);
+  const expensive = path => vmDisk(path) || /\.litertlm$/i.test(path);
   const result = {
     undecidedRequests: undecided,
-    hostRequestedDisk: host.some(path => /vm-network-ext4\.img/i.test(path)),
+    hostRequestedDisk: host.some(vmDisk),
+    defaultRequestedAiTools: host.some(path => /vm-ai-tools-i386-ext4\.img/i.test(path)),
+    selectedRequestedBarebones: barebones.some(path => /vm-barebones-i386-ext4\.img/i.test(path)),
     guestOpenedRemote: guest.includes('/remote.html'),
     undecidedLoadedHost: undecided.some(expensive),
     guestLoadedHost: guest.some(expensive),
   };
   console.log(JSON.stringify(result, null, 2));
-  if (result.undecidedLoadedHost || !result.hostRequestedDisk || !result.guestOpenedRemote || result.guestLoadedHost) process.exitCode = 1;
+  if (result.undecidedLoadedHost || !result.hostRequestedDisk || !result.defaultRequestedAiTools ||
+      !result.selectedRequestedBarebones || !result.guestOpenedRemote || result.guestLoadedHost) process.exitCode = 1;
 } finally {
   server.close();
 }

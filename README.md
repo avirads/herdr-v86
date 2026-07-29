@@ -6,11 +6,9 @@ automation, file transfer, and optional full IPv4 networking.
 AutoBro browser automation extension: see
 [installation and download instructions](docs/autobro-extension.md).
 
-On load, the UI completes VM boot behind a two-step setup wizard: configure the
-page-local WebGPU LLM, then pair AutoBro. The guest shell is revealed only after
-both providers report ready, or immediately when **Skip setup and open shell**
-is selected. The skip choice is remembered in that browser. Cached model and
-current-tab pairing state are detected automatically.
+On load, AI Tools boots by default. Select another cumulative image under
+**Settings → VMVM Image**; changing it restarts VMVM. Models and AutoBro are
+configured independently from Settings.
 
 Use **Settings** in the header to reset either provider. **Reset LLM** unloads
 the model and deletes its browser-cached model files; **Reset AutoBro** closes
@@ -19,16 +17,17 @@ Either action hides the shell and returns to the corresponding wizard step.
 After skipping, use **Settings → Configure providers** to configure the model or
 AutoBro independently without repeating the other provider's setup.
 
-- `bzImage-network` + `vm-network-ext4.img` — default network-enabled demo
-  kernel and Alpine shell guest with DHCP, CA certificates, full HTTPS curl,
-  browser-bridge tools, tmux 3.5a, Zerostack, and the compact Rig coding agent.
+- `bzImage-network` + the images in `vm-images.json` — four cumulative VMVM
+  tiers from Barebones through Performance testing. AI Tools is the default
+  and includes browser-bridge tools, tmux 3.5a, Zerostack, and Rig. See
+  [VMVM image tiers](docs/vm-images.md).
 - `network/` — authenticated WebSocket-to-TAP gateway, v86 adapter, guest build
   recipes, and automated DHCP/DNS/ping/HTTPS test.
 
 Boot args (disk image route): `root=/dev/sda rw console=ttyS0`
 Needs an i686 kernel with 8250 serial + ext4 (or 9p/virtio for the tarball route).
 
-The default `index.html` uses the network-enabled artifacts and accepts a
+The default `index.html` uses the manifest-selected artifacts and accepts a
 short-lived gateway session in its URL fragment. See [network/README.md](network/README.md).
 
 The demo also includes a gateway-free browser bridge. Its `vmfetch`, `vmclip`,

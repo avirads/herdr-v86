@@ -1,5 +1,6 @@
 *.onnx binary
 *.wasm binary
+*.img binary
 
 # Guest scripts run inside the Alpine VM via #!/bin/sh; a CRLF-converted
 # checkout (core.autocrlf=true on Windows) turns the shebang into

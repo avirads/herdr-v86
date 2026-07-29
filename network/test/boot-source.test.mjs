@@ -7,18 +7,18 @@ const serviceWorker = await readFile(new URL('../../service-worker.js', import.m
 
 test('every long-lived VM startup message includes its source', () => {
   assert.match(html, /Preparing VMVM…/);
-  assert.match(html, /Checking VMVM \[\$\{vmImageSource\}\]…/);
+  assert.match(html, /Checking VMVM \[\$\{vmImageDisplaySource\}\]…/);
   assert.doesNotMatch(html, /Starting VM…/);
-  assert.match(html, /Starting VMVM \[\$\{vmImageSource\}\]…/);
-  assert.match(html, /Starting VMVM \[\$\{vmImageSource\}\] in compatibility mode…/);
+  assert.match(html, /Starting VMVM \[\$\{vmImageDisplaySource\}\]…/);
+  assert.match(html, /Starting VMVM \[\$\{vmImageDisplaySource\}\] in compatibility mode…/);
   assert.doesNotMatch(html, /(?:Preparing|Checking) VM(?:…| \[)/);
 });
 
 test('a successfully booted disk version becomes the local source', () => {
-  assert.match(html, /localStorage\.setItem\("vm\.diskVersion", DISK_VERSION\)/);
+  assert.match(html, /localStorage\.setItem\(diskCacheKey, DISK_VERSION\)/);
   assert.match(
     html,
-    /localStorage\.getItem\("vm\.diskVersion"\) === DISK_VERSION\s*\?\s*"local cache"\s*:\s*"remote"/,
+    /localStorage\.getItem\(diskCacheKey\) === DISK_VERSION\s*\?\s*"local cache"\s*:\s*"remote"/,
   );
   assert.doesNotMatch(html, /cache:\s*"only-if-cached"/);
 });
@@ -29,9 +29,16 @@ test('v86 disk progress describes the selected source rather than the event name
     html,
     /vmImageSource === "local cache" \? "Loading cached VMVM" : "Downloading VMVM"/,
   );
-  assert.match(html, /`\$\{action\} \[\$\{vmImageSource\}\]…`/);
-  assert.match(html, /Downloading VMVM \[\$\{vmImageSource\}\]…/);
+  assert.match(html, /`\$\{action\} \[\$\{vmImageDisplaySource\}\]…`/);
+  assert.match(html, /Downloading VMVM \[\$\{vmImageDisplaySource\}\]…/);
   assert.doesNotMatch(html, /Downloading \$\{e\.file_name\}/);
+});
+
+test('the selected cumulative image comes from the manifest and has its own cache key', () => {
+  assert.match(html, /fetch\("\.\/vm-images\.json", \{ cache: "no-cache" \}\)/);
+  assert.match(html, /localStorage\.getItem\("vm\.imageTier"\)/);
+  assert.match(html, /const diskCacheKey = `vm\.diskVersion\.\$\{vmImageTier\}`/);
+  assert.match(html, /hda: \{ url: diskURL, async: !compatibilityBoot, size: DISK_SIZE \}/);
 });
 
 test('the interactive VM shell starts in the project directory', () => {

@@ -9,6 +9,8 @@ test('Settings keeps version information in Diagnostics without a redundant Abou
   assert.match(html, /const APP_VERSION = "[^"]+"/);
   assert.match(html, /version: APP_VERSION/);
   assert.match(html, /diskVersion: DISK_VERSION/);
+  assert.match(html, /imageTier: vmImageTier/);
+  assert.match(html, /imageName: vmImage\.name/);
   assert.match(html, /moonshineJs: "0\.1\.29"/);
   assert.match(html, /onnxRuntimeWeb: "1\.22\.0"/);
   assert.match(html, /<h3 id="diagnostics-settings-title">Diagnostics<\/h3>/);

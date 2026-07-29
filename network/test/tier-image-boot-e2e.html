@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>VMVM tier image boot test</title>
+<pre id="status">booting</pre>
+<div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script>
+const tier = new URLSearchParams(location.hash.slice(1)).get("tier") || "ai-tools";
+const images = {
+  barebones: ["vm-barebones-i386-ext4.img", 67108864, 1],
+  essentials: ["vm-essentials-i386-ext4.img", 83886080, 2],
+  "ai-tools": ["vm-ai-tools-i386-ext4.img", 92274688, 3],
+  performance: ["vm-performance-i386-ext4.img", 96468992, 4],
+};
+const [image, size, level] = images[tier];
+const status = document.getElementById("status");
+let serial = "";
+let submitted = false;
+const emulator = new V86({
+  wasm_path: "../../v86-network.wasm",
+  memory_size: 256 * 1024 * 1024,
+  bios: { url: "../../seabios.bin" },
+  vga_bios: { url: "../../vgabios.bin" },
+  bzimage: { url: "../../bzImage-network" },
+  cmdline: "root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet",
+  hda: { url: `../../${image}`, async: true, size },
+  net_device: { type: "virtio" },
+  uart1: true,
+  screen_container: document.getElementById("screen_container"),
+  autostart: true,
+});
+
+async function submit(ok, reason = "") {
+  if (submitted) return;
+  submitted = true;
+  status.textContent = ok ? "PASS" : "FAIL";
+  await fetch("/__result", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ok, tier, reason, serial }),
+  });
+}
+
+emulator.add_listener("serial0-output-byte", byte => {
+  serial += String.fromCharCode(byte);
+  if (serial.length > 50000) serial = serial.slice(-50000);
+  if (!serial.includes("TIER_CHECK_BEGIN") && /vm:.*#\s*$/.test(serial)) {
+    const checks = [
+      `test "$(cat /etc/vmvm/tier)" = "${tier}"`,
+      `test "$(cat /etc/vmvm/tier-level)" = "${level}"`,
+      level >= 2 ? "command -v curl jq qjs vmagent-rpc >/dev/null" : "! command -v curl >/dev/null",
+      level >= 3 ? "command -v tmux herdr git rg zerostack rig vmfetch vmllm vmlang vmmastra >/dev/null" : "! command -v rig >/dev/null",
+      level >= 4 ? "command -v k6 >/dev/null" : "! command -v k6 >/dev/null",
+    ].join(" && ");
+    emulator.serial0_send(`echo TIER_CHECK_BEGIN; ${checks}; echo TIER_CHECK_RESULT:$?\n`);
+  }
+  const result = serial.match(/TIER_CHECK_RESULT:(\d+)/);
+  if (result) submit(result[1] === "0", `guest checks exited ${result[1]}`);
+});
+setTimeout(() => submit(false, "boot timed out"), 90000);
+</script>
