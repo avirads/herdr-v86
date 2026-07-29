@@ -102,9 +102,10 @@ test('Settings Voice has no manual model download link', () => {
   assert.match(html, /handleTerminalData\(transcript \+ " "\)/);
 });
 
-test('Help is the last Settings item before Close', () => {
+test('Settings Close is at the top-right and Help remains the last content item', () => {
   const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
   assert.ok(settings.lastIndexOf('<strong>Help</strong>') > settings.lastIndexOf('id="diagnostics-settings-title"'));
   assert.ok(settings.lastIndexOf('<strong>Help</strong>') > settings.lastIndexOf('<strong>Remote agent</strong>'));
-  assert.ok(settings.lastIndexOf('<strong>Help</strong>') < settings.lastIndexOf('id="close-settings"'));
+  assert.ok(settings.indexOf('id="close-settings"') < settings.indexOf('<h2>Settings</h2>'));
+  assert.match(html, /#settings-dialog > \.settings-close \{[^}]*position: sticky;[^}]*top: 0;[^}]*float: right;/);
 });
