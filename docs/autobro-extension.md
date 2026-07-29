@@ -2,8 +2,8 @@
 
 Download the packaged Manifest V3 extension:
 
-- [AutoBro Web Bridge 2026.07.29.3](../downloads/autobro-web-bridge-2026.07.29.3.zip)
-- SHA-256: `AD7EC8B45D881613F4D202EE57049A4B475312B71397A29B7B60F89E5BF0AABF`
+- [AutoBro Web Bridge 2026.07.29.4](../downloads/autobro-web-bridge-2026.07.29.4.zip)
+- SHA-256: `6466B8F969E73AB691FD59019E3318C135DB1295B91151C77370A39425D55CAD`
 - [Windows networking helper with source](../downloads/autobro-helper-windows-amd64.zip)
 - SHA-256: `E403CFE59EBCB65603FEEA69946C5BC6410B3C8BA8D6F20D811871C403D3DEB7`
 
@@ -33,6 +33,10 @@ The extension ID and pairing token fields are still available for manual
 entry (under "Enter extension ID and pairing token manually instead") as a
 fallback if browser notifications are blocked, or for advanced/scripted
 setups.
+
+After pairing succeeds, the Settings **Connect** button becomes **Open**.
+Selecting it closes Settings and focuses the extension's existing panel window,
+or creates the singleton panel window when it is not already open.
 
 ### Upgrading from older releases
 

@@ -71,6 +71,7 @@ chrome.action?.onClicked.addListener(() => { openPanelWindow().catch(() => undef
 // so approving it never depends on the OS notification pipeline rendering
 // anything (observed unreliable in some Windows/remote-desktop sessions).
 externalMessaging.onPairingRequested(() => { openPanelWindow().catch(() => undefined); });
+externalMessaging.onOpenPanelRequested(openPanelWindow);
 
 // Persist position + size as the user drags or resizes the panel window.
 chrome.windows?.onBoundsChanged?.addListener(win => { rememberBoundsIfPanel(win).catch(() => undefined); });

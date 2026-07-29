@@ -17,8 +17,8 @@ test('provider controls are grouped at the top of Settings', () => {
   assert.match(settings, /id="configure-autobro-later"[^>]*>Connect</);
   assert.match(settings, /id="reset-autobro"[^>]*>Reset</);
   assert.match(settings, /id="settings-autobro-status"[^>]*role="status"/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.3\.zip" download/);
-  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.3<\/a>/);
+  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.4\.zip" download/);
+  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.4<\/a>/);
   assert.match(settings, /id="load-voice"[^>]*>Load</);
   assert.match(settings, /id="reset-voice"[^>]*>Reset</);
 });
@@ -41,7 +41,13 @@ test('Settings connects AutoBro in place without opening VM setup', () => {
     html.indexOf('document.getElementById("load-voice").onclick'),
   );
   assert.match(handler, /oneClickConnectAutoBro\(statusElement\)/);
-  assert.doesNotMatch(handler, /openSetupStep|settingsDialog\.close|setup-step-autobro/);
+  assert.doesNotMatch(handler, /openSetupStep|setup-step-autobro/);
+});
+
+test('connected AutoBro changes Connect to Open and closes Settings', () => {
+  assert.match(html, /configure-autobro-later"\)\.textContent = "Open"/);
+  assert.match(html, /if \(autobroReady && autobroClient\) \{[\s\S]*settingsDialog\.close\(\);[\s\S]*autobroClient\.command\("openPanelWindow"\)/);
+  assert.match(html, /button\.textContent = autobroReady \? "Open" : "Connect"/);
 });
 
 test('the cached-model selector uses the real OPFS model list', () => {

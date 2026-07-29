@@ -220,7 +220,7 @@
       <h3 id="autobro-settings-title">AutoBro</h3>
       <small id="settings-autobro-status" role="status" aria-live="polite">Connect browser automation or forget the current pairing.</small>
       <div class="provider-actions">
-        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.3.zip" download>Download AutoBro Chrome extension 2026.07.29.3</a>
+        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.4.zip" download>Download AutoBro Chrome extension 2026.07.29.4</a>
         <a class="tool-link" href="https://fapstaff.com/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
         <button id="configure-autobro-later" type="button">Connect</button>
         <button id="reset-autobro" type="button">Reset</button>
@@ -1037,7 +1037,7 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
     browserStatus(`connected — bridge v${health.bridgeVersion || "?"}`);
     autobroReady = true;
     document.getElementById("settings-autobro-status").textContent = `Connected — bridge v${health.bridgeVersion || "?"}.`;
-    document.getElementById("configure-autobro-later").textContent = "Connected";
+    document.getElementById("configure-autobro-later").textContent = "Open";
     await connectAutoBroUserspaceNetwork(client);
     return true;
   } catch (error) {
@@ -1311,13 +1311,22 @@ document.getElementById("configure-llm-later").onclick = () => llmFileInput.clic
 document.getElementById("configure-autobro-later").onclick = async () => {
   const button = document.getElementById("configure-autobro-later");
   const statusElement = document.getElementById("settings-autobro-status");
+  if (autobroReady && autobroClient) {
+    settingsDialog.close();
+    try {
+      await autobroClient.command("openPanelWindow");
+    } catch (error) {
+      browserStatus("could not open extension — " + error.message);
+    }
+    return;
+  }
   button.disabled = true;
   button.textContent = "Connecting…";
   try {
     await oneClickConnectAutoBro(statusElement);
   } finally {
     button.disabled = false;
-    button.textContent = autobroReady ? "Connected" : "Connect";
+    button.textContent = autobroReady ? "Open" : "Connect";
   }
 };
 document.getElementById("load-voice").onclick = () => {
