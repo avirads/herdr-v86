@@ -2,8 +2,8 @@
 
 Download the packaged Manifest V3 extension:
 
-- [AutoBro Web Bridge 2026.07.29.7](../downloads/autobro-web-bridge-2026.07.29.7.zip)
-- SHA-256: `637DC737C4E65A4734254BF22BF7F9C358C25833FECCC4B8CE98B1F2CD25D71F`
+- [AutoBro Web Bridge 2026.07.29.8](../downloads/autobro-web-bridge-2026.07.29.8.zip)
+- SHA-256: `F7C9519EDF101E742BFCAD0ED02909117AB185DA0F14E1FA880D076EAD84810B`
 - [Guidewire PolicyCenter skills 1.0.0](../skills/guidewire-policycenter-1.0.0.zip)
 - [Windows networking helper with source](../downloads/autobro-helper-windows-amd64.zip)
 - SHA-256: `E403CFE59EBCB65603FEEA69946C5BC6410B3C8BA8D6F20D811871C403D3DEB7`

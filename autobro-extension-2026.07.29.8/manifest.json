@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AutoBro Web Bridge",
-  "version": "2026.7.29.7",
-  "version_name": "2026.07.29.7",
+  "version": "2026.7.29.8",
+  "version_name": "2026.07.29.8",
   "description": "Browser-native automation bridge with optional no-admin local VM networking.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA92r2KbqNo31z/gXPplUYhGc1nwB1MBUwCNPd9aIGznub/lSSQwqo+xgxcwsq0rK14jz4X6wiXJEmTF77Rb5VwpG9/e4rmvg63zrlJ6xtiv0g4C2wWJN9nJSSQrQKyQNUYFyYJZMmGU+UzgRZFylerkRfh37hK7DRLOz2B0AlcmrwUkvQFs4zT9jkKc2qtbTp9IwCl4IBKlHyxblnwV1X9RbN9oczBgJFpVLATCGg8zHRzpuCXjIoxk04Inj6eW3ZLAC0SMirvTB1lfGM2dmLhZAxUswNOZ3hiixPj/7nO1tfNxVV2AcG4fD59I1KcUj3+N0yqOavlEHE0akQ4DXtoQIDAQAB",
   "permissions": ["activeTab", "alarms", "debugger", "nativeMessaging", "notifications", "scripting", "storage", "tabs", "sidePanel"],

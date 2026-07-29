@@ -81,6 +81,10 @@
   .provider-actions { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .provider-actions label { flex: 1 1 180px; margin: 0; }
   .provider-actions button { flex: 0 0 auto; }
+  .autobro-install-help { margin-top: 10px; padding: 10px 12px; color: #c9d1d9; background: #2d1b0e; border: 1px solid #d29922; border-radius: 6px; font-size: 12px; line-height: 1.45; }
+  .autobro-install-help[hidden] { display: none; }
+  .autobro-install-help strong { color: #e3b341; }
+  .autobro-install-help ol { margin: 7px 0 0; padding-left: 20px; }
   #diagnostics-status { min-height: 1.4em; margin: 8px 0 0; color: #8b949e; font-size: 12px; }
   #remote-dialog { width: min(560px, calc(100vw - 32px)); }
   #remote-status { display: flex; align-items: center; gap: 8px; }
@@ -220,11 +224,21 @@
       <h3 id="autobro-settings-title">AutoBro</h3>
       <small id="settings-autobro-status" role="status" aria-live="polite">Connect browser automation or forget the current pairing.</small>
       <div class="provider-actions">
-        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.7.zip" download>Download AutoBro Chrome extension 2026.07.29.7</a>
+        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro Chrome extension 2026.07.29.8</a>
         <a class="tool-link" href="https://fapstaff.com/skills/guidewire-policycenter-1.0.0.zip" download>Download Guidewire PolicyCenter skills 1.0.0</a>
         <a class="tool-link" href="https://fapstaff.com/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
         <button id="configure-autobro-later" type="button">Connect</button>
         <button id="reset-autobro" type="button">Reset</button>
+      </div>
+      <div id="autobro-install-help" class="autobro-install-help" role="alert" hidden>
+        <strong>AutoBro is not installed or enabled.</strong>
+        <ol>
+          <li><a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro 2026.07.29.8</a> and extract the ZIP.</li>
+          <li>Open <code>chrome://extensions</code> in Chrome or Chromium.</li>
+          <li>Enable <strong>Developer mode</strong>, then select <strong>Load unpacked</strong>.</li>
+          <li>Select the extracted folder containing <code>manifest.json</code>.</li>
+          <li>Return here and select <strong>Connect</strong> again.</li>
+        </ol>
       </div>
     </section>
     <section class="provider-section" aria-labelledby="voice-settings-title">
@@ -1038,6 +1052,7 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
     autobroReady = true;
     document.getElementById("settings-autobro-status").textContent = `Connected — bridge v${health.bridgeVersion || "?"}.`;
     document.getElementById("configure-autobro-later").textContent = "Connected";
+    document.getElementById("autobro-install-help").hidden = true;
     await connectAutoBroUserspaceNetwork(client);
     return true;
   } catch (error) {
@@ -1049,9 +1064,20 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
   }
 }
 async function oneClickConnectAutoBro(statusElement = document.getElementById("settings-autobro-status")) {
-  statusElement.textContent = "Waiting for approval — check your browser for a notification…";
+  const installHelp = document.getElementById("autobro-install-help");
   try {
-    const { requestAutoBroPairing } = await import("./network/browser/autobro-client.js");
+    statusElement.textContent = "Checking for the AutoBro extension…";
+    const { probeAutoBro, requestAutoBroPairing } = await import("./network/browser/autobro-client.js");
+    if (!await probeAutoBro(AUTOBRO_EXTENSION_ID)) {
+      installHelp.hidden = false;
+      statusElement.textContent = "AutoBro extension not detected. Download and install it using the steps below.";
+      autobroClient?.disconnect?.();
+      autobroClient = null;
+      autobroReady = false;
+      return false;
+    }
+    installHelp.hidden = true;
+    statusElement.textContent = "Waiting for approval — check the AutoBro extension…";
     const token = await requestAutoBroPairing(AUTOBRO_EXTENSION_ID);
     const connected = await connectAutoBro({ extensionId: AUTOBRO_EXTENSION_ID, token });
     return connected;
@@ -1395,6 +1421,7 @@ document.getElementById("reset-autobro").onclick = () => {
   autobroReady = false;
   localStorage.removeItem("vm.autobroExtensionId");
   localStorage.removeItem("vm.autobroPairingToken");
+  document.getElementById("autobro-install-help").hidden = true;
   document.getElementById("settings-autobro-status").textContent = "AutoBro pairing reset.";
   document.getElementById("configure-autobro-later").textContent = "Connect";
   vmAgentController?.resetHarness();

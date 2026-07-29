@@ -17,8 +17,8 @@ test('provider controls are grouped at the top of Settings', () => {
   assert.match(settings, /id="configure-autobro-later"[^>]*>Connect</);
   assert.match(settings, /id="reset-autobro"[^>]*>Reset</);
   assert.match(settings, /id="settings-autobro-status"[^>]*role="status"/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.7\.zip" download/);
-  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.7<\/a>/);
+  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.8\.zip" download/);
+  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.8<\/a>/);
   assert.match(settings, /href="https:\/\/fapstaff\.com\/skills\/guidewire-policycenter-1\.0\.0\.zip" download/);
   assert.match(settings, />Download Guidewire PolicyCenter skills 1\.0\.0<\/a>/);
   assert.match(settings, /id="load-voice"[^>]*>Load</);
@@ -59,6 +59,22 @@ test('failed AutoBro pairing clears stale connected state', () => {
     html.indexOf('const settingsDialog'),
   );
   assert.match(pairing, /catch \(error\) \{[\s\S]*autobroClient = null;[\s\S]*autobroReady = false;[\s\S]*return false/);
+});
+
+test('missing AutoBro extension shows download and installation steps', () => {
+  const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
+  assert.match(settings, /id="autobro-install-help"[^>]*role="alert" hidden/);
+  assert.match(settings, /Download AutoBro 2026\.07\.29\.8/);
+  for (const instruction of ['chrome://extensions', 'Developer mode', 'Load unpacked', 'manifest.json']) {
+    assert.ok(settings.includes(instruction), `missing installation instruction: ${instruction}`);
+  }
+  const pairing = html.slice(
+    html.indexOf('async function oneClickConnectAutoBro'),
+    html.indexOf('const settingsDialog'),
+  );
+  assert.match(pairing, /probeAutoBro\(AUTOBRO_EXTENSION_ID\)/);
+  assert.match(pairing, /if \(!await probeAutoBro[\s\S]*installHelp\.hidden = false;[\s\S]*AutoBro extension not detected[\s\S]*return false/);
+  assert.match(pairing, /installHelp\.hidden = true;[\s\S]*requestAutoBroPairing/);
 });
 
 test('the cached-model selector uses the real OPFS model list', () => {
