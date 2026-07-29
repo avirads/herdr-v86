@@ -17,8 +17,10 @@ test('provider controls are grouped at the top of Settings', () => {
   assert.match(settings, /id="configure-autobro-later"[^>]*>Connect</);
   assert.match(settings, /id="reset-autobro"[^>]*>Reset</);
   assert.match(settings, /id="settings-autobro-status"[^>]*role="status"/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.4\.zip" download/);
-  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.4<\/a>/);
+  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.5\.zip" download/);
+  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.5<\/a>/);
+  assert.match(settings, /href="https:\/\/fapstaff\.com\/skills\/guidewire-policycenter-1\.0\.0\.zip" download/);
+  assert.match(settings, />Download Guidewire PolicyCenter skills 1\.0\.0<\/a>/);
   assert.match(settings, /id="load-voice"[^>]*>Load</);
   assert.match(settings, /id="reset-voice"[^>]*>Reset</);
 });
@@ -68,10 +70,9 @@ test('Settings offers downloads only for Gemma models missing from the cache', (
   assert.match(html, /downloads\.hidden = missingCount === 0/);
 });
 
-test('Settings Voice links to the versioned Moonshine Tiny model ZIP on fapstaff', () => {
+test('Settings Voice has no manual model download link', () => {
   const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/moonshine-tiny-quantized-0\.1\.29\.zip" download/);
-  assert.match(settings, />Download Moonshine Tiny voice model ZIP<\/a>/);
+  assert.doesNotMatch(settings, /moonshine-tiny-quantized-0\.1\.29\.zip|Download Moonshine Tiny voice model ZIP/);
   assert.doesNotMatch(settings, /id="voice-mode"|Run as command/);
   assert.match(html, /handleTerminalData\(transcript \+ " "\)/);
 });
