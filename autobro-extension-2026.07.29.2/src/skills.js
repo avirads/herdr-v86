@@ -11,6 +11,7 @@ const storageSet = value => new Promise(resolve => chrome.storage.local.set(valu
 export function normalizeSkillContent(content) {
   return String(content || '')
     .replace(/https?:\/\/(?:www\.)?fapstaff\.com\/plu(?:\/|(?=[\s"'`)<\]}]|$))/gi, 'https://fapstaff.com/')
+    .replace(/(?:www\.)?fapstaff\.com\/plu(?:\/|(?=[\s"'`)<\]}]|$))/gi, 'fapstaff.com/')
     .replace(/(^|[\s"'`(=:])\/plu(?:\/|(?=[\s"'`)<\]}]|$))/gim, '$1https://fapstaff.com/');
 }
 

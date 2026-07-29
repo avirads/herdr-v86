@@ -17,8 +17,8 @@ test('provider controls are grouped at the top of Settings', () => {
   assert.match(settings, /id="configure-autobro-later"[^>]*>Connect</);
   assert.match(settings, /id="reset-autobro"[^>]*>Reset</);
   assert.match(settings, /id="settings-autobro-status"[^>]*role="status"/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-0\.4\.0\.zip" download/);
-  assert.match(settings, />Download AutoBro Chrome extension<\/a>/);
+  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.2\.zip" download/);
+  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.2<\/a>/);
   assert.match(settings, /id="load-voice"[^>]*>Load</);
   assert.match(settings, /id="reset-voice"[^>]*>Reset</);
 });
@@ -54,4 +54,13 @@ test('Settings Voice links to the versioned Moonshine Tiny model ZIP on fapstaff
   const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
   assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/moonshine-tiny-quantized-0\.1\.29\.zip" download/);
   assert.match(settings, />Download Moonshine Tiny voice model ZIP<\/a>/);
+  assert.doesNotMatch(settings, /id="voice-mode"|Run as command/);
+  assert.match(html, /handleTerminalData\(transcript \+ " "\)/);
+});
+
+test('Help is the last Settings item before Close', () => {
+  const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
+  assert.ok(settings.lastIndexOf('<strong>Help</strong>') > settings.lastIndexOf('id="diagnostics-settings-title"'));
+  assert.ok(settings.lastIndexOf('<strong>Help</strong>') > settings.lastIndexOf('<strong>Remote agent</strong>'));
+  assert.ok(settings.lastIndexOf('<strong>Help</strong>') < settings.lastIndexOf('id="close-settings"'));
 });

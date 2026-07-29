@@ -200,15 +200,15 @@ $('refreshSkills').addEventListener('click', () => {
 async function showSelectedSkill() {
   const path = $('skillList').value;
   if (!path) {
-    $('skillContent').value = '';
+    $('automationPrompt').value = '';
     return;
   }
   try {
     const skill = await send({ command: 'skillsGet', path });
-    $('skillContent').value = skill.content;
+    $('automationPrompt').value = skill.content;
     setSkillStatus(`${skill.loaded ? 'Loaded' : 'Unloaded'} — viewing ${skillDisplayPath(skill.path)}`);
   } catch (error) {
-    $('skillContent').value = '';
+    $('automationPrompt').value = '';
     setSkillStatus(`Could not view skill: ${error.message}`);
   }
 }
@@ -418,11 +418,19 @@ function normalizeAutomation(value, page = null, options = {}) {
   const steps = rawSteps.map(step => {
     if (!step || typeof step !== 'object') throw new Error('Automation step must be an object');
     if (!allowedCommands.has(step.command)) throw new Error(`Command not allowed: ${step.command}`);
-    const args = step.args === undefined ? [] : step.args;
-    if (!Array.isArray(args)) throw new Error(`args must be an array for ${step.command}`);
+    const rawArgs = step.args === undefined ? [] : step.args;
+    if (!Array.isArray(rawArgs)) throw new Error(`args must be an array for ${step.command}`);
+    const args = rawArgs.map(arg =>
+      typeof arg === 'string'
+        ? arg.replace(/<timestamp suffix>/gi, String(Date.now()).slice(-8))
+        : arg
+    );
     for (const arg of args) {
       if (!['string', 'number', 'boolean'].includes(typeof arg) && arg !== null) {
         throw new Error(`Unsupported argument type for ${step.command}`);
+      }
+      if (typeof arg === 'string' && /<[^>]+>/.test(arg)) {
+        throw new Error(`Unresolved placeholder in ${step.command}: ${JSON.stringify(arg)}`);
       }
     }
     if (step.command === 'gwClick' || step.command === 'gwOpenMenu') {
@@ -458,10 +466,20 @@ function planHasRiskyAction(plan) {
 
 async function refreshTargetTab() {
   const tabs = await send({ command: 'listTabs', args: [false] });
-  const tab = (tabs || [])[0];
+  const candidates = tabs || [];
+  const tab = candidates.find(candidate => {
+    try {
+      return new URL(candidate.url).hostname.replace(/^www\./, '') !== 'fapstaff.com';
+    } catch {
+      return true;
+    }
+  }) || candidates[0];
   if (!tab?.tabId) throw new Error('No normal HTTP/HTTPS target tab found');
   targetTab = tab;
-  setAutomationStatus(`Target: ${tab.title || tab.url} (${tab.tabId})`);
+  const targetLabel = String(tab.title || tab.url || '')
+    .replace(/https?:\/\/(?:www\.)?fapstaff\.com\/plu\/?/gi, 'https://fapstaff.com/')
+    .replace(/(?:www\.)?fapstaff\.com\/plu\/?/gi, 'fapstaff.com/');
+  setAutomationStatus(`Target: ${targetLabel} (${tab.tabId})`);
   return tab;
 }
 
@@ -495,7 +513,7 @@ async function askLlmForAutomation(userPrompt, selectedSkills = []) {
       max_tokens: 1200,
       chat_template_kwargs: { enable_thinking: false },
       messages: [
-        { role: 'system', content: 'You produce browser automation JSON. Output only the final JSON object.' },
+        { role: 'system', content: 'You produce compact browser automation JSON. Output only one strict JSON object. Never output placeholders in angle brackets.' },
         { role: 'user', content: buildAutomationPrompt(userPrompt, pageContext, skills, automationOptions) }
       ]
     },
@@ -512,10 +530,10 @@ async function askLlmForAutomation(userPrompt, selectedSkills = []) {
       ...request,
       body: {
         temperature: 0,
-        max_tokens: 800,
+        max_tokens: 1600,
         chat_template_kwargs: { enable_thinking: false },
         messages: [
-          { role: 'system', content: 'Repair malformed automation output. Return only strict valid JSON matching {"steps":[{"command":"...","args":[]}]} with no markdown or prose.' },
+          { role: 'system', content: 'Repair malformed automation output. Return one complete, compact, strict JSON object matching {"steps":[{"command":"...","args":[]}]} with no markdown, prose, comments, trailing commas, or angle-bracket placeholders.' },
           {
             role: 'user',
             content: JSON.stringify({
@@ -534,7 +552,24 @@ async function askLlmForAutomation(userPrompt, selectedSkills = []) {
     try {
       return normalizeAutomation(parseJsonObject(repaired), pageContext, automationOptions);
     } catch (repairError) {
-      throw new Error(`LLM returned invalid JSON after repair: ${repairError.message}. Raw: ${repaired.slice(0, 300)}`);
+      const retryPayload = await send({
+        ...request,
+        body: {
+          ...request.body,
+          max_tokens: 1800,
+          messages: [
+            { role: 'system', content: 'Return one complete compact strict JSON automation object only. No markdown, prose, comments, trailing commas, or placeholders.' },
+            { role: 'user', content: buildAutomationPrompt(userPrompt, pageContext, skills, automationOptions) }
+          ]
+        }
+      });
+      const retry = llmContent(retryPayload);
+      if (retry) {
+        try {
+          return normalizeAutomation(parseJsonObject(retry), pageContext, automationOptions);
+        } catch { /* report the repair failure below */ }
+      }
+      throw new Error(`LLM returned invalid JSON after repair and retry: ${repairError.message}. Raw: ${repaired.slice(0, 300)}`);
     }
   }
 }
@@ -609,15 +644,12 @@ $('runSkill').addEventListener('click', async () => {
       setSkillStatus(`Load ${skillDisplayPath(path)} before running it`);
       return;
     }
-    $('skillContent').value = skill.content;
     const request = `Run the workflow defined by the selected installed skill ${JSON.stringify(skillDisplayPath(path))}.
 Follow its safety rules and use the live page state. Do not invent missing business values.
-
-Selected skill:
-${String(skill.content || '').slice(0, 12000)}`;
+The selected skill text is already supplied as skill context.`;
     const plan = await askLlmForAutomation(request, [{
       path: skill.path,
-      content: String(skill.content || '').slice(0, 12000)
+      content: String(skill.content || '').slice(0, 6000)
     }]);
     plannedAutomation = plan;
     plannedSkillPath = path;

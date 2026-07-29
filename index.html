@@ -220,7 +220,7 @@
       <h3 id="autobro-settings-title">AutoBro</h3>
       <small id="settings-autobro-status" role="status" aria-live="polite">Connect browser automation or forget the current pairing.</small>
       <div class="provider-actions">
-        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.1.zip" download>Download AutoBro Chrome extension 2026.07.29.1</a>
+        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.2.zip" download>Download AutoBro Chrome extension 2026.07.29.2</a>
         <a class="tool-link" href="https://fapstaff.com/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
         <button id="configure-autobro-later" type="button">Connect</button>
         <button id="reset-autobro" type="button">Reset</button>
@@ -228,14 +228,8 @@
     </section>
     <section class="provider-section" aria-labelledby="voice-settings-title">
       <h3 id="voice-settings-title">Voice</h3>
-      <small>Load Moonshine Tiny locally for microphone transcription.</small>
+      <small>Load Moonshine Tiny locally and insert transcription at the current prompt.</small>
       <div class="provider-actions">
-        <label>After transcription
-          <select id="voice-mode">
-            <option value="dictate">Insert at prompt</option>
-            <option value="execute">Run as command</option>
-          </select>
-        </label>
         <button id="load-voice" type="button">Load</button>
         <button id="reset-voice" type="button">Reset</button>
       </div>
@@ -259,10 +253,6 @@
     </div>
   </section>
   <div class="settings-action">
-    <div><strong>Help</strong><br><small>Open the VM command reference.</small></div>
-    <button id="open-help" type="button">Open help</button>
-  </div>
-  <div class="settings-action">
     <div><strong>Remote agent</strong><br><small>Run this model as an agent or chat with a paired agent over WebRTC.</small></div>
     <button id="open-remote" type="button">Remote access</button>
   </div>
@@ -274,6 +264,10 @@
       <button id="copy-diagnostics" type="button">Copy diagnostics</button>
     </div>
   </section>
+  <div class="settings-action">
+    <div><strong>Help</strong><br><small>Open the VM command reference.</small></div>
+    <button id="open-help" type="button">Open help</button>
+  </div>
   <div class="dialog-actions"><button id="close-settings" type="button">Close</button></div>
 </dialog>
 <dialog id="remote-dialog">
@@ -887,9 +881,6 @@ const voiceButton = document.getElementById("voice-button");
 const voiceProgress = document.getElementById("voice-progress");
 const voiceProgressTitle = document.getElementById("voice-progress-title");
 const voiceProgressMessage = document.getElementById("voice-progress-message");
-const voiceMode = document.getElementById("voice-mode");
-voiceMode.value = localStorage.getItem("vm.voiceMode") === "execute" ? "execute" : "dictate";
-voiceMode.onchange = () => localStorage.setItem("vm.voiceMode", voiceMode.value);
 function setVoiceListening(listening) {
   voiceListening = listening;
   voiceButton.classList.toggle("listening", listening);
@@ -941,8 +932,7 @@ async function createVoiceTranscriber() {
       const transcript = String(text || "").trim();
       if (!transcript) return;
       voiceStatus(transcript);
-      handleTerminalData(transcript + (voiceMode.value === "execute" ? "\r" : " "));
-      if (voiceMode.value === "execute") stopVoiceInput();
+      handleTerminalData(transcript + " ");
     },
     onError(error) {
       setVoiceListening(false);
@@ -1418,7 +1408,6 @@ document.getElementById("reset-voice").onclick = async () => {
     const keys = await caches.keys();
     await Promise.all(keys.filter(key => /moonshine|transformers|onnx/i.test(key)).map(key => caches.delete(key)));
   }
-  localStorage.removeItem("vm.voiceMode");
   location.reload();
 };
 if (localStorage.getItem("vm.autobroExtensionId") && localStorage.getItem("vm.autobroPairingToken")) connectAutoBro();
