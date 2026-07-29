@@ -68,7 +68,8 @@
   dialog { color: #c9d1d9; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 18px; width: min(420px, calc(100vw - 48px)); }
   dialog::backdrop { background: rgb(0 0 0 / .65); }
   dialog h2 { margin: 0 0 14px; font-size: 17px; }
-  #settings-dialog > .settings-close { position: sticky; z-index: 2; top: 0; float: right; min-width: 52px; min-height: 44px; margin: -6px -6px 8px 12px; }
+  #settings-dialog > .settings-close { position: sticky; z-index: 2; top: 0; display: block; min-width: 52px; min-height: 44px; margin: -6px -6px -38px auto; }
+  #settings-dialog > h2 { padding-right: 64px; }
   dialog label { display: grid; gap: 5px; margin: 12px 0; font-size: 12px; color: #8b949e; }
   dialog input, dialog select, dialog textarea { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 8px; }
   dialog textarea { min-height: 130px; resize: vertical; font: 13px/1.4 monospace; }

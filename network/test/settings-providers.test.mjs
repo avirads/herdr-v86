@@ -107,5 +107,7 @@ test('Settings Close is at the top-right and Help remains the last content item'
   assert.ok(settings.lastIndexOf('<strong>Help</strong>') > settings.lastIndexOf('id="diagnostics-settings-title"'));
   assert.ok(settings.lastIndexOf('<strong>Help</strong>') > settings.lastIndexOf('<strong>Remote agent</strong>'));
   assert.ok(settings.indexOf('id="close-settings"') < settings.indexOf('<h2>Settings</h2>'));
-  assert.match(html, /#settings-dialog > \.settings-close \{[^}]*position: sticky;[^}]*top: 0;[^}]*float: right;/);
+  assert.match(html, /#settings-dialog > \.settings-close \{[^}]*position: sticky;[^}]*top: 0;[^}]*display: block;[^}]*margin: -6px -6px -38px auto;/);
+  assert.doesNotMatch(html, /#settings-dialog > \.settings-close \{[^}]*float:/);
+  assert.match(html, /#settings-dialog > h2 \{ padding-right: 64px; \}/);
 });
