@@ -243,6 +243,79 @@ unset OPENAI_API_KEY
 origin via CORS. The command returns raw JSON. Credentials cross the trusted
 hosting page; use short-lived, narrow-scope keys. Never save a VM snapshot while
 a key remains in the environment or shell history.</p>
+<h2 id="cloud-llms-openai-claude-gemini-and-gateways">Cloud LLMs: OpenAI, Claude, Gemini, and gateways</h2>
+<p>Rig, Zerostack, vmlang, and vmmastra use the model loaded under
+<strong>Settings → AI Model</strong> by default. This Local WebGPU path remains direct
+and does not pass through the cloud router. Add OpenAI, Anthropic, Gemini, or an
+OpenAI-compatible endpoint under <strong>Settings → Cloud AI providers</strong>, then either
+choose a per-agent default there or override one invocation:</p>
+<pre><code class="language-sh">rig --provider work-openai --model gpt-4.1-mini 'Review this project'
+vmlang --provider claude --session review-a run 'Review this project'
+vmmastra --provider gemini --session build-a 'Implement and test the change'
+zerostack --provider local-gateway --model provider/model-id
+</code></pre>
+<p><code>--provider</code>, <code>--model</code>, and <code>--session</code> must precede the task or
+subcommand. A named session is pinned to its first provider/model selection.
+Different terminal instances can use different session names and providers.
+Omit all three flags to use that agent's Settings default; every initial default
+is <code>local</code>.</p>
+<p>API keys remain in the current browser tab by default. <strong>Retain key in this
+browser</strong> uses browser storage, not a hardware-backed secret vault. Cloud
+errors are reported and never trigger fallback to another model. The provider
+receives prompts and content placed in model context.</p>
+<h3 id="openai-responses-api">OpenAI Responses API</h3>
+<p><code>vmai</code> is the shortest path when the provider implements the OpenAI Responses
+API and permits browser-origin requests:</p>
+<pre><code class="language-sh">export OPENAI_API_KEY='your-short-lived-key'
+export OPENAI_MODEL='model-id-from-your-account'
+vmai 'Explain the current project structure'
+unset OPENAI_API_KEY OPENAI_MODEL
+</code></pre>
+<p>See the <a href="https://platform.openai.com/docs/api-reference/responses">OpenAI Responses API documentation</a>.</p>
+<h3 id="openai-compatible-cloud-gateway">OpenAI-compatible cloud gateway</h3>
+<p>A gateway can expose OpenAI, Claude, Gemini, or another hosted model through a
+common interface. The endpoint used with <code>vmai</code> must implement
+<code>POST /responses</code>, not only <code>/chat/completions</code>, and must allow the
+<code>https://fapstaff.com</code> browser origin:</p>
+<pre><code class="language-sh">export OPENAI_BASE_URL='https://your-gateway.example/v1'
+export OPENAI_API_KEY='your-short-lived-key'
+export OPENAI_MODEL='provider/model-id'
+vmai 'Review main.js for correctness'
+unset OPENAI_BASE_URL OPENAI_API_KEY OPENAI_MODEL
+</code></pre>
+<p>Model identifiers and authentication rules are gateway-specific. Do not assume
+that a provider's “OpenAI-compatible” label includes the Responses API.</p>
+<h3 id="anthropic-claude-native-api">Anthropic Claude native API</h3>
+<p>The native Claude API is not compatible with <code>vmai</code>. With full guest networking
+connected, call its Messages API using <code>curl</code>:</p>
+<pre><code class="language-sh">export ANTHROPIC_API_KEY='your-short-lived-key'
+export ANTHROPIC_MODEL='model-id-from-your-account'
+curl -fsS https://api.anthropic.com/v1/messages \
+  -H &quot;x-api-key: $ANTHROPIC_API_KEY&quot; \
+  -H 'anthropic-version: 2023-06-01' \
+  -H 'content-type: application/json' \
+  -d &quot;{\&quot;model\&quot;:\&quot;$ANTHROPIC_MODEL\&quot;,\&quot;max_tokens\&quot;:1024,\&quot;messages\&quot;:[{\&quot;role\&quot;:\&quot;user\&quot;,\&quot;content\&quot;:\&quot;Explain this project\&quot;}]}&quot;
+unset ANTHROPIC_API_KEY ANTHROPIC_MODEL
+</code></pre>
+<p>See the <a href="https://docs.anthropic.com/en/api/messages">Anthropic Messages API documentation</a>.</p>
+<h3 id="google-gemini-native-api">Google Gemini native API</h3>
+<p>With full guest networking connected, call Gemini using its native API:</p>
+<pre><code class="language-sh">export GEMINI_API_KEY='your-short-lived-key'
+export GEMINI_MODEL='model-id-from-your-account'
+curl -fsS &quot;https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent&quot; \
+  -H &quot;x-goog-api-key: $GEMINI_API_KEY&quot; \
+  -H 'content-type: application/json' \
+  -d '{&quot;contents&quot;:[{&quot;parts&quot;:[{&quot;text&quot;:&quot;Explain this project&quot;}]}]}'
+unset GEMINI_API_KEY GEMINI_MODEL
+</code></pre>
+<p>See the <a href="https://ai.google.dev/api">Gemini API documentation</a>.</p>
+<p>Native Claude and Gemini requests use ordinary guest networking. If <code>ip route</code>
+has no default route, connect the AutoBro userspace helper or remote gateway
+first. <code>vmfetch</code> is generally unsuitable for native provider APIs unless the
+provider explicitly allows the portal origin through CORS.</p>
+<p>Never paste a long-lived key directly into a command that will be retained in
+shell history. Prefer restricted, short-lived credentials, clear relevant
+history afterward, and unset every credential variable when finished.</p>
 <h2 id="vmllm-local-webgpu-model-through-autobro-web-bridge"><code>vmllm</code> — local WebGPU model through AutoBro Web Bridge</h2>
 <pre><code class="language-text">vmllm PROMPT...
 vmllm chat PROMPT...

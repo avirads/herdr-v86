@@ -13,12 +13,27 @@ export class VmAgentController {
     this.completedRuns = new Map();
   }
 
+  route(value) {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try { return JSON.parse(value); } catch { return {}; }
+  }
+
+  llm(agent, route) {
+    return this.getLlmClient(agent, this.route(route));
+  }
+
+  routeKey(agent, route) {
+    const value = this.route(route);
+    return `${agent}:${value.sessionId || value.session || ''}:${value.provider || ''}:${value.model || ''}`;
+  }
+
   resetHarness() { this.harness = null; this.mastraHarness = null; this.codeHarness = null; this.completedRuns.clear(); }
 
   // Everything the Mastra harness can do, reachable from `vmmastra` in the guest
   // shell. Subcommands arrive as separate AGENT_MASTRA_* operations, matching
   // how vmlang's status/stop/reset/yolo are routed.
-  async handleMastra(command, value) {
+  async handleMastra(command, value, route = '') {
     // Cheap, harness-free commands first — these must work before any agent is
     // loaded, otherwise `vmmastra status` cannot tell you why it is not ready.
     if (command === 'mastra_stop') {
@@ -47,7 +62,7 @@ export class VmAgentController {
       this.mastraHarness?.setYolo?.(this.yolo);
       return await this.onOutput(`[vmmastra] YOLO ${this.yolo ? 'on' : 'off'} (shared with vmlang).`);
     }
-    if (command === 'mastra_code') return await this.handleMastraCode(value);
+    if (command === 'mastra_code') return await this.handleMastraCode(value, '', route);
     if (command === 'mastra_tools' && (value === 'lean' || value === 'full')) {
       const wanted = value === 'full';
       if (wanted !== this.mastraFullTools) {
@@ -61,7 +76,10 @@ export class VmAgentController {
 
     const guest = this.getGuest();
     if (!guest) return await this.onOutput('[vmmastra] guest bridge is still initializing.');
-    const llmClient = this.getLlmClient();
+    const llmClient = this.llm('vmmastra', route);
+    const mastraRouteKey = this.routeKey('vmmastra', route);
+    if (this.mastraRouteKey && this.mastraRouteKey !== mastraRouteKey) this.mastraHarness = null;
+    this.mastraRouteKey = mastraRouteKey;
     const model = llmClient && typeof llmClient.status === 'function'
       ? await llmClient.status().catch(() => null)
       : null;
@@ -139,7 +157,7 @@ export class VmAgentController {
     }
   }
 
-  async handleMastraCode(value, cwd = '') {
+  async handleMastraCode(value, cwd = '', route = '') {
     if (!this.createCodeAgent) return await this.onOutput('[vmmastra] code tier is not available in this build.');
 
     const guest = this.getGuest();
@@ -151,7 +169,13 @@ export class VmAgentController {
       this.codeWorkspace = workspace;
     }
     guest.setWorkspace?.(workspace);
-    const llmClient = this.getLlmClient();
+    const llmClient = this.llm('vmmastra', route);
+    const codeRouteKey = this.routeKey('vmmastra-code', route);
+    if (this.codeRouteKey && this.codeRouteKey !== codeRouteKey) {
+      await this.codeHarness?.reset();
+      this.codeHarness = null;
+    }
+    this.codeRouteKey = codeRouteKey;
     if (!llmClient) return await this.onOutput('[vmmastra] WebGPU LLM is not ready; use Configure LLM in the browser header.');
 
     const subcmd = String(value ?? '');
@@ -215,8 +239,8 @@ export class VmAgentController {
   }
   closeConversation() { this.conversationActive = false; }
 
-  async runRig(prompt) {
-    const llm = this.getLlmClient();
+  async runRig(prompt, route = '') {
+    const llm = this.llm('rig', route);
     const guest = this.getGuest();
     if (!llm || !guest) throw new Error('model or VM bridge is not ready');
     const tools = [
@@ -255,8 +279,8 @@ export class VmAgentController {
   // is a slow guest RPC), the model writes ONE shell script that performs the
   // whole task locally in the VM, run in a single guest.execute. Collapses N
   // model calls + N RPC round-trips into ~1 + 1.
-  async runRigCodeAct(prompt) {
-    const llm = this.getLlmClient();
+  async runRigCodeAct(prompt, route = '') {
+    const llm = this.llm('rig', route);
     const guest = this.getGuest();
     if (!llm || !guest) throw new Error('model or VM bridge is not ready');
     const messages = [
@@ -273,9 +297,9 @@ export class VmAgentController {
     return String(output);
   }
 
-  async handle(command, value = '', cwd = '') {
+  async handle(command, value = '', cwd = '', route = '') {
     if (command === 'status') {
-      const llm = this.getLlmClient();
+      const llm = this.llm('vmlang', route);
       const model = llm ? await llm.status().catch(() => null) : null;
       return await this.onOutput(`[vmlang] ${this.abortController ? 'running' : 'idle'}; model: ${model?.modelName || 'not configured'}; YOLO: ${this.yolo ? 'on' : 'off'}`);
     }
@@ -310,15 +334,15 @@ export class VmAgentController {
     // invocation, no persistent conversation. The harness is built lazily and
     // reused so the 9.5 MB bundle is only imported if someone actually runs it.
     if (command.startsWith('mastra')) {
-      if (command === 'mastra_code') return await this.handleMastraCode(value, cwd);
-      return await this.handleMastra(command, value);
+      if (command === 'mastra_code') return await this.handleMastraCode(value, cwd, route);
+      return await this.handleMastra(command, value, route);
     }
     if (command === 'rig' || command === 'codeact') {
       if (this.abortController) return await this.onOutput('[rig] another agent task is running.');
       this.abortController = new AbortController();
       await this.onBusy(true);
       try {
-        const output = command === 'codeact' ? await this.runRigCodeAct(value) : await this.runRig(value);
+        const output = command === 'codeact' ? await this.runRigCodeAct(value, route) : await this.runRig(value, route);
         await this.onOutput(output);
       }
       catch (error) { await this.onOutput(`Rig error: ${error.message}`); }
@@ -333,7 +357,10 @@ export class VmAgentController {
       return;
     }
     if (this.abortController) return await this.onOutput('[vmlang] another task is already running; use vmlang stop first.');
-    const llmClient = this.getLlmClient();
+    const llmClient = this.llm('vmlang', route);
+    const harnessRouteKey = this.routeKey('vmlang', route);
+    if (this.harnessRouteKey && this.harnessRouteKey !== harnessRouteKey) this.harness = null;
+    this.harnessRouteKey = harnessRouteKey;
     const guest = this.getGuest();
     if (!llmClient) return await this.onOutput('[vmlang] WebGPU LLM is not ready; use Configure LLM in the browser header.');
     if (!guest) return await this.onOutput('[vmlang] guest bridge is still initializing.');

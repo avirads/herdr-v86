@@ -4,7 +4,7 @@ set -eu
 usage() {
   cat >&2 <<'EOF'
 usage: vmlang PROMPT...
-       vmlang run PROMPT...
+       vmlang [--provider NAME] [--model MODEL] [--session ID] run PROMPT...
        vmlang status
        vmlang stop
        vmlang reset
@@ -21,6 +21,19 @@ EOF
 
 b64() { printf %s "$1" | base64 | tr -d '\n'; }
 case "${1:-}" in -h|--help|help) usage 0;; esac
+
+provider=''
+model=''
+session=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --provider) [ "$#" -ge 2 ] || usage 2; provider=$2; shift 2 ;;
+    --model) [ "$#" -ge 2 ] || usage 2; model=$2; shift 2 ;;
+    --session) [ "$#" -ge 2 ] || usage 2; session=$2; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
 
 operation=RUN
 payload=''
@@ -50,7 +63,9 @@ fi
 [ "$#" -eq 0 ] || usage 2
 
 request_tmp="/run/vmagent-request.$$"
-printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" > "$request_tmp"
+route=$(jq -cn --arg provider "$provider" --arg model "$model" --arg sessionId "$session" \
+  '{provider:$provider,model:$model,sessionId:$sessionId}')
+printf '__V86RPC__\tAGENT_%s\t%s\t%s\t%s\t%s\n' "$operation" "$$-$(date +%s)" "$(b64 "$payload")" "" "$(b64 "$route")" > "$request_tmp"
 mv "$request_tmp" /run/vmagent-request
 case "$operation" in
   RUN) echo '[vmlang] conversation started; Ctrl-C stops the current response.' ;;

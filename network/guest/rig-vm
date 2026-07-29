@@ -1,8 +1,22 @@
 #!/bin/sh
 set -eu
 op=RIG
-if [ "${1:-}" = "--codeact" ]; then op=CODEACT; shift; fi
-[ "$#" -gt 0 ] || { echo 'usage: rig [--codeact] TASK...' >&2; exit 2; }
+provider=''
+model=''
+session=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --codeact) op=CODEACT; shift ;;
+    --provider) [ "$#" -ge 2 ] || exit 2; provider=$2; shift 2 ;;
+    --model) [ "$#" -ge 2 ] || exit 2; model=$2; shift 2 ;;
+    --session) [ "$#" -ge 2 ] || exit 2; session=$2; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+[ "$#" -gt 0 ] || { echo 'usage: rig [--codeact] [--provider NAME] [--model MODEL] [--session ID] TASK...' >&2; exit 2; }
 b64() { printf %s "$1" | base64 | tr -d '\n'; }
-printf '__V86RPC__\tAGENT_%s\t%s\t%s\n' "$op" "$$-$(date +%s)" "$(b64 "$*")" > /dev/ttyS0
+route=$(jq -cn --arg provider "$provider" --arg model "$model" --arg sessionId "$session" \
+  '{provider:$provider,model:$model,sessionId:$sessionId}')
+printf '__V86RPC__\tAGENT_%s\t%s\t%s\t%s\t%s\n' "$op" "$$-$(date +%s)" "$(b64 "$*")" "" "$(b64 "$route")" > /dev/ttyS0
 echo '[rig] submitted to the ready browser agent.'

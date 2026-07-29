@@ -26,3 +26,24 @@ startup and again before choosing tools for a task.
   the project through the browser.
 - AutoBro browser tools are exposed only when they appear in the active agent's
   tool list. Do not claim AutoBro access when those tools are absent.
+- Local WebGPU is the direct default LLM for `rig`, `zerostack`, `vmlang`, and
+  `vmmastra`; it does not pass through the cloud router. The browser's
+  **Settings → Cloud AI providers** section can configure OpenAI, Anthropic,
+  Gemini, and OpenAI-compatible endpoints and a separate default for each
+  agent.
+- A user can override an agent invocation with `--provider NAME`, `--model
+  MODEL`, and `--session ID`. These options must appear before the task or
+  subcommand, for example:
+
+  ```sh
+  rig --provider work-openai --model gpt-4.1-mini 'Review this project'
+  vmlang --provider claude --session review-a run 'Review this project'
+  vmmastra --provider gemini --session build-a 'Implement and test the change'
+  zerostack --provider local-gateway --model provider/model-id
+  ```
+
+  Omit the options to use the selected agent's browser setting. A named session
+  remains pinned to its initial provider and model. Provider, authentication,
+  network, and CORS failures are reported and never silently fall back to a
+  different model. Do not ask for, print, read, or persist provider API keys;
+  credentials are owned by the browser Settings layer.

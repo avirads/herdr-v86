@@ -22,12 +22,13 @@ function encodeBytes(bytes) {
 }
 
 export class V86HostBridge extends EventTarget {
-  constructor(emulator, { maxFetchBytes = 16 << 20, chunkBytes = 12 << 10, llmClient = null, agentHandler = null, rpcSerial = 1 } = {}) {
+  constructor(emulator, { maxFetchBytes = 16 << 20, chunkBytes = 12 << 10, llmClient = null, llmResolver = null, agentHandler = null, rpcSerial = 1 } = {}) {
     super();
     this.emulator = emulator;
     this.maxFetchBytes = maxFetchBytes;
     this.chunkBytes = chunkBytes;
     this.llmClient = llmClient;
+    this.llmResolver = llmResolver;
     this.agentHandler = agentHandler;
     this.rpcSerial = rpcSerial;
     this.lines = ["", ""];
@@ -104,9 +105,9 @@ export class V86HostBridge extends EventTarget {
     if (operation === "EXPORT9P") return this.exportSharedFile(id, fields);
     if (operation === "LLM_STATUS") return this.llm(id, "status");
     if (operation === "LLM_MODELS") return this.llm(id, "models");
-    if (operation === "LLM_CHAT") return this.llm(id, "chat", fields[0]);
-    if (operation === "LLM_COMPLETION") return this.llm(id, "completion", fields[0]);
-    if (operation === "LLM_OPENAI") return this.llm(id, "openai", fields[0]);
+    if (operation === "LLM_CHAT") return this.llm(id, "chat", fields[0], fields[1]);
+    if (operation === "LLM_COMPLETION") return this.llm(id, "completion", fields[0], fields[1]);
+    if (operation === "LLM_OPENAI") return this.llm(id, "openai", fields[0], fields[1]);
     if (operation === "EVAL") return this.eval(id, fields[0]);
     if (operation.startsWith("AGENT_")) {
       const command = operation.slice("AGENT_".length).toLowerCase();
@@ -144,18 +145,20 @@ export class V86HostBridge extends EventTarget {
     }
   }
 
-  async llm(id, operation, body64) {
-    if (!this.llmClient) throw new Error("WebGPU LLM is not paired; use the browser's Configure LLM button");
+  async llm(id, operation, body64, route64 = "") {
+    const route = route64 ? JSON.parse(decodeText(route64)) : {};
+    const client = this.llmResolver ? this.llmResolver("zerostack", route) : this.llmClient;
+    if (!client) throw new Error("No LLM is configured; open Settings > AI providers");
     let result;
-    if (operation === "status") result = await this.llmClient.status();
-    else if (operation === "models") result = await this.llmClient.models();
+    if (operation === "status") result = await client.status();
+    else if (operation === "models") result = await client.models();
     else if (operation === "chat") {
-      const completion = await this.llmClient.chat(JSON.parse(decodeText(body64)));
+      const completion = await client.chat(JSON.parse(decodeText(body64)));
       result = completion?.choices?.[0]?.message?.content ?? completion;
     } else if (operation === "completion") {
-      result = await this.llmClient.chat(JSON.parse(decodeText(body64)));
+      result = await client.chat(JSON.parse(decodeText(body64)));
     } else {
-      const completion = await this.llmClient.chat(JSON.parse(decodeText(body64)));
+      const completion = await client.chat(JSON.parse(decodeText(body64)));
       result = this.openAiSse(completion);
     }
     const output = typeof result === "string" ? result : JSON.stringify(result);

@@ -4,6 +4,8 @@ Operating manual for an agent using the `vmmastra` command in this guest without
 a human in the loop. Installed at `/usr/local/share/mastra/SKILL.md`.
 
 Before choosing shell tools, read `/usr/local/share/vm-agent-capabilities.md`.
+That reference also documents Local WebGPU and optional cloud-provider routing;
+provider credentials remain browser-owned and must not be requested or exposed.
 It includes the installed Grafana `k6` command for JavaScript HTTP/API
 performance and load testing.
 

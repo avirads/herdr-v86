@@ -23,16 +23,16 @@
       "description": "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.",
       "url": "vm-ai-tools-i386-ext4.img",
       "size": 92274688,
-      "version": "2026.07.29.1",
-      "sha256": "f833daa65f45b83c384b4719e64b06d70caec6b51b348e85705d657806f5b92f"
+      "version": "2026.07.29.3",
+      "sha256": "e91d6fc024944a13bbecf703f634b6eb7c71b31f5e18765ab3a9183492646e7d"
     },
     "performance": {
       "name": "Performance testing",
       "description": "AI Tools plus Grafana k6.",
       "url": "vm-performance-i386-ext4.img",
       "size": 96468992,
-      "version": "2026.07.29.1",
-      "sha256": "2046d4193142ceedd050ffbe56bdee21debb42a619dca2a385b97e8bcfd6e528"
+      "version": "2026.07.29.3",
+      "sha256": "11f7ecaa6ab7e363534f5959fe5ad0aeb5b97fb52618f4e136542fd01f51a160"
     }
   }
 }

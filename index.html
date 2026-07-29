@@ -235,6 +235,39 @@
         </p>
       </details>
     </section>
+    <section class="provider-section" aria-labelledby="cloud-model-settings-title">
+      <h3 id="cloud-model-settings-title">Cloud AI providers</h3>
+      <small>Local WebGPU remains the direct default. Add a cloud provider for optional per-agent or command-line selection. Keys stay in this tab unless you explicitly retain them.</small>
+      <div class="provider-actions">
+        <label>Saved provider
+          <select id="cloud-provider-select" aria-label="Saved cloud provider"></select>
+        </label>
+        <button id="delete-cloud-provider" type="button">Delete</button>
+      </div>
+      <div class="provider-actions">
+        <label>Name <input id="cloud-provider-id" autocomplete="off" placeholder="work-openai"></label>
+        <label>API type
+          <select id="cloud-provider-type">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="gemini">Gemini</option>
+            <option value="compatible">OpenAI-compatible</option>
+          </select>
+        </label>
+        <label>Model <input id="cloud-provider-model" autocomplete="off" placeholder="model name"></label>
+        <label>Base URL <input id="cloud-provider-url" type="url" autocomplete="off" placeholder="https://api.openai.com/v1"></label>
+        <label>API key <input id="cloud-provider-key" type="password" autocomplete="new-password" placeholder="kept for this tab"></label>
+        <label><input id="persist-cloud-provider-key" type="checkbox"> Retain key in this browser</label>
+        <button id="save-cloud-provider" type="button">Save provider</button>
+      </div>
+      <div class="provider-actions">
+        <label>Rig default <select class="agent-provider-default" data-agent="rig"></select></label>
+        <label>Zerostack default <select class="agent-provider-default" data-agent="zerostack"></select></label>
+        <label>vmlang default <select class="agent-provider-default" data-agent="vmlang"></select></label>
+        <label>vmmastra default <select class="agent-provider-default" data-agent="vmmastra"></select></label>
+      </div>
+      <small id="cloud-provider-status" role="status" aria-live="polite"></small>
+    </section>
     <section class="provider-section" aria-labelledby="autobro-settings-title">
       <h3 id="autobro-settings-title">AutoBro</h3>
       <small id="settings-autobro-status" role="status" aria-live="polite">Connect browser automation or forget the current pairing.</small>
@@ -288,7 +321,7 @@
     </div>
   </section>
   <div class="settings-action">
-    <div><strong>Help</strong><br><small>Open the VM command reference.</small></div>
+    <div><strong>Help</strong><br><small>Open the VM command reference, including local and cloud LLM connections.</small></div>
     <button id="open-help" type="button">Open help</button>
   </div>
 </dialog>
@@ -734,6 +767,7 @@ const emulator = new V86({
 
 let hostBridge;
 let webGpuLlmClient;
+let llmProviderRouter;
 let autobroClient;
 let guestReadonlyClient;
 let vmAgentController;
@@ -800,8 +834,13 @@ function writeSerialByte(byte) {
   }
   queueSerialOutput(byte);
 }
-import("./network/browser/v86-host-bridge.js").then(module => {
-  hostBridge = new module.V86HostBridge(emulator, { llmClient: webGpuLlmClient });
+import("./network/browser/v86-host-bridge.js").then(async module => {
+  const { LlmProviderRouter } = await import("./network/browser/llm-provider-router.js");
+  llmProviderRouter = new LlmProviderRouter({ getLocalClient: () => webGpuLlmClient });
+  hostBridge = new module.V86HostBridge(emulator, {
+    llmClient: webGpuLlmClient,
+    llmResolver: (agent, route) => llmProviderRouter.resolve(agent, route),
+  });
   window.v86HostBridge = hostBridge;
   import("./network/browser/v86-guest-readonly.js").then(({ V86GuestReadonlyClient }) => {
     guestReadonlyClient = new V86GuestReadonlyClient(emulator, hostBridge, { rpcSerial: 1 });
@@ -843,7 +882,7 @@ import("./network/browser/v86-host-bridge.js").then(module => {
             sandboxOptions: { captureStderr: false },
           });
         },
-        getLlmClient: () => webGpuLlmClient,
+        getLlmClient: (agent, route) => llmProviderRouter.resolve(agent, route),
         getGuest: () => guestReadonlyClient,
         getBrowserClient: () => autobroClient,
         approveAction: async (operation, detail) => confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
@@ -1361,8 +1400,84 @@ document.getElementById("copy-diagnostics").onclick = async () => {
     button.disabled = false;
   }
 };
+const cloudProviderSelect = document.getElementById("cloud-provider-select");
+const cloudProviderStatus = document.getElementById("cloud-provider-status");
+const cloudProviderFields = {
+  id: document.getElementById("cloud-provider-id"),
+  type: document.getElementById("cloud-provider-type"),
+  model: document.getElementById("cloud-provider-model"),
+  baseUrl: document.getElementById("cloud-provider-url"),
+  apiKey: document.getElementById("cloud-provider-key"),
+};
+const providerTypeDefaults = {
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com/v1",
+  gemini: "https://generativelanguage.googleapis.com/v1beta",
+  compatible: "http://localhost:11434/v1",
+};
+function refreshCloudProviderSettings(selectedId = "") {
+  if (!llmProviderRouter) return;
+  const providers = llmProviderRouter.providers();
+  const defaults = llmProviderRouter.defaults();
+  const choices = [{ id: "local", label: "Local WebGPU (direct)" }, ...providers];
+  cloudProviderSelect.replaceChildren(new Option("Add a provider…", ""));
+  for (const provider of providers) cloudProviderSelect.add(new Option(provider.label || provider.id, provider.id));
+  cloudProviderSelect.value = selectedId && providers.some(provider => provider.id === selectedId) ? selectedId : "";
+  for (const select of document.querySelectorAll(".agent-provider-default")) {
+    select.replaceChildren(...choices.map(provider => new Option(provider.label || provider.id, provider.id)));
+    select.value = defaults[select.dataset.agent] || "local";
+  }
+}
+cloudProviderSelect.onchange = () => {
+  const provider = llmProviderRouter.providers().find(item => item.id === cloudProviderSelect.value);
+  if (!provider) return;
+  cloudProviderFields.id.value = provider.id;
+  cloudProviderFields.type.value = provider.type;
+  cloudProviderFields.model.value = provider.model;
+  cloudProviderFields.baseUrl.value = provider.baseUrl;
+  cloudProviderFields.apiKey.value = "";
+  cloudProviderStatus.textContent = "Enter a new key only if you want to replace the current key.";
+};
+cloudProviderFields.type.onchange = () => {
+  if (!cloudProviderFields.baseUrl.value || Object.values(providerTypeDefaults).includes(cloudProviderFields.baseUrl.value)) {
+    cloudProviderFields.baseUrl.value = providerTypeDefaults[cloudProviderFields.type.value];
+  }
+};
+document.getElementById("save-cloud-provider").onclick = () => {
+  try {
+    const saved = llmProviderRouter.saveProvider({
+      id: cloudProviderFields.id.value,
+      label: cloudProviderFields.id.value,
+      type: cloudProviderFields.type.value,
+      model: cloudProviderFields.model.value,
+      baseUrl: cloudProviderFields.baseUrl.value || providerTypeDefaults[cloudProviderFields.type.value],
+    }, cloudProviderFields.apiKey.value, {
+      persistSecret: document.getElementById("persist-cloud-provider-key").checked,
+    });
+    cloudProviderFields.apiKey.value = "";
+    refreshCloudProviderSettings(saved.id);
+    cloudProviderStatus.textContent = `Provider ${saved.id} saved.`;
+  } catch (error) {
+    cloudProviderStatus.textContent = "Could not save provider: " + error.message;
+  }
+};
+document.getElementById("delete-cloud-provider").onclick = () => {
+  const id = cloudProviderSelect.value;
+  if (!id || !confirm(`Delete provider "${id}"?`)) return;
+  llmProviderRouter.removeProvider(id);
+  refreshCloudProviderSettings();
+  cloudProviderStatus.textContent = `Provider ${id} deleted.`;
+};
+for (const select of document.querySelectorAll(".agent-provider-default")) {
+  select.onchange = () => {
+    llmProviderRouter.setDefault(select.dataset.agent, select.value);
+    vmAgentController?.resetHarness();
+    cloudProviderStatus.textContent = `${select.dataset.agent} now defaults to ${select.value}.`;
+  };
+}
 document.getElementById("open-settings").onclick = () => {
   settingsDialog.showModal();
+  refreshCloudProviderSettings(cloudProviderSelect.value);
   refreshCachedModelSelect().catch(error => llmStatus("could not list cached models — " + error.message));
 };
 document.getElementById("close-settings").onclick = () => settingsDialog.close();

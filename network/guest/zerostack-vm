@@ -6,6 +6,23 @@ core=/usr/local/libexec/zerostack
 [ -c /dev/ttyS1 ] || { echo 'zerostack: VM RPC serial device is unavailable' >&2; exit 1; }
 ip link set lo up 2>/dev/null || true
 
+provider=''
+model=''
+session=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --provider) [ "$#" -ge 2 ] || { echo 'zerostack: --provider needs a name' >&2; exit 2; }; provider=$2; shift 2 ;;
+    --model) [ "$#" -ge 2 ] || { echo 'zerostack: --model needs a name' >&2; exit 2; }; model=$2; shift 2 ;;
+    --session) [ "$#" -ge 2 ] || { echo 'zerostack: --session needs an id' >&2; exit 2; }; session=$2; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+route=$(jq -cn --arg provider "$provider" --arg model "$model" --arg sessionId "$session" \
+  '{provider:$provider,model:$model,sessionId:$sessionId}')
+export VM_LLM_ROUTE_B64
+VM_LLM_ROUTE_B64=$(printf %s "$route" | base64 | tr -d '\n')
+
 saved=/tmp/zerostack-inittab.$$
 proxy_pid=''
 cp /etc/inittab "$saved"

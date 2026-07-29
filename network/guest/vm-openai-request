@@ -34,7 +34,7 @@ case "$request" in
     rpc=LLM_OPENAI
     case "$request" in 'POST /v1/opendev/'*|'POST /v1/rig/'*) rpc=LLM_COMPLETION;; esac
     exec 3<>"$rpc_tty"
-    printf '__V86RPC__\t%s\t%s\t%s\n' "$rpc" "$id" "$encoded" >&3
+    printf '__V86RPC__\t%s\t%s\t%s\t%s\n' "$rpc" "$id" "$encoded" "${VM_LLM_ROUTE_B64:-}" >&3
     while IFS="$(printf '\t')" read -r prefix response_id kind value; do
       [ "$prefix:$response_id" = "__V86RPC_RESPONSE__:$id" ] || continue
       case "$kind" in
