@@ -2,8 +2,8 @@
 
 Download the packaged Manifest V3 extension:
 
-- [AutoBro Web Bridge 0.5.0](../downloads/autobro-web-bridge-0.5.0.zip)
-- SHA-256: `170D61DF7D19326BA71801E2F177A071CB98D583ABBC187911EDAD6937CE889D`
+- [AutoBro Web Bridge 2026.07.29.1](../downloads/autobro-web-bridge-2026.07.29.1.zip)
+- SHA-256: `296E1E1D87179B692A22E1845728333CB51FE8F02DA46DEEB8D68B111BFB9E4F`
 - [Windows networking helper with source](../downloads/autobro-helper-windows-amd64.zip)
 - SHA-256: `E403CFE59EBCB65603FEEA69946C5BC6410B3C8BA8D6F20D811871C403D3DEB7`
 
@@ -34,10 +34,10 @@ entry (under "Enter extension ID and pairing token manually instead") as a
 fallback if browser notifications are blocked, or for advanced/scripted
 setups.
 
-### Upgrading from 0.3.0
+### Upgrading from older releases
 
 0.3.0 was loaded unpacked without a pinned ID, so its extension ID varies per
-install path. Reload the unpacked extension from the 0.5.0 ZIP (same Load
+install path. Reload the unpacked extension from the current ZIP (same Load
 unpacked steps, pointed at the new directory) to pick up the fixed ID and the
 one-click pairing flow; the page will no longer recognize the old ID.
 

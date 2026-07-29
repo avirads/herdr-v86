@@ -189,6 +189,7 @@ async function refreshSkillList() {
   );
   localStorage.setItem('webBridge.guidewireSkillsLoaded', String(guidewireSkillsLoaded));
   setSkillStatus(`${skills.length} skill${skills.length === 1 ? '' : 's'} installed`);
+  await showSelectedSkill();
   return skills;
 }
 
@@ -196,39 +197,25 @@ $('refreshSkills').addEventListener('click', () => {
   refreshSkillList().catch(error => setSkillStatus(`Could not list skills: ${error.message}`));
 });
 
-$('viewSkill').addEventListener('click', async () => {
+async function showSelectedSkill() {
   const path = $('skillList').value;
-  if (!path) return setSkillStatus('Select a skill to view');
+  if (!path) {
+    $('skillContent').value = '';
+    return;
+  }
   try {
     const skill = await send({ command: 'skillsGet', path });
     $('skillContent').value = skill.content;
     setSkillStatus(`${skill.loaded ? 'Loaded' : 'Unloaded'} — viewing ${skillDisplayPath(skill.path)}`);
   } catch (error) {
+    $('skillContent').value = '';
     setSkillStatus(`Could not view skill: ${error.message}`);
-  }
-});
-
-async function setSelectedSkillLoaded(loaded) {
-  const path = $('skillList').value;
-  if (!path) return setSkillStatus(`Select a skill to ${loaded ? 'load' : 'unload'}`);
-  try {
-    await send({ command: loaded ? 'skillsLoad' : 'skillsUnload', path });
-    if (!loaded && plannedSkillPath === path) {
-      plannedAutomation = null;
-      plannedSkillPath = null;
-      riskyRunArmed = false;
-      showPlan('—');
-      setAutomationStatus('Selected skill unloaded; previous plan cleared');
-    }
-    await refreshSkillList();
-    setSkillStatus(`${loaded ? 'Loaded' : 'Unloaded'} ${skillDisplayPath(path)}`);
-  } catch (error) {
-    setSkillStatus(`Could not ${loaded ? 'load' : 'unload'} skill: ${error.message}`);
   }
 }
 
-$('loadSelectedSkill').addEventListener('click', () => setSelectedSkillLoaded(true));
-$('unloadSelectedSkill').addEventListener('click', () => setSelectedSkillLoaded(false));
+$('skillList').addEventListener('change', () => {
+  showSelectedSkill().catch(error => setSkillStatus(`Could not view skill: ${error.message}`));
+});
 
 // --- automation planner (same logic as the external controller) --------------
 

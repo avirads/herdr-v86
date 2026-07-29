@@ -1,5 +1,13 @@
 # web-bridge extension (scaffold)
 
+## Versioning
+
+Every AutoBro source or behavior update creates a new calendar release. Public
+versions and archive names use `YYYY.MM.DD.N`, where `N` starts at 1 each day
+and increments for every release that day. Chrome's numeric `version` field
+cannot contain leading zeroes, so `version_name` preserves the zero-padded
+public version.
+
 Load unpacked via `chrome://extensions` → Developer mode → *Load unpacked* →
 select this folder. Then serve `../controller` on localhost (e.g.
 `npx serve ../controller`) and open it.

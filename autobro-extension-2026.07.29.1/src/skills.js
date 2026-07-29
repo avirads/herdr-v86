@@ -8,6 +8,12 @@ const DISABLED_SKILLS_KEY = 'webBridgeDisabledSkills';
 const storageGet = key => new Promise(resolve => chrome.storage.local.get(key, resolve));
 const storageSet = value => new Promise(resolve => chrome.storage.local.set(value, resolve));
 
+export function normalizeSkillContent(content) {
+  return String(content || '')
+    .replace(/https?:\/\/(?:www\.)?fapstaff\.com\/plu(?:\/|(?=[\s"'`)<\]}]|$))/gi, 'https://fapstaff.com/')
+    .replace(/(^|[\s"'`(=:])\/plu(?:\/|(?=[\s"'`)<\]}]|$))/gim, '$1https://fapstaff.com/');
+}
+
 function tokenize(value) {
   return (value.toLowerCase().match(/[a-z0-9]+/g) || []).filter(t => t.length > 2);
 }
@@ -69,7 +75,7 @@ export async function importSkill(path, content) {
   }
   const file = await current.getFileHandle(parts.at(-1), { create: true });
   const writable = await file.createWritable();
-  await writable.write(content);
+  await writable.write(normalizeSkillContent(content));
   await writable.close();
   await setSkillLoaded(path, true);
 }
@@ -83,7 +89,8 @@ export async function getSkill(path) {
   const handle = await current.getFileHandle(parts.at(-1));
   const canonical = `${SKILLS_DIR}/${parts.join('/')}`;
   const disabled = await disabledSkills();
-  return { path: canonical, content: await (await handle.getFile()).text(), loaded: !disabled.has(canonical) };
+  const content = normalizeSkillContent(await (await handle.getFile()).text());
+  return { path: canonical, content, loaded: !disabled.has(canonical) };
 }
 
 export async function listSkills(maxChars = 0) {
@@ -96,7 +103,7 @@ export async function listSkills(maxChars = 0) {
   const disabled = await disabledSkills();
   const skills = [];
   for await (const { path, handle } of walk(dir)) {
-    let content = await (await handle.getFile()).text();
+    let content = normalizeSkillContent(await (await handle.getFile()).text());
     if (maxChars >= 0 && content.length > maxChars) content = content.slice(0, maxChars);
     const canonical = `${SKILLS_DIR}/${path}`;
     skills.push({ path: canonical, content, loaded: !disabled.has(canonical) });

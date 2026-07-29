@@ -15,6 +15,17 @@ clipboard, file-transfer, GitHub, or AI operations.
   deployment. Deploy website changes only to fapstaff.com unless the user
   explicitly changes this policy.
 
+## AutoBro release policy
+
+- Every change to AutoBro source, behavior, UI, documentation, or packaged
+  contents must create a new AutoBro release.
+- Public versions, source directories, ZIP filenames, links, and display text
+  use `YYYY.MM.DD.N`, where `N` starts at 1 and increments for each release on
+  that date.
+- Chrome manifest `version` uses the same four numeric components without
+  leading zeroes; manifest `version_name` uses the zero-padded public version.
+- Never overwrite an older AutoBro release ZIP.
+
 ## Guest environment
 
 - Architecture: Linux i386/i586, not x86-64.
