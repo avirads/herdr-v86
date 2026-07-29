@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoBro Web Bridge</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; font-size: 14px; }
+    body { margin: .75rem; }
+    fieldset { border: 1px solid #8884; border-radius: 8px; margin-bottom: .75rem; padding: .5rem .75rem; }
+    legend { font-weight: 600; }
+    input, textarea, button, select { font: inherit; }
+    input[type=url], input[type=text], textarea, select { width: 100%; box-sizing: border-box; }
+    textarea { font-family: ui-monospace, monospace; }
+    pre { background: #8881; padding: .6rem; border-radius: 8px; overflow: auto; max-height: 300px; font-size: 12px; }
+    .row { display: flex; gap: .4rem; align-items: center; margin: .4rem 0; flex-wrap: wrap; }
+    .status { font-weight: 600; }
+    img#shot { max-width: 100%; border: 1px solid #8884; border-radius: 8px; display: none; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+    header h1 { font-size: 1.1rem; margin: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Web Bridge</h1>
+    <button id="openWindow" title="Open this panel as a draggable window">Open as window ⧉</button>
+  </header>
+
+  <div id="pairingRequest" class="row" style="display:none; background:#d97706; color:#111; padding:.5rem .75rem; border-radius:8px; margin-bottom:.75rem;">
+    <span id="pairingRequestText" style="flex:1;font-weight:600;"></span>
+    <button id="pairingApprove">Approve</button>
+    <button id="pairingDeny">Deny</button>
+  </div>
+
+  <fieldset>
+    <legend>Skill packs</legend>
+    <div class="row">
+      <input id="skillPackFile" type="file" accept=".zip,application/zip" hidden />
+      <button id="loadSkills">Load Skill Pack</button>
+      <button id="refreshSkills">Refresh list</button>
+    </div>
+    <small>Select a skill-pack ZIP containing <code>index.json</code> and a <code>skills/</code> folder.</small>
+    <div id="skillStatus">No external skill pack loaded</div>
+    <div class="row">
+      <select id="skillList" aria-label="Installed skills">
+        <option value="">No skills installed</option>
+      </select>
+      <button id="loadSelectedSkill">Load selected</button>
+      <button id="unloadSelectedSkill">Unload selected</button>
+      <button id="viewSkill">Show selected</button>
+      <button id="runSkill">Run selected</button>
+    </div>
+    <label for="skillContent">Selected skill</label>
+    <textarea id="skillContent" rows="10" readonly placeholder="Select a skill and choose Show selected"></textarea>
+  </fieldset>
+
+  <fieldset>
+    <legend>Automation prompt</legend>
+    <textarea id="automationPrompt" rows="3" placeholder="Describe what to do on the current web page..."></textarea>
+    <div class="row">
+      <button id="planAutomation">Develop</button>
+      <button id="runAutomation">Execute</button>
+      <button id="refreshTarget">Refresh target tab</button>
+    </div>
+    <div id="automationStatus" class="status">No plan</div>
+    <pre id="automationPlan">—</pre>
+  </fieldset>
+
+  <fieldset>
+    <legend>Command console (bridge protocol v3)</legend>
+    <textarea id="payload" rows="3">{"command":"pageInfo"}</textarea>
+    <div class="row">
+      <button id="send">Send</button>
+      <button id="screenshot">Screenshot</button>
+      <button data-cmd='{"command":"currentTab"}'>currentTab</button>
+      <button data-cmd='{"command":"listTabs","args":[false]}'>listTabs</button>
+      <button data-cmd='{"command":"inventoryCurrentPage"}'>inventory</button>
+    </div>
+    <pre id="output">—</pre>
+    <img id="shot" alt="screenshot" />
+  </fieldset>
+
+  <script type="module" src="panel.js"></script>
+</body>
+</html>

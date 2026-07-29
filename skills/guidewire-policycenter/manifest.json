@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "name": "guidewire-policycenter",
+  "displayName": "Guidewire PolicyCenter",
+  "version": "1.0.0",
+  "released": "2026-07-29",
+  "runtime": {
+    "name": "autobro-web-bridge",
+    "minimumVersion": "0.4.0",
+    "protocolVersion": 3
+  },
+  "skillsIndex": "index.json",
+  "skillCount": 37,
+  "domainCommands": [
+    "gwClick",
+    "gwOpenMenu"
+  ]
+}

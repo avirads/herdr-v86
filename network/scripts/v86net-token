@@ -2,10 +2,10 @@
 set -euo pipefail
 
 TTL_SECONDS="${1:-3600}"
-ORIGIN="${2:-https://avirads.github.io}"
+ORIGIN="${2:-https://fapstaff.com}"
 ADMIN_TOKEN_FILE="${V86NET_ADMIN_TOKEN_FILE:-/etc/v86net/admin.token}"
 SESSION_ENDPOINT="${V86NET_SESSION_ENDPOINT:-http://127.0.0.1:8086/v1/sessions}"
-VM_URL="${V86NET_VM_URL:-https://avirads.github.io/herdr-v86/}"
+VM_URL="${V86NET_VM_URL:-https://fapstaff.com/}"
 GATEWAY_URL="${V86NET_GATEWAY_URL:-wss://gateway.fapstaff.com/v1/ethernet}"
 
 if [[ ! "$TTL_SECONDS" =~ ^[1-9][0-9]*$ ]] || (( TTL_SECONDS > 3600 )); then

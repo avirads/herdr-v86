@@ -5,7 +5,7 @@ param(
     [string]$InstallDirectory = "$env:ProgramData\VMV86",
     [string]$AdapterName = "VMV86",
     [string]$ListenAddress = "127.0.0.1:8086",
-    [string]$AllowedOrigin = "https://avirads.github.io",
+    [string]$AllowedOrigin = "https://fapstaff.com",
     [string]$TlsCertificate = "",
     [string]$TlsPrivateKey = ""
 )

@@ -43,7 +43,7 @@ optional native backend.
 An HTTPS-hosted Herdr portal can carry the same Ethernet frames through the
 AutoBro extension and Chrome Native Messaging, avoiding localhost mixed-content
 and certificate problems. Build `v86net-gateway`, then use the per-user
-installer under `autobro-extension-0.4.0/native/`. The helper runs
+installer under `autobro-extension-0.5.0/native/`. The helper runs
 `-native-messaging`, opens the userspace backend directly, and exits when the
 extension connection closes. Installation uses HKCU on Windows or the current
 user's browser configuration on Linux and does not require elevation.
@@ -211,7 +211,7 @@ An optional first argument selects the lifetime in seconds (maximum 3600), and
 an optional second argument selects the exact browser origin:
 
 ```bash
-sudo v86net-token 900 https://avirads.github.io
+sudo v86net-token 900 https://fapstaff.com
 ```
 
 The equivalent raw API request is:

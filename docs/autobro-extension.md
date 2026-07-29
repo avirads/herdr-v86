@@ -2,7 +2,7 @@
 
 Download the packaged Manifest V3 extension:
 
-- [AutoBro Web Bridge 0.4.0](../downloads/autobro-web-bridge-0.4.0.zip)
+- [AutoBro Web Bridge 0.5.0](../downloads/autobro-web-bridge-0.5.0.zip)
 - SHA-256: `170D61DF7D19326BA71801E2F177A071CB98D583ABBC187911EDAD6937CE889D`
 - [Windows networking helper with source](../downloads/autobro-helper-windows-amd64.zip)
 - SHA-256: `E403CFE59EBCB65603FEEA69946C5BC6410B3C8BA8D6F20D811871C403D3DEB7`
@@ -14,7 +14,7 @@ Download the packaged Manifest V3 extension:
 3. Enable **Developer mode**.
 4. Select **Load unpacked**.
 5. Select the extracted directory that contains `manifest.json`.
-6. Open the [VM](https://avirads.github.io/herdr-v86/), select
+6. Open the [VM](https://fapstaff.com/), select
    **Connect AutoBro**, then click **Connect AutoBro** and approve the
    pairing request. No copying an extension ID or pairing token is needed —
    the extension's ID is pinned (via its manifest `key`), so the page detects
@@ -37,7 +37,7 @@ setups.
 ### Upgrading from 0.3.0
 
 0.3.0 was loaded unpacked without a pinned ID, so its extension ID varies per
-install path. Reload the unpacked extension from the 0.4.0 ZIP (same Load
+install path. Reload the unpacked extension from the 0.5.0 ZIP (same Load
 unpacked steps, pointed at the new directory) to pick up the fixed ID and the
 one-click pairing flow; the page will no longer recognize the old ID.
 
