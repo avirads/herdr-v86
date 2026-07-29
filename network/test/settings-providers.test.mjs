@@ -17,8 +17,8 @@ test('provider controls are grouped at the top of Settings', () => {
   assert.match(settings, /id="configure-autobro-later"[^>]*>Connect</);
   assert.match(settings, /id="reset-autobro"[^>]*>Reset</);
   assert.match(settings, /id="settings-autobro-status"[^>]*role="status"/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.5\.zip" download/);
-  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.5<\/a>/);
+  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.6\.zip" download/);
+  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.6<\/a>/);
   assert.match(settings, /href="https:\/\/fapstaff\.com\/skills\/guidewire-policycenter-1\.0\.0\.zip" download/);
   assert.match(settings, />Download Guidewire PolicyCenter skills 1\.0\.0<\/a>/);
   assert.match(settings, /id="load-voice"[^>]*>Load</);
@@ -46,10 +46,11 @@ test('Settings connects AutoBro in place without opening VM setup', () => {
   assert.doesNotMatch(handler, /openSetupStep|setup-step-autobro/);
 });
 
-test('connected AutoBro changes Connect to Open and closes Settings', () => {
-  assert.match(html, /configure-autobro-later"\)\.textContent = "Open"/);
-  assert.match(html, /if \(autobroReady && autobroClient\) \{[\s\S]*settingsDialog\.close\(\);[\s\S]*autobroClient\.command\("openPanelWindow"\)/);
-  assert.match(html, /button\.textContent = autobroReady \? "Open" : "Connect"/);
+test('AutoBro Connect closes Settings after pairing succeeds', () => {
+  assert.match(html, /configure-autobro-later"\)\.textContent = "Connected"/);
+  assert.match(html, /const connected = await oneClickConnectAutoBro\(statusElement\);[\s\S]*if \(connected\) settingsDialog\.close\(\)/);
+  assert.match(html, /button\.textContent = autobroReady \? "Connected" : "Connect"/);
+  assert.doesNotMatch(html, /autobroClient\.command\("openPanelWindow"\)/);
 });
 
 test('the cached-model selector uses the real OPFS model list', () => {

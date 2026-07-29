@@ -28,17 +28,12 @@ async function pairingToken() {
 // never land on the wrong origin.
 let pendingPairing = null; // { notificationId, origin, resolve, timer }
 let onPairingRequestedCallback = null;
-let onOpenPanelRequestedCallback = null;
 
 // Registered by background.js with its panel-window opener, so a pairing
 // request surfaces a real, always-rendering extension window immediately —
 // not dependent on the OS notification pipeline at all.
 export function onPairingRequested(callback) {
   onPairingRequestedCallback = callback;
-}
-
-export function onOpenPanelRequested(callback) {
-  onOpenPanelRequestedCallback = callback;
 }
 
 function setPendingBadge(origin) {
@@ -141,11 +136,6 @@ export function start() {
       }
       if (message?.token !== token) throw new Error('unauthorized: pair first');
       if (message.command === 'health') return health();
-      if (message.command === 'openPanelWindow') {
-        if (!onOpenPanelRequestedCallback) throw new Error('panel opener is unavailable');
-        await onOpenPanelRequestedCallback();
-        return { opened: true };
-      }
       return await execute(message, { timeoutMs: message.timeoutMs ?? 30_000 });
     })()
       .then(result => sendResponse({ ok: true, result }))
