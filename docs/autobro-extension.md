@@ -2,8 +2,8 @@
 
 Download the packaged Manifest V3 extension:
 
-- [AutoBro Web Bridge 2026.07.29.2](../downloads/autobro-web-bridge-2026.07.29.2.zip)
-- SHA-256: `75E85DE649D8468DAEB836D53E8ED1C81E5C91E6326BA038C8675EDE77CC1B1D`
+- [AutoBro Web Bridge 2026.07.29.3](../downloads/autobro-web-bridge-2026.07.29.3.zip)
+- SHA-256: `AD7EC8B45D881613F4D202EE57049A4B475312B71397A29B7B60F89E5BF0AABF`
 - [Windows networking helper with source](../downloads/autobro-helper-windows-amd64.zip)
 - SHA-256: `E403CFE59EBCB65603FEEA69946C5BC6410B3C8BA8D6F20D811871C403D3DEB7`
 
@@ -45,6 +45,12 @@ AutoBro uses VM's ready page-local WebGPU LLM for chat and automation
 planning. It contains no model picker or extension-local LiteRT runtime. Keep
 the paired VM page open and configure the model there before using AutoBro's
 LLM-backed actions.
+
+Automation runs in a fresh tab cloned from the selected application tab. For
+Guidewire workflows, AutoBro loads the installed login/session skill, reuses an
+existing authenticated browser session, and permits automatic `su` / `gw`
+login only on `localhost` or `127.0.0.1`. It attempts a UI logout after the
+final step, including when an automation step fails.
 
 The extension works in desktop Chromium-based browsers that support unpacked
 Manifest V3 extensions. Mobile Chrome does not support installing this

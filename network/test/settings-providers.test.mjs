@@ -7,7 +7,7 @@ const html = await readFile(new URL('../../index.html', import.meta.url), 'utf8'
 test('provider controls are grouped at the top of Settings', () => {
   const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
   const providers = settings.indexOf('class="provider-settings"');
-  const transfers = settings.indexOf('id="project-transfer-settings-title"');
+  const transfers = settings.indexOf('id="assets-transfer-settings-title"');
   assert.ok(providers >= 0 && providers < transfers);
   for (const title of ['AI Model', 'AutoBro', 'Voice']) {
     assert.match(settings, new RegExp(`<h3[^>]*>${title}</h3>`));
@@ -17,10 +17,22 @@ test('provider controls are grouped at the top of Settings', () => {
   assert.match(settings, /id="configure-autobro-later"[^>]*>Connect</);
   assert.match(settings, /id="reset-autobro"[^>]*>Reset</);
   assert.match(settings, /id="settings-autobro-status"[^>]*role="status"/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.2\.zip" download/);
-  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.2<\/a>/);
+  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.3\.zip" download/);
+  assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.3<\/a>/);
   assert.match(settings, /id="load-voice"[^>]*>Load</);
   assert.match(settings, /id="reset-voice"[^>]*>Reset</);
+});
+
+test('project and file controls share one Assets transfer section', () => {
+  const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
+  const start = settings.indexOf('<h3 id="assets-transfer-settings-title">Assets transfer</h3>');
+  const end = settings.indexOf('</section>', start);
+  const assets = settings.slice(start, end);
+  assert.ok(start >= 0);
+  for (const id of ['import-project', 'export-project', 'import-file', 'export-file']) {
+    assert.match(assets, new RegExp(`id="${id}"`));
+  }
+  assert.doesNotMatch(settings, />Project transfer<|>File transfer</);
 });
 
 test('Settings connects AutoBro in place without opening VM setup', () => {

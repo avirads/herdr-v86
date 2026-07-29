@@ -457,7 +457,7 @@ function normalizeAutomation(value, page = null, options = {}) {
     && !steps.some(step => step.command === 'attach')) {
     steps.unshift({ command: 'attach', tabId: targetTab.tabId });
   }
-  return { targetTab: usesTargetTab ? targetTab : null, steps };
+  return { targetTab: usesTargetTab || options.guidewire ? targetTab : null, steps, logoutAfterRun: options.guidewire === true };
 }
 
 function planHasRiskyAction(plan) {
@@ -483,6 +483,37 @@ async function refreshTargetTab() {
   return tab;
 }
 
+async function loadLoginSkill() {
+  const installed = await send({ command: 'skillsList', maxChars: 0 });
+  const match = installed.find(skill => /policycenter-login-session-health\.md$/i.test(skill.path));
+  if (!match?.path) throw new Error('Guidewire login/session skill is not installed');
+  const skill = await send({ command: 'skillsGet', path: match.path });
+  if (!skill.loaded) throw new Error('Guidewire login/session skill is unloaded');
+  return { path: skill.path, content: String(skill.content || '').slice(0, 4000) };
+}
+
+async function prepareAutomationTab({ guidewire = false } = {}) {
+  const sourceTab = await refreshTargetTab();
+  if (!/^https?:/i.test(sourceTab.url || '')) throw new Error('Automation requires an HTTP/HTTPS application tab');
+  const created = await send({ command: 'newTab', args: [sourceTab.url] });
+  if (!created?.tabId) throw new Error('Could not create a fresh automation tab');
+  targetTab = created;
+  await send({ command: 'waitForLoad', args: [20], tabId: created.tabId });
+  if (!guidewire) return { tab: created, loginSkill: null };
+
+  const loginSkill = await loadLoginSkill();
+  const login = await send({ command: 'loginStatus', tabId: created.tabId });
+  if (login?.loginForm) {
+    const hostname = new URL(created.url || sourceTab.url).hostname;
+    if (!['localhost', '127.0.0.1'].includes(hostname)) {
+      throw new Error('Login is required; the login skill forbids automatic credentials outside local development');
+    }
+    const result = await send({ command: 'localLogin', args: ['su', 'gw'], tabId: created.tabId });
+    if (result?.finalStatus?.loginForm) throw new Error('Local login did not complete');
+  }
+  return { tab: created, loginSkill };
+}
+
 async function loadSkillContext(userPrompt) {
   const payload = await send({ command: 'skills', q: userPrompt, limit: 2, maxChars: 1800 }).catch(() => null);
   const skills = Array.isArray(payload?.skills) ? payload.skills : Array.isArray(payload) ? payload : [];
@@ -495,14 +526,18 @@ async function loadSkillContext(userPrompt) {
 async function askLlmForAutomation(userPrompt, selectedSkills = []) {
   const browserTabPlan = planBrowserTabAutomation(userPrompt);
   if (browserTabPlan) return normalizeAutomation(browserTabPlan, null, { guidewire: false });
-  const tab = await refreshTargetTab();
+  const skills = selectedSkills.length ? selectedSkills : await loadSkillContext(userPrompt);
+  const guidewire = hasGuidewireSkills(skills);
+  const prepared = await prepareAutomationTab({ guidewire });
+  const tab = prepared.tab;
+  if (prepared.loginSkill && !skills.some(skill => skill.path === prepared.loginSkill.path)) {
+    skills.unshift(prepared.loginSkill);
+  }
   const page = await send({ command: 'inventoryCurrentPage', tabId: tab.tabId });
   const relatedActions = await send({
     command: 'relatedActions', args: [userPrompt, 12], tabId: tab.tabId
   }).catch(() => []);
   const pageContext = { ...page, relatedActions };
-  const skills = selectedSkills.length ? selectedSkills : await loadSkillContext(userPrompt);
-  const guidewire = hasGuidewireSkills(skills);
   const automationOptions = { guidewire };
   const heuristicPlan = planMenuArrowAutomation(userPrompt, pageContext, automationOptions);
   if (heuristicPlan) return normalizeAutomation(heuristicPlan, pageContext, automationOptions);
@@ -610,6 +645,7 @@ async function executePlannedAutomation() {
   }
   riskyRunArmed = false;
   setAutomationStatus(`Running ${plannedAutomation.steps.length} step(s)...`);
+  let runFailed = false;
   try {
     const results = [];
     for (const step of plannedAutomation.steps) {
@@ -618,8 +654,20 @@ async function executePlannedAutomation() {
     show(results);
     setAutomationStatus('Run complete');
   } catch (error) {
+    runFailed = true;
     show(`error: ${error.message}`);
     setAutomationStatus('Run failed');
+  } finally {
+    if (plannedAutomation.logoutAfterRun && plannedAutomation.targetTab?.tabId) {
+      try {
+        const logout = await send({ command: 'gwLogout', tabId: plannedAutomation.targetTab.tabId });
+        if (!logout?.fired) throw new Error(logout?.reason || 'logout action not found');
+        await send({ command: 'waitForLoad', args: [15], tabId: plannedAutomation.targetTab.tabId }).catch(() => undefined);
+        setAutomationStatus(runFailed ? 'Run failed; logged out' : 'Run complete; logged out');
+      } catch (logoutError) {
+        setAutomationStatus(`${runFailed ? 'Run failed' : 'Run complete'}; logout failed: ${logoutError.message}`);
+      }
+    }
   }
 }
 
