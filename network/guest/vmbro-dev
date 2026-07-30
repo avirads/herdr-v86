@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+PATH="/usr/local/bin:/usr/bin:/bin"
+export PATH
+
 project="${1:-/root/project}"
 port="${PORT:-3000}"
 

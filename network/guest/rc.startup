@@ -34,3 +34,9 @@ if [ "$tier_level" -ge 2 ]; then
   ip link set eth0 up 2>/dev/null || true
   udhcpc -i eth0 -q -t 10 -T 1 >/var/log/udhcpc.log 2>&1 &
 fi
+
+# The Dev tier is an appliance-style development image: compile and serve its
+# starter automatically while the interactive shell remains immediately usable.
+if [ "$(cat /etc/vmvm/tier 2>/dev/null)" = "dev" ] && [ -x /usr/local/bin/vmbro-dev ]; then
+  (cd /root/project && PORT=3000 /usr/local/bin/vmbro-dev >/var/log/vmbro-dev.log 2>&1) &
+fi

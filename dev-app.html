@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Starting Dev App — Herdr</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; background: #0d1117; color: #c9d1d9; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; }
+    main { width: min(32rem, calc(100% - 2rem)); padding: 2rem; border: 1px solid #30363d; border-radius: 12px; background: #161b22; text-align: center; }
+    h1 { margin-top: 0; color: #f0f6fc; }
+    a { display: inline-block; margin-top: 1rem; padding: .65rem 1rem; border: 1px solid #58a6ff; border-radius: 6px; color: #fff; background: #1f6feb; text-decoration: none; }
+    small { display: block; margin-top: 1.25rem; color: #8b949e; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Starting Dev App</h1>
+    <p id="message" role="status" aria-live="polite">VMVM is booting. Opening the app in <span id="seconds">25</span> seconds…</p>
+    <a id="open" href="http://10.77.0.15:3000/">Open now</a>
+    <small>The native networking helper must be connected. If the app is still compiling, wait a moment and reload.</small>
+  </main>
+  <script>
+    const appURL = "http://10.77.0.15:3000/";
+    let remaining = 25;
+    const seconds = document.getElementById("seconds");
+    const timer = setInterval(() => {
+      remaining -= 1;
+      seconds.textContent = remaining;
+      if (remaining <= 0) {
+        clearInterval(timer);
+        document.getElementById("message").textContent = "Opening the Dev app…";
+        location.replace(appURL);
+      }
+    }, 1000);
+  </script>
+</body>
+</html>

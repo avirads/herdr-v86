@@ -5,6 +5,8 @@ import test from 'node:test';
 const root = new URL('../../', import.meta.url);
 const manifest = JSON.parse(await readFile(new URL('vm-images.json', root), 'utf8'));
 const html = await readFile(new URL('index.html', root), 'utf8');
+const devApp = await readFile(new URL('dev-app.html', root), 'utf8');
+const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 
 const expected = [
@@ -67,4 +69,12 @@ test('Dev tier exposes its port 3000 app launcher', () => {
   assert.match(html, /id="open-dev-app"[^>]*hidden>Open Dev App<\/button>/);
   assert.match(html, /devAppButton\.hidden = selectedVMImage !== "dev"/);
   assert.match(html, /http:\/\/10\.77\.0\.15:3000\//);
+});
+
+test('Dev tier starts and opens its app automatically', () => {
+  assert.match(startup, /\[ "\$\(cat \/etc\/vmvm\/tier 2>\/dev\/null\)" = "dev" \]/);
+  assert.match(startup, /PORT=3000 \/usr\/local\/bin\/vmbro-dev >\/var\/log\/vmbro-dev\.log 2>&1/);
+  assert.match(html, /window\.open\("dev-app\.html", "herdr-dev-app"\)/);
+  assert.match(devApp, /location\.replace\(appURL\)/);
+  assert.match(devApp, /http:\/\/10\.77\.0\.15:3000\//);
 });
