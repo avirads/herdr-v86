@@ -35,7 +35,7 @@ tier_bytes() {
     barebones) echo 67108864 ;;
     essentials) echo 83886080 ;;
     ai-tools) echo 92274688 ;;
-    dev) echo 125829120 ;;
+    dev) echo 99614720 ;;
     performance) echo 96468992 ;;
     vapt) echo 103809024 ;;
   esac
