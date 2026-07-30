@@ -78,3 +78,8 @@ test('Dev tier starts and opens its app automatically', () => {
   assert.match(devApp, /location\.replace\(appURL\)/);
   assert.match(devApp, /http:\/\/10\.77\.0\.15:3000\//);
 });
+
+test('Dev tier allows the larger image enough time to produce VM output', () => {
+  assert.match(html, /vmImageTier === "dev" \? 300000 : 120000/);
+  assert.match(html, /first boot may take several minutes/);
+});

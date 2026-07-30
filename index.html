@@ -482,6 +482,8 @@ function setBootProgress(value, message) {
 const bootTicker = setInterval(() => {
   if (bootProgress < 90) {
     setBootProgress(bootProgress + 1, `Starting VMVM [${vmImageDisplaySource}]…`);
+  } else if (!shellReady && vmImageTier === "dev") {
+    bootMessage.textContent = `Starting Dev VMVM [${vmImageDisplaySource}] — first boot may take several minutes…`;
   }
 }, 700);
 function finishBoot() {
@@ -1872,7 +1874,15 @@ window.onerror = (msg, source) => {
   failBoot("Startup error: " + msg);
 };
 let gotSerial = false;
-setTimeout(() => { if (!gotSerial) { const message = "No VM output after 120 seconds. Reload to retry automatic compatibility boot."; status(message); failBoot(message); } }, 120000);
+const noOutputTimeoutMs = vmImageTier === "dev" ? 300000 : 120000;
+setTimeout(() => {
+  if (!gotSerial) {
+    const seconds = noOutputTimeoutMs / 1000;
+    const message = `No VM output after ${seconds} seconds. Reload to retry automatic compatibility boot.`;
+    status(message);
+    failBoot(message);
+  }
+}, noOutputTimeoutMs);
 // The kernel serial console has no window size (TIOCGWINSZ reports 0x0).
 // Set it once at the first shell prompt, matching the xterm.js geometry above.
 let recentOutput = "";
