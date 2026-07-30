@@ -13,7 +13,7 @@ test('Settings keeps version information in Diagnostics without a redundant Abou
   assert.match(html, /imageName: vmImage\.name/);
   assert.match(html, /moonshineJs: "0\.1\.29"/);
   assert.match(html, /onnxRuntimeWeb: "1\.22\.0"/);
-  assert.match(html, /<h3 id="diagnostics-settings-title">Diagnostics<\/h3>/);
+  assert.match(html, /<summary><h3 id="diagnostics-settings-title">Diagnostics<\/h3><\/summary>/);
   assert.match(html, /id="copy-diagnostics"[^>]*>Copy diagnostics</);
   assert.match(html, /id="diagnostics-status" role="status" aria-live="polite"/);
   assert.doesNotMatch(html, /id="diagnostics-output"|id="download-diagnostics"|id="refresh-diagnostics"/);

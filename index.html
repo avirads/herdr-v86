@@ -78,7 +78,13 @@
   .settings-action small, #settings-dialog p { color: #8b949e; }
   .provider-settings { display: grid; gap: 10px; margin-bottom: 14px; }
   .provider-section { padding: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 7px; }
-  .provider-section h3 { margin: 0 0 4px; font-size: 14px; color: #f0f6fc; }
+  .provider-section > summary { min-height: 44px; display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; user-select: none; }
+  .provider-section > summary::-webkit-details-marker { display: none; }
+  .provider-section > summary::after { content: "›"; margin-left: auto; color: #8b949e; font-size: 22px; line-height: 1; transform: rotate(0); transition: transform .15s ease; }
+  .provider-section[open] > summary::after { transform: rotate(90deg); }
+  .provider-section > summary:hover h3, .provider-section > summary:focus-visible h3 { color: #58a6ff; }
+  .provider-section > summary:focus-visible { outline: 2px solid #58a6ff; outline-offset: 3px; border-radius: 4px; }
+  .provider-section h3 { margin: 0; font-size: 14px; color: #f0f6fc; }
   .provider-section > small { display: block; color: #8b949e; line-height: 1.4; }
   .provider-actions { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .provider-actions label { flex: 1 1 180px; margin: 0; }
@@ -202,8 +208,8 @@
   <button id="close-settings" class="settings-close" type="button" aria-label="Close Settings">Close</button>
   <h2>Settings</h2>
   <div class="provider-settings">
-    <section class="provider-section" aria-labelledby="vm-image-settings-title">
-      <h3 id="vm-image-settings-title">VMVM Image</h3>
+    <details class="provider-section" aria-labelledby="vm-image-settings-title">
+      <summary><h3 id="vm-image-settings-title">VMVM Image</h3></summary>
       <small>Select a cumulative guest image. Changing it restarts VMVM; each image has an independent guest filesystem.</small>
       <div class="provider-actions">
         <label>Image
@@ -212,9 +218,9 @@
         <button id="apply-vm-image" type="button">Apply &amp; restart</button>
       </div>
       <small id="vm-image-description"></small>
-    </section>
-    <section class="provider-section" aria-labelledby="ai-model-settings-title">
-      <h3 id="ai-model-settings-title">AI Model</h3>
+    </details>
+    <details class="provider-section" aria-labelledby="ai-model-settings-title">
+      <summary><h3 id="ai-model-settings-title">AI Model</h3></summary>
       <small>Load a LiteRT-LM model into this browser or clear all cached models.</small>
       <div class="provider-actions">
         <label id="cached-model-row" hidden>Loaded model
@@ -234,9 +240,9 @@
           <a class="tool-link" href="https://developers.googleblog.com/blazing-fast-on-device-genai-with-litert-lm/" target="_blank" rel="noopener noreferrer">Blazing-fast on-device GenAI with LiteRT-LM</a>.
         </p>
       </details>
-    </section>
-    <section class="provider-section" aria-labelledby="cloud-model-settings-title">
-      <h3 id="cloud-model-settings-title">Cloud AI providers</h3>
+    </details>
+    <details class="provider-section" aria-labelledby="cloud-model-settings-title">
+      <summary><h3 id="cloud-model-settings-title">Cloud AI providers</h3></summary>
       <small>Local WebGPU remains the direct default. Add a cloud provider for optional per-agent or command-line selection. Keys stay in this tab unless you explicitly retain them.</small>
       <div class="provider-actions">
         <label>Saved provider
@@ -267,9 +273,9 @@
         <label>vmmastra default <select class="agent-provider-default" data-agent="vmmastra"></select></label>
       </div>
       <small id="cloud-provider-status" role="status" aria-live="polite"></small>
-    </section>
-    <section class="provider-section" aria-labelledby="autobro-settings-title">
-      <h3 id="autobro-settings-title">AutoBro</h3>
+    </details>
+    <details class="provider-section" aria-labelledby="autobro-settings-title">
+      <summary><h3 id="autobro-settings-title">AutoBro</h3></summary>
       <small id="settings-autobro-status" role="status" aria-live="polite">Connect browser automation or forget the current pairing.</small>
       <div class="provider-actions">
         <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro Chrome extension 2026.07.29.8</a>
@@ -288,18 +294,18 @@
           <li>Return here and select <strong>Connect</strong> again.</li>
         </ol>
       </div>
-    </section>
-    <section class="provider-section" aria-labelledby="voice-settings-title">
-      <h3 id="voice-settings-title">Voice</h3>
+    </details>
+    <details class="provider-section" aria-labelledby="voice-settings-title">
+      <summary><h3 id="voice-settings-title">Voice</h3></summary>
       <small>Load Moonshine Tiny locally and insert transcription at the current prompt.</small>
       <div class="provider-actions">
         <button id="load-voice" type="button">Load</button>
         <button id="reset-voice" type="button">Reset</button>
       </div>
-    </section>
+    </details>
   </div>
-  <section class="provider-section" aria-labelledby="assets-transfer-settings-title">
-    <h3 id="assets-transfer-settings-title">Assets transfer</h3>
+  <details class="provider-section" aria-labelledby="assets-transfer-settings-title">
+    <summary><h3 id="assets-transfer-settings-title">Assets transfer</h3></summary>
     <small>Import or export a complete project archive, or transfer one regular guest file up to 8 MiB.</small>
     <div class="provider-actions">
       <button id="import-project" type="button">Import project</button>
@@ -307,19 +313,19 @@
       <button id="import-file" type="button">Import file</button>
       <button id="export-file" type="button">Export file</button>
     </div>
-  </section>
+  </details>
   <div class="settings-action">
     <div><strong>Remote agent</strong><br><small>Run this model as an agent or chat with a paired agent over WebRTC.</small></div>
     <button id="open-remote" type="button">Remote access</button>
   </div>
-  <section class="provider-section" aria-labelledby="diagnostics-settings-title">
-    <h3 id="diagnostics-settings-title">Diagnostics</h3>
+  <details class="provider-section" aria-labelledby="diagnostics-settings-title">
+    <summary><h3 id="diagnostics-settings-title">Diagnostics</h3></summary>
     <small>Local capability and runtime metrics only. Project files, AI prompts, and pairing credentials are excluded. A retained VM fault may include bounded serial context and the last shell command.</small>
     <div id="diagnostics-status" role="status" aria-live="polite"></div>
     <div class="provider-actions">
       <button id="copy-diagnostics" type="button">Copy diagnostics</button>
     </div>
-  </section>
+  </details>
   <div class="settings-action">
     <div><strong>Help</strong><br><small>Open the VM command reference, including local and cloud LLM connections.</small></div>
     <button id="open-help" type="button">Open help</button>

@@ -6,7 +6,7 @@ const html = await readFile(new URL('../../index.html', import.meta.url), 'utf8'
 const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
 
 test('project and file import/export share the Assets transfer section', () => {
-  const section = settings.match(/<section class="provider-section" aria-labelledby="assets-transfer-settings-title">([\s\S]*?)<\/section>/)?.[1] || '';
+  const section = settings.match(/<details class="provider-section" aria-labelledby="assets-transfer-settings-title">([\s\S]*?)<\/details>/)?.[1] || '';
   for (const id of ['import-project', 'export-project', 'import-file', 'export-file']) {
     assert.match(section, new RegExp(`id="${id}"`));
   }
