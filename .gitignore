@@ -5,3 +5,8 @@ network/v86net-gateway-userspace-test.exe
 
 # Large WebGPU model, hardlinked/copied in locally for e2e benchmarks
 models/
+
+# VAPT external-tool binaries: build inputs for the abandoned all-tools image,
+# not shipped in the native-only vapt tier (vaptr is self-contained).
+network/guest/vapt-bin/
+network/guest/vaptr-all-tools.json

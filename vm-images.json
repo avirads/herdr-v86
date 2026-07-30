@@ -33,6 +33,14 @@
       "size": 96468992,
       "version": "2026.07.29.3",
       "sha256": "11f7ecaa6ab7e363534f5959fe5ad0aeb5b97fb52618f4e136542fd01f51a160"
+    },
+    "vapt": {
+      "name": "VAPT — native scanner",
+      "description": "Performance plus Vaptr, the self-contained native scanner. Fingerprint, crawl, content/parameter discovery and vulnerability checks all run in-process; no external tools (httpx/katana/nuclei/ffuf) are bundled, so it runs inside the v86 guest.",
+      "url": "vm-vapt-i386-ext4.img",
+      "size": 103809024,
+      "version": "2026.07.30.1",
+      "sha256": "3ef8d537e6500566e143c50193bd71bb2ca0529d747b82e6357d6249cfee23f9"
     }
   }
 }

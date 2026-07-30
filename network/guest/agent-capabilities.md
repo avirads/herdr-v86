@@ -15,6 +15,15 @@ startup and again before choosing tools for a task.
 - Use `rg` for fast source search, `ctags` for symbol indexing, `make` for
   projects that provide a Makefile, `patch` to apply unified diffs, and `k6`
   for HTTP/API performance tests.
+- The optional **VAPT — native scanner** image adds `vaptr`, a self-contained
+  web-VAPT orchestrator. No external tools are bundled; fingerprint, crawl,
+  content/parameter discovery and vulnerability checks all run in-process via
+  vaptr's built-in `native` backends, so the pipeline runs inside the guest.
+  Run `vaptr caps` to inspect the deterministic allowlisted capabilities, and
+  copy `/opt/vaptr/configs/native.json` before editing a scan configuration.
+  Use Vaptr only against systems you own or have explicit written authorization
+  to assess; replace the target, scope, workspace, and authorization reference
+  before running `vaptr scan`.
 - After creating or editing a shell script, run `shfmt -w FILE`, then
   `sh -n FILE`; run `shellcheck FILE` when an external ShellCheck is available.
   Repair failures before reporting success.

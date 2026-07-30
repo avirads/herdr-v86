@@ -12,9 +12,10 @@ const expected = [
   ['essentials', 83886080],
   ['ai-tools', 92274688],
   ['performance', 96468992],
+  ['vapt', 103809024],
 ];
 
-test('VM image manifest defines four ordered cumulative tiers', () => {
+test('VM image manifest defines five ordered cumulative tiers', () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.defaultTier, 'ai-tools');
   assert.deepEqual(Object.keys(manifest.tiers), expected.map(([tier]) => tier));
@@ -38,9 +39,14 @@ test('tier builder applies each preceding installer and validates boundaries', (
   assert.match(builder, /number >= 2 \)\) && install_essentials/);
   assert.match(builder, /number >= 3 \)\) && install_ai_tools/);
   assert.match(builder, /number >= 4 \)\) && install_performance/);
+  assert.match(builder, /number >= 5 \)\) && install_vapt/);
   assert.match(builder, /! command -v curl; ! command -v vmagent-rpc/);
   assert.match(builder, /! command -v herdr; ! command -v rig; ! command -v git/);
   assert.match(builder, /! command -v k6/);
+  assert.match(builder, /! command -v nuclei/);
+  assert.match(builder, /command -v vaptr/);
+  assert.match(builder, /for tool in httpx katana urlfinder ffuf interactsh-client hakrawler gospider nuclei/);
+  assert.match(builder, /test -f \/opt\/vaptr\/configs\/native\.json/);
 });
 
 test('Settings selects a manifest image and warns before restart', () => {

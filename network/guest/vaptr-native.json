@@ -1,0 +1,21 @@
+{
+  "target": "replace-with-authorized-target.example",
+  "targets": ["https://replace-with-authorized-target.example"],
+  "workspace": "/root/vaptr-workspace/scan",
+  "scope": {
+    "allowed_domains": ["replace-with-authorized-target.example"],
+    "allow_subdomains": true,
+    "allowed_cidrs": [],
+    "allow_private": false,
+    "allow_wildcard": false,
+    "rate_limit": 10,
+    "max_concurrency": 4,
+    "authorization": "REPLACE WITH WRITTEN AUTHORIZATION REFERENCE"
+  },
+  "fingerprint": { "backend": "native" },
+  "crawl": { "backend": "native" },
+  "content": { "backend": "native" },
+  "params": { "backend": "native" },
+  "scan": { "backend": "native" },
+  "llm": { "provider": "vmllm", "command": "vmllm", "max_tokens": 256 }
+}

@@ -9,9 +9,11 @@ RIG_PACKAGE="${RIG_PACKAGE:-$PROJECT_DIR/network/guest/rig-agent-0.1.0-x86.tar.g
 ZEROSTACK_PACKAGE="${ZEROSTACK_PACKAGE:-$PROJECT_DIR/network/guest/zerostack-1.5.0-x86.tar.gz}"
 HERDR_BINARY="${HERDR_BINARY:-$PROJECT_DIR/herdr-i686}"
 K6_BINARY="${K6_BINARY:-$PROJECT_DIR/network/guest/bin/k6}"
+VAPTR_BINARY="${VAPTR_BINARY:-$PROJECT_DIR/network/guest/bin/vaptr}"
+VAPTR_CONFIG="${VAPTR_CONFIG:-$PROJECT_DIR/network/guest/vaptr-native.json}"
 DOMAIN_SKILLS_PACKAGE="${DOMAIN_SKILLS_PACKAGE:-$PROJECT_DIR/skills/guidewire-policycenter-1.0.0.zip}"
 
-TIERS=(barebones essentials ai-tools performance)
+TIERS=(barebones essentials ai-tools performance vapt)
 
 tier_number() {
   case "$1" in
@@ -19,6 +21,7 @@ tier_number() {
     essentials) echo 2 ;;
     ai-tools) echo 3 ;;
     performance) echo 4 ;;
+    vapt) echo 5 ;;
     *) echo "unknown tier: $1" >&2; exit 2 ;;
   esac
 }
@@ -29,6 +32,7 @@ tier_bytes() {
     essentials) echo 83886080 ;;
     ai-tools) echo 92274688 ;;
     performance) echo 96468992 ;;
+    vapt) echo 103809024 ;;
   esac
 }
 
@@ -120,6 +124,18 @@ install_performance() {
   install -D -m 0755 "$K6_BINARY" "$MOUNT_DIR/usr/local/bin/k6"
 }
 
+install_vapt() {
+  # Native-only image: vaptr does fingerprint/crawl/content/params/scan entirely
+  # in-process (stdlib Go), so NO external scan tools are baked in. This keeps
+  # the vapt tier small (~vaptr only) and lets it run inside the 512MB v86 guest,
+  # unlike the heavy PD binaries (httpx/katana/nuclei) which thrash the emulator.
+  require_file "$VAPTR_BINARY"
+  require_file "$VAPTR_CONFIG"
+  install -D -m 0755 "$VAPTR_BINARY" "$MOUNT_DIR/usr/local/bin/vaptr"
+  install -D -m 0644 "$VAPTR_CONFIG" "$MOUNT_DIR/opt/vaptr/configs/native.json"
+  install -d "$MOUNT_DIR/root/vaptr-workspace"
+}
+
 write_tier_metadata() {
   local tier="$1" number="$2"
   install -d "$MOUNT_DIR/etc/vmvm"
@@ -155,6 +171,20 @@ verify_tier() {
   else
     chroot "$MOUNT_DIR" /bin/sh -ec '! command -v k6'
   fi
+  if (( number >= 5 )); then
+    chroot "$MOUNT_DIR" /bin/sh -ec '
+      command -v vaptr >/dev/null
+      for tool in httpx katana urlfinder ffuf interactsh-client hakrawler gospider nuclei; do
+        ! command -v "$tool" >/dev/null
+      done
+      vaptr version
+      vaptr caps
+      test -f /opt/vaptr/configs/native.json
+      test -d /root/vaptr-workspace
+    '
+  else
+    chroot "$MOUNT_DIR" /bin/sh -ec '! command -v vaptr; ! command -v httpx; ! command -v nuclei'
+  fi
   [[ "$(cat "$MOUNT_DIR/etc/vmvm/tier")" == "$tier" ]]
 }
 
@@ -168,6 +198,7 @@ build_tier() {
   (( number >= 2 )) && install_essentials
   (( number >= 3 )) && install_ai_tools
   (( number >= 4 )) && install_performance
+  (( number >= 5 )) && install_vapt
   write_tier_metadata "$tier" "$number"
   verify_tier "$tier" "$number"
   cleanup

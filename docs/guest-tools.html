@@ -203,6 +203,26 @@ Use k6 for JavaScript HTTP/API performance and load tests:</p>
 <pre><code class="language-sh">k6 new load-test.js
 k6 run --vus 5 --duration 30s load-test.js
 </code></pre>
+<h2 id="vaptr-authorized-web-vapt-orchestration"><code>vaptr</code> — authorized web VAPT orchestration</h2>
+<p>The cumulative <strong>VAPT — native scanner</strong> VMVM image adds the static 32-bit
+<a href="https://github.com/avirads/vmvapt"><code>vaptr</code></a> orchestrator. No external tools are
+bundled — every stage runs in-process through vaptr's built-in <code>native</code> backends:</p>
+<pre><code class="language-text">fingerprint  crawl  content discovery  parameter discovery  vulnerability checks
+</code></pre>
+<p>Because there are no heavyweight helper binaries (httpx, katana, nuclei, ffuf,
+…), the whole pipeline fits and runs inside the 512 MB v86 guest. Inspect
+capabilities and prepare a scan:</p>
+<pre><code class="language-sh">vaptr version
+vaptr caps
+cp /opt/vaptr/configs/native.json /root/vaptr-scan.json
+vi /root/vaptr-scan.json
+vaptr scan -config /root/vaptr-scan.json
+</code></pre>
+<p>Before running a scan, replace the example target, allowed domains, workspace,
+and authorization reference. Use this tooling only for systems you own or have
+explicit written permission to assess. Normal targets require working guest
+networking; the browser-backed <code>vmfetch</code> command is not a general network
+adapter for Vaptr or its child processes.</p>
 <p>ShellCheck is documented but is not installed because
 Alpine 3.22 does not publish an x86 package and this VM image remains fixed-size.
 Remote Git and curl require a default route; without one, use
@@ -245,8 +265,8 @@ hosting page; use short-lived, narrow-scope keys. Never save a VM snapshot while
 a key remains in the environment or shell history.</p>
 <h2 id="cloud-llms-openai-claude-gemini-and-gateways">Cloud LLMs: OpenAI, Claude, Gemini, and gateways</h2>
 <p>Rig, Zerostack, vmlang, and vmmastra use the model loaded under
-<strong>Settings → AI Model</strong> by default. This Local WebGPU path remains direct
-and does not pass through the cloud router. Add OpenAI, Anthropic, Gemini, or an
+<strong>Settings → AI Model</strong> by default. This Local WebGPU path remains direct and
+does not pass through the cloud router. Add OpenAI, Anthropic, Gemini, or an
 OpenAI-compatible endpoint under <strong>Settings → Cloud AI providers</strong>, then either
 choose a per-agent default there or override one invocation:</p>
 <pre><code class="language-sh">rig --provider work-openai --model gpt-4.1-mini 'Review this project'
@@ -254,15 +274,18 @@ vmlang --provider claude --session review-a run 'Review this project'
 vmmastra --provider gemini --session build-a 'Implement and test the change'
 zerostack --provider local-gateway --model provider/model-id
 </code></pre>
-<p><code>--provider</code>, <code>--model</code>, and <code>--session</code> must precede the task or
-subcommand. A named session is pinned to its first provider/model selection.
+<p><code>--provider</code>, <code>--model</code>, and <code>--session</code> must precede the task or subcommand.
+A named session is pinned to its first provider/model selection, preventing a
+later request from silently moving its conversation to another service.
 Different terminal instances can use different session names and providers.
-Omit all three flags to use that agent's Settings default; every initial default
-is <code>local</code>.</p>
-<p>API keys remain in the current browser tab by default. <strong>Retain key in this
-browser</strong> uses browser storage, not a hardware-backed secret vault. Cloud
-errors are reported and never trigger fallback to another model. The provider
-receives prompts and content placed in model context.</p>
+Omit all three flags to use that agent's Settings default; the initial default
+for every agent is <code>local</code>.</p>
+<p>API keys are kept in the current browser tab by default. Selecting <strong>Retain key
+in this browser</strong> stores the key in browser storage, which is convenient but is
+not a hardware-backed secret vault. Cloud requests fail visibly on provider,
+authentication, network, or CORS errors and never fall back to another model.
+The provider receives the agent prompt and any content the agent places in its
+model context.</p>
 <h3 id="openai-responses-api">OpenAI Responses API</h3>
 <p><code>vmai</code> is the shortest path when the provider implements the OpenAI Responses
 API and permits browser-origin requests:</p>

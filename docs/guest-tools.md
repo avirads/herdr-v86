@@ -144,6 +144,35 @@ k6 new load-test.js
 k6 run --vus 5 --duration 30s load-test.js
 ```
 
+## `vaptr` — authorized web VAPT orchestration
+
+The cumulative **VAPT — native scanner** VMVM image adds the static 32-bit
+[`vaptr`](https://github.com/avirads/vmvapt) orchestrator. No external tools are
+bundled — every stage runs in-process through vaptr's built-in `native`
+backends:
+
+```text
+fingerprint  crawl  content discovery  parameter discovery  vulnerability checks
+```
+
+Because there are no heavyweight helper binaries (httpx, katana, nuclei, ffuf,
+…), the whole pipeline fits and runs inside the 512 MB v86 guest. Inspect
+capabilities and prepare a scan:
+
+```sh
+vaptr version
+vaptr caps
+cp /opt/vaptr/configs/native.json /root/vaptr-scan.json
+vi /root/vaptr-scan.json
+vaptr scan -config /root/vaptr-scan.json
+```
+
+Before running a scan, replace the example target, allowed domains, workspace,
+and authorization reference. Use this tooling only for systems you own or have
+explicit written permission to assess. Normal targets require working guest
+networking; the browser-backed `vmfetch` command is not a general network
+adapter for Vaptr or its child processes.
+
 ShellCheck is documented but is not installed because
 Alpine 3.22 does not publish an x86 package and this VM image remains fixed-size.
 Remote Git and curl require a default route; without one, use

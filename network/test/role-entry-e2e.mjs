@@ -56,7 +56,7 @@ try {
   const host = await load('?role=agent', 6000);
   const barebones = await load('?role=agent&tier=barebones', 6000);
   const guest = await load('?role=human', 2500);
-  const vmDisk = path => /vm-(?:barebones|essentials|ai-tools|performance)-i386-ext4\.img/i.test(path);
+  const vmDisk = path => /vm-(?:barebones|essentials|ai-tools|performance|vapt)-i386-ext4\.img/i.test(path);
   const expensive = path => vmDisk(path) || /\.litertlm$/i.test(path);
   const result = {
     undecidedRequests: undecided,
