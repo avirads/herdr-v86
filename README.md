@@ -17,7 +17,7 @@ Either action hides the shell and returns to the corresponding wizard step.
 After skipping, use **Settings → Configure providers** to configure the model or
 AutoBro independently without repeating the other provider's setup.
 
-- `bzImage-network` + the images in `vm-images.json` — four cumulative VMVM
+- `bzImage-network` + the images in `vm-images.json` — cumulative VMVM
   tiers from Barebones through Performance testing. AI Tools is the default
   and includes browser-bridge tools, tmux 3.5a, Zerostack, and Rig. See
   [VMVM image tiers](docs/vm-images.md).

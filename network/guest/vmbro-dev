@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+project="${1:-/root/project}"
+port="${PORT:-3000}"
+
+cd "$project"
+mkdir -p dist
+esbuild src/server.ts \
+  --bundle \
+  --format=esm \
+  --platform=neutral \
+  --target=es2020 \
+  --outfile=dist/server.js
+
+echo "Vmbro dev project listening on http://127.0.0.1:${port}/"
+exec nc -lk -p "$port" -e vmbro-httpd \
+  --cgi \
+  --root "$project/dist" \
+  --handler "$project/server.js"

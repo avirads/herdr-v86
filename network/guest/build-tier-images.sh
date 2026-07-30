@@ -12,14 +12,18 @@ K6_BINARY="${K6_BINARY:-$PROJECT_DIR/network/guest/bin/k6}"
 VAPTR_BINARY="${VAPTR_BINARY:-$PROJECT_DIR/network/guest/bin/vaptr}"
 VAPTR_CONFIG="${VAPTR_CONFIG:-$PROJECT_DIR/network/guest/vaptr-native.json}"
 DOMAIN_SKILLS_PACKAGE="${DOMAIN_SKILLS_PACKAGE:-$PROJECT_DIR/skills/guidewire-policycenter-1.0.0.zip}"
+ESBUILD_BINARY="${ESBUILD_BINARY:-$PROJECT_DIR/network/guest/bin/esbuild}"
+VMBRO_HTTPD_BINARY="${VMBRO_HTTPD_BINARY:-$PROJECT_DIR/network/guest/bin/vmbro-httpd}"
+DEV_TEMPLATE="${DEV_TEMPLATE:-$PROJECT_DIR/network/guest/dev-template}"
 
-TIERS=(barebones essentials ai-tools performance vapt)
+TIERS=(barebones essentials ai-tools dev performance vapt)
 
 tier_number() {
   case "$1" in
     barebones) echo 1 ;;
     essentials) echo 2 ;;
     ai-tools) echo 3 ;;
+    dev) echo 4 ;;
     performance) echo 4 ;;
     vapt) echo 5 ;;
     *) echo "unknown tier: $1" >&2; exit 2 ;;
@@ -31,6 +35,7 @@ tier_bytes() {
     barebones) echo 67108864 ;;
     essentials) echo 83886080 ;;
     ai-tools) echo 92274688 ;;
+    dev) echo 125829120 ;;
     performance) echo 96468992 ;;
     vapt) echo 103809024 ;;
   esac
@@ -124,6 +129,20 @@ install_performance() {
   install -D -m 0755 "$K6_BINARY" "$MOUNT_DIR/usr/local/bin/k6"
 }
 
+install_dev() {
+  require_file "$ESBUILD_BINARY"
+  require_file "$VMBRO_HTTPD_BINARY"
+  [[ -d "$DEV_TEMPLATE" ]] || { echo "required directory not found: $DEV_TEMPLATE" >&2; exit 1; }
+  install -D -m 0755 "$ESBUILD_BINARY" "$MOUNT_DIR/usr/local/bin/esbuild"
+  install -D -m 0755 "$VMBRO_HTTPD_BINARY" "$MOUNT_DIR/usr/local/bin/vmbro-httpd"
+  install -D -m 0755 "$PROJECT_DIR/network/guest/vmbro-dev" "$MOUNT_DIR/usr/local/bin/vmbro-dev"
+  install -d "$MOUNT_DIR/opt/vmbro/templates/mastra-hono-astro"
+  cp -a "$DEV_TEMPLATE/." "$MOUNT_DIR/opt/vmbro/templates/mastra-hono-astro/"
+  rm -rf "$MOUNT_DIR/root/project"
+  install -d "$MOUNT_DIR/root/project"
+  cp -a "$DEV_TEMPLATE/." "$MOUNT_DIR/root/project/"
+}
+
 install_vapt() {
   # Native-only image: vaptr does fingerprint/crawl/content/params/scan entirely
   # in-process (stdlib Go), so NO external scan tools are baked in. This keeps
@@ -166,12 +185,24 @@ verify_tier() {
   else
     chroot "$MOUNT_DIR" /bin/sh -ec '! command -v herdr; ! command -v rig; ! command -v git'
   fi
-  if (( number >= 4 )); then
+  if [[ "$tier" == dev ]]; then
+    chroot "$MOUNT_DIR" /bin/sh -ec '
+      command -v esbuild vmbro-httpd vmbro-dev
+      test -f /root/project/src/pages/index.astro
+      test -f /root/project/src/server.ts
+      test -f /root/project/dist/index.html
+      test -f /opt/vmbro/templates/mastra-hono-astro/README.md
+      esbuild --version
+    '
+  else
+    chroot "$MOUNT_DIR" /bin/sh -ec '! command -v vmbro-dev'
+  fi
+  if [[ "$tier" == performance || "$tier" == vapt ]]; then
     chroot "$MOUNT_DIR" /usr/local/bin/k6 version
   else
     chroot "$MOUNT_DIR" /bin/sh -ec '! command -v k6'
   fi
-  if (( number >= 5 )); then
+  if [[ "$tier" == vapt ]]; then
     chroot "$MOUNT_DIR" /bin/sh -ec '
       command -v vaptr >/dev/null
       for tool in httpx katana urlfinder ffuf interactsh-client hakrawler gospider nuclei; do
@@ -197,8 +228,9 @@ build_tier() {
   bootstrap_image "$image" "$bytes"
   (( number >= 2 )) && install_essentials
   (( number >= 3 )) && install_ai_tools
-  (( number >= 4 )) && install_performance
-  (( number >= 5 )) && install_vapt
+  [[ "$tier" == dev ]] && install_dev
+  [[ "$tier" == performance || "$tier" == vapt ]] && install_performance
+  [[ "$tier" == vapt ]] && install_vapt
   write_tier_metadata "$tier" "$number"
   verify_tier "$tier" "$number"
   cleanup

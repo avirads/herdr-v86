@@ -11,11 +11,12 @@ const expected = [
   ['barebones', 67108864],
   ['essentials', 83886080],
   ['ai-tools', 92274688],
+  ['dev', 125829120],
   ['performance', 96468992],
   ['vapt', 103809024],
 ];
 
-test('VM image manifest defines five ordered cumulative tiers', () => {
+test('VM image manifest defines six ordered cumulative tiers', () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.defaultTier, 'ai-tools');
   assert.deepEqual(Object.keys(manifest.tiers), expected.map(([tier]) => tier));
@@ -38,13 +39,16 @@ test('built image files match manifest byte sizes', async () => {
 test('tier builder applies each preceding installer and validates boundaries', () => {
   assert.match(builder, /number >= 2 \)\) && install_essentials/);
   assert.match(builder, /number >= 3 \)\) && install_ai_tools/);
-  assert.match(builder, /number >= 4 \)\) && install_performance/);
-  assert.match(builder, /number >= 5 \)\) && install_vapt/);
+  assert.match(builder, /\[\[ "\$tier" == dev \]\] && install_dev/);
+  assert.match(builder, /\[\[ "\$tier" == performance \|\| "\$tier" == vapt \]\] && install_performance/);
+  assert.match(builder, /\[\[ "\$tier" == vapt \]\] && install_vapt/);
   assert.match(builder, /! command -v curl; ! command -v vmagent-rpc/);
   assert.match(builder, /! command -v herdr; ! command -v rig; ! command -v git/);
   assert.match(builder, /! command -v k6/);
   assert.match(builder, /! command -v nuclei/);
   assert.match(builder, /command -v vaptr/);
+  assert.match(builder, /command -v esbuild vmbro-httpd vmbro-dev/);
+  assert.match(builder, /test -f \/root\/project\/src\/pages\/index\.astro/);
   assert.match(builder, /for tool in httpx katana urlfinder ffuf interactsh-client hakrawler gospider nuclei/);
   assert.match(builder, /test -f \/opt\/vaptr\/configs\/native\.json/);
 });

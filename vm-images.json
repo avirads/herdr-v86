@@ -26,6 +26,14 @@
       "version": "2026.07.29.3",
       "sha256": "e91d6fc024944a13bbecf703f634b6eb7c71b31f5e18765ab3a9183492646e7d"
     },
+    "dev": {
+      "name": "Dev",
+      "description": "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.",
+      "url": "vm-dev-i386-ext4.img",
+      "size": 125829120,
+      "version": "2026.07.30.1",
+      "sha256": "3f9176133d26255ea759c1813ff6678dca2b9476da07a4128b3ff0b4f54aa622"
+    },
     "performance": {
       "name": "Performance testing",
       "description": "AI Tools plus Grafana k6.",

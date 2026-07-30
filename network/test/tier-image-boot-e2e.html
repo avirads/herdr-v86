@@ -10,6 +10,7 @@ const images = {
   barebones: ["vm-barebones-i386-ext4.img", 67108864, 1],
   essentials: ["vm-essentials-i386-ext4.img", 83886080, 2],
   "ai-tools": ["vm-ai-tools-i386-ext4.img", 92274688, 3],
+  dev: ["vm-dev-i386-ext4.img", 125829120, 4],
   performance: ["vm-performance-i386-ext4.img", 96468992, 4],
   vapt: ["vm-vapt-i386-ext4.img", 103809024, 5],
 };
@@ -51,7 +52,11 @@ emulator.add_listener("serial0-output-byte", byte => {
       `test "$(cat /etc/vmvm/tier-level)" = "${level}"`,
       level >= 2 ? "command -v curl jq qjs vmagent-rpc >/dev/null" : "! command -v curl >/dev/null",
       level >= 3 ? "command -v tmux herdr git rg zerostack rig vmfetch vmllm vmlang vmmastra >/dev/null" : "! command -v rig >/dev/null",
-      level >= 4 ? "command -v k6 >/dev/null" : "! command -v k6 >/dev/null",
+      tier === "dev"
+        ? "command -v esbuild vmbro-httpd vmbro-dev >/dev/null && test -f /root/project/src/pages/index.astro && ! command -v k6 >/dev/null"
+        : level >= 4
+          ? "command -v k6 >/dev/null"
+          : "! command -v k6 >/dev/null",
     ].join(" && ");
     emulator.serial0_send(`echo TIER_CHECK_BEGIN; ${checks}; echo TIER_CHECK_RESULT:$?\n`);
   }
