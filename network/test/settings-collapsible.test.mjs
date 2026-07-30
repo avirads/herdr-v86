@@ -13,6 +13,7 @@ test("every titled Settings section is a native collapsible control", () => {
     "autobro-settings-title",
     "voice-settings-title",
     "assets-transfer-settings-title",
+    "remote-agent-settings-title",
     "diagnostics-settings-title",
   ];
   for (const title of titles) {
@@ -22,8 +23,13 @@ test("every titled Settings section is a native collapsible control", () => {
 
 test("Settings sections are collapsed by default", () => {
   const sections = [...settings.matchAll(/<details class="provider-section"[^>]*>/g)].map(match => match[0]);
-  assert.equal(sections.length, 7);
+  assert.equal(sections.length, 8);
   assert.ok(sections.every(section => !/\sopen(?:\s|>|=)/.test(section)));
+});
+
+test("Help remains directly accessible instead of being collapsed", () => {
+  assert.match(settings, /<div class="settings-action">\s*<div><strong>Help<\/strong>/);
+  assert.doesNotMatch(settings, /<summary><h3[^>]*>Help<\/h3><\/summary>/);
 });
 
 test("collapsible headings have visible keyboard and touch affordances", () => {
