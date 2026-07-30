@@ -178,6 +178,7 @@
     <button id="copy-terminal" type="button" title="Copy selected text, or the visible terminal when nothing is selected (Ctrl+Shift+C)">Copy</button>
     <button id="paste-terminal" type="button" title="Paste clipboard text into the shell (Ctrl+Shift+V)">Paste</button>
     <button id="voice-button" type="button" title="Dictate locally with Moonshine">🎙 Voice</button>
+    <button id="open-dev-app" type="button" title="Open the Dev VM app running on guest port 3000" hidden>Open Dev App</button>
     <button id="open-settings" title="Reset model or AutoBro configuration">Settings</button>
   </div>
 </header>
@@ -1759,6 +1760,20 @@ document.getElementById("export-file").onclick = async () => {
   }
 };
 document.getElementById("open-help").onclick = () => { settingsDialog.close(); window.open("docs/guest-tools.html", "_blank", "noopener"); };
+
+const devAppButton = document.getElementById("open-dev-app");
+devAppButton.hidden = selectedVMImage !== "dev";
+devAppButton.onclick = () => {
+  const devURL = "http://10.77.0.15:3000/";
+  const opened = window.open(devURL, "_blank", "noopener");
+  if (!opened) {
+    status("Dev app popup blocked — allow popups, then select Open Dev App again");
+    return;
+  }
+  status(location.protocol === "https:"
+    ? "Opening Dev app on guest port 3000 — the native network helper is required from HTTPS"
+    : "Opening Dev app on guest port 3000");
+};
 async function importFileIntoVm(file, afterImport = "") {
   if (!file) return;
   if (file.size > MAX_TRANSFER_BYTES) return status("import limited to 8 MiB");

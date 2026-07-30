@@ -62,3 +62,9 @@ test('Settings selects a manifest image and warns before restart', () => {
   assert.match(html, /localStorage\.setItem\("vm\.imageTier", nextTier\)/);
   assert.match(html, /next\.searchParams\.set\("tier", nextTier\)/);
 });
+
+test('Dev tier exposes its port 3000 app launcher', () => {
+  assert.match(html, /id="open-dev-app"[^>]*hidden>Open Dev App<\/button>/);
+  assert.match(html, /devAppButton\.hidden = selectedVMImage !== "dev"/);
+  assert.match(html, /http:\/\/10\.77\.0\.15:3000\//);
+});
