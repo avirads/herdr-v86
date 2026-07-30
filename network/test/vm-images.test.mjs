@@ -55,6 +55,8 @@ test('tier builder applies each preceding installer and validates boundaries', (
 
 test('Settings selects a manifest image and warns before restart', () => {
   assert.match(html, /id="vm-image-tier"/);
+  assert.match(html, /"dev": \{ name: "Dev".*url: "vm-dev-i386-ext4\.img".*size: 125829120/);
+  assert.match(html, /dev: "Dev tier · includes AI Tools"/);
   assert.match(html, /id="apply-vm-image"[^>]*>Apply &amp; restart/);
   assert.match(html, /Each image has an independent guest filesystem/);
   assert.match(html, /localStorage\.setItem\("vm\.imageTier", nextTier\)/);
