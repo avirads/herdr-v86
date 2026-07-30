@@ -38,5 +38,8 @@ fi
 # The Dev tier is an appliance-style development image: compile and serve its
 # starter automatically while the interactive shell remains immediately usable.
 if [ "$(cat /etc/vmvm/tier 2>/dev/null)" = "dev" ] && [ -x /usr/local/bin/vmbro-dev ]; then
-  (cd /root/project && PORT=3000 /usr/local/bin/vmbro-dev >/var/log/vmbro-dev.log 2>&1) &
+  # Let init spawn the serial getty first. On slower browsers, starting the
+  # compiler immediately can starve the shell-prompt event that completes the
+  # host page's boot overlay.
+  (sleep 5; cd /root/project && PORT=3000 /usr/local/bin/vmbro-dev >/var/log/vmbro-dev.log 2>&1) &
 fi

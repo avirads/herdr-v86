@@ -73,7 +73,7 @@ test('Dev tier exposes its port 3000 app launcher', () => {
 
 test('Dev tier starts and opens its app automatically', () => {
   assert.match(startup, /\[ "\$\(cat \/etc\/vmvm\/tier 2>\/dev\/null\)" = "dev" \]/);
-  assert.match(startup, /PORT=3000 \/usr\/local\/bin\/vmbro-dev >\/var\/log\/vmbro-dev\.log 2>&1/);
+  assert.match(startup, /\(sleep 5; cd \/root\/project && PORT=3000 \/usr\/local\/bin\/vmbro-dev >\/var\/log\/vmbro-dev\.log 2>&1\) &/);
   assert.match(html, /window\.open\("dev-app\.html", "herdr-dev-app"\)/);
   assert.match(devApp, /location\.replace\(appURL\)/);
   assert.match(devApp, /http:\/\/10\.77\.0\.15:3000\//);
