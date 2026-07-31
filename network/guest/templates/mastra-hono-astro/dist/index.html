@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width" />
+		<title>VMVM Dev IDE</title>
+		<link rel="icon" type="image/png" href="vmvm-logo.png" />
+		<link rel="stylesheet" href="styles.css" />
+		<script>
+			const requestedTheme = new URLSearchParams(location.search).get('theme');
+			const initialTheme = ['light', 'dark'].includes(requestedTheme)
+				? requestedTheme
+				: localStorage.getItem('dev.theme') || 'dark';
+			document.documentElement.dataset.theme = initialTheme;
+			localStorage.setItem('dev.theme', initialTheme);
+			addEventListener('message', (event) => {
+				if (event.origin !== location.origin || event.data?.type !== 'vmvm-theme') return;
+				if (!['light', 'dark'].includes(event.data.theme)) return;
+				document.documentElement.dataset.theme = event.data.theme;
+				localStorage.setItem('dev.theme', event.data.theme);
+			});
+		</script>
+	</head>
+	<body>
+		<main class="shell">
+			<header>
+				<div class="brand">
+					<img src="vmvm-logo.png" alt="" />
+					<div>
+						<p class="eyebrow">ASTRO · HONO · WEBGPU</p>
+						<h1>VMVM Dev IDE</h1>
+						<p class="subtitle">Node-free TypeScript development inside the browser VM.</p>
+					</div>
+				</div>
+				<div class="header-actions">
+					<span class="status">Dev server ready</span>
+					<button id="theme" class="quiet icon-button" type="button" title="Switch theme" aria-label="Switch theme">◐</button>
+					<button id="refresh" class="quiet icon-button" type="button" title="Refresh IDE" aria-label="Refresh IDE">↻</button>
+				</div>
+			</header>
+			<section class="connection">
+				<div class="model">
+					<strong>Astro + Hono runtime</strong>
+					<small>Native esbuild and Chi serving the guest workspace on port 3000.</small>
+				</div>
+				<button id="hello" type="button">Check API</button>
+			</section>
+			<pre id="output" class="messages">Ready.</pre>
+		</main>
+		<script>
+			const output = document.querySelector('#output');
+			document.querySelector('#hello').addEventListener('click', async () => {
+				const response = await fetch('api/health');
+				output.textContent = JSON.stringify(await response.json(), null, 2);
+			});
+			document.querySelector('#theme').addEventListener('click', () => {
+				const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+				document.documentElement.dataset.theme = next;
+				localStorage.setItem('dev.theme', next);
+			});
+			document.querySelector('#refresh').addEventListener('click', () => location.reload());
+		</script>
+	</body>
+</html>

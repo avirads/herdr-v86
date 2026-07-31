@@ -4,21 +4,19 @@ set -eu
 PATH="/usr/local/bin:/usr/bin:/bin"
 export PATH
 
+# Dev IDE supervisor: serves the browsercode-style IDE shell and its /api/*
+# routes on port 3000 (the public /ide/ reverse-proxy target), while running
+# the scaffolded app server on its own port (3100, the /preview/ target).
+#
+# First boot scaffolds /root/project from /opt/vmbro/templates/<framework>,
+# then builds (esbuild bundles + Astro render) and starts the app server.
 project="${1:-/root/project}"
 port="${PORT:-3000}"
 
-cd "$project"
-mkdir -p dist
-esbuild src/server.ts \
-  --bundle \
-  --format=esm \
-  --platform=neutral \
-  --target=es2020 \
-  --outfile=dist/server.js
-
-echo "Vmbro dev project listening on http://127.0.0.1:${port}/"
-echo "VMVM will enter the Dev IDE at guest http://10.77.0.15:${port}/ when ready."
-exec nc -lk -p "$port" -e vmbro-httpd \
-  --cgi \
-  --root "$project/dist" \
-  --handler "$project/server.js"
+exec vmbro-httpd \
+  --supervise "$project" \
+  --templates /opt/vmbro/templates \
+  --app-port 3100 \
+  --root /opt/vmbro/ide \
+  --bind 0.0.0.0 \
+  --port "$port"

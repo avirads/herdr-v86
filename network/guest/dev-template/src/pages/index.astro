@@ -73,8 +73,7 @@ const title = 'Mastra Weather Agent';
 			const requestedTheme = new URLSearchParams(location.search).get('theme');
 			const initialTheme = ['light', 'dark'].includes(requestedTheme)
 				? requestedTheme
-				: localStorage.getItem('dev.theme') ||
-					(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+				: localStorage.getItem('dev.theme') || 'dark';
 			document.documentElement.dataset.theme = initialTheme;
 			localStorage.setItem('dev.theme', initialTheme);
 			addEventListener('message', (event) => {

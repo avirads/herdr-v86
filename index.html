@@ -8,8 +8,7 @@
 <link rel="stylesheet" href="xterm.css">
 <script>
   document.documentElement.dataset.theme =
-    localStorage.getItem("vm.theme") ||
-    (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    localStorage.getItem("vm.theme") || "dark";
 </script>
 <style>
   :root { color-scheme: dark; }
@@ -332,9 +331,9 @@
         <button id="reset-llm" type="button">Reset</button>
       </div>
       <div id="settings-model-downloads" class="model-downloads" aria-label="Download an AI model not yet loaded">
-        <a class="tool-link" data-model-file="gemma-4-E2B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download Gemma 4 E2B</a>
-        <a class="tool-link" data-model-file="gemma-4-E4B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 E4B</a>
-        <a class="tool-link" data-model-file="gemma-4-12B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 12B</a>
+        <a class="tool-link" data-model-file="gemma-4-E2B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download Gemma 4 E2B (2.0 GB)</a>
+        <a class="tool-link" data-model-file="gemma-4-E4B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 E4B (3.0 GB)</a>
+        <a class="tool-link" data-model-file="gemma-4-12B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 12B (6.0 GB)</a>
       </div>
       <details class="model-more-info">
         <summary>More info</summary>

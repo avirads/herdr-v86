@@ -15,6 +15,8 @@ DOMAIN_SKILLS_PACKAGE="${DOMAIN_SKILLS_PACKAGE:-$PROJECT_DIR/skills/guidewire-po
 ESBUILD_BINARY="${ESBUILD_BINARY:-$PROJECT_DIR/network/guest/bin/esbuild}"
 VMBRO_HTTPD_BINARY="${VMBRO_HTTPD_BINARY:-$PROJECT_DIR/network/guest/bin/vmbro-httpd}"
 DEV_TEMPLATE="${DEV_TEMPLATE:-$PROJECT_DIR/network/guest/dev-template}"
+DEV_TEMPLATES="${DEV_TEMPLATES:-$PROJECT_DIR/network/guest/templates}"
+DEV_IDE="${DEV_IDE:-$PROJECT_DIR/network/guest/dev-ide}"
 
 TIERS=(barebones essentials ai-tools dev performance vapt)
 
@@ -133,14 +135,29 @@ install_dev() {
   require_file "$ESBUILD_BINARY"
   require_file "$VMBRO_HTTPD_BINARY"
   [[ -d "$DEV_TEMPLATE" ]] || { echo "required directory not found: $DEV_TEMPLATE" >&2; exit 1; }
+  [[ -d "$DEV_TEMPLATES" ]] || { echo "required directory not found: $DEV_TEMPLATES" >&2; exit 1; }
+  [[ -d "$DEV_IDE" ]] || { echo "required directory not found: $DEV_IDE" >&2; exit 1; }
   install -D -m 0755 "$ESBUILD_BINARY" "$MOUNT_DIR/usr/local/bin/esbuild"
   install -D -m 0755 "$VMBRO_HTTPD_BINARY" "$MOUNT_DIR/usr/local/bin/vmbro-httpd"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmbro-dev" "$MOUNT_DIR/usr/local/bin/vmbro-dev"
-  install -d "$MOUNT_DIR/opt/vmbro/templates/mastra-hono-astro"
-  cp -a "$DEV_TEMPLATE/." "$MOUNT_DIR/opt/vmbro/templates/mastra-hono-astro/"
+  # All framework templates ship into /opt/vmbro/templates/<id>. The Dev IDE
+  # supervisor scaffolds from these on first boot; the mastra starter is also
+  # pre-baked into /root/project so the image is immediately useful.
+  install -d "$MOUNT_DIR/opt/vmbro/templates"
+  for template in "$DEV_TEMPLATES"/*; do
+    [[ -d "$template" ]] || continue
+    install -d "$MOUNT_DIR/opt/vmbro/templates/$(basename "$template")"
+    cp -a "$template/." "$MOUNT_DIR/opt/vmbro/templates/$(basename "$template")/"
+  done
+  # The browsercode-style IDE shell (sidebar + Monaco + preview) is static.
+  install -d "$MOUNT_DIR/opt/vmbro/ide"
+  cp -a "$DEV_IDE/." "$MOUNT_DIR/opt/vmbro/ide/"
   rm -rf "$MOUNT_DIR/root/project"
   install -d "$MOUNT_DIR/root/project"
   cp -a "$DEV_TEMPLATE/." "$MOUNT_DIR/root/project/"
+  # Pre-seed the framework marker so the supervisor does not re-scaffold on first boot.
+  install -d "$MOUNT_DIR/root/project/.vmbro"
+  printf 'mastra-hono-astro\n' > "$MOUNT_DIR/root/project/.vmbro/framework"
 }
 
 install_vapt() {
@@ -191,6 +208,13 @@ verify_tier() {
       test -f /root/project/src/pages/index.astro
       test -f /root/project/src/server.ts
       test -f /root/project/dist/index.html
+      test -f /root/project/.vmbro/framework
+      test -d /opt/vmbro/ide
+      test -f /opt/vmbro/ide/index.html
+      test -f /opt/vmbro/ide/app.js
+      for t in static quickjs chi astro-hono mastra-hono-astro esm typescript; do
+        test -d /opt/vmbro/templates/$t || exit 1
+      done
       test -f /opt/vmbro/templates/mastra-hono-astro/README.md
       esbuild --version
     '

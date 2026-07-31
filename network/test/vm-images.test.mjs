@@ -106,7 +106,7 @@ test('VMVM branding, themes, and refresh controls are present', () => {
   assert.match(html, /id="refresh-app"/);
   assert.match(html, /id="share-ide"/);
   assert.match(html, /navigator\.clipboard\.writeText\(shareURL\)/);
-  assert.match(html, /aria-label="Settings">⚙/);
+  assert.match(html, /aria-label="Settings">\s*<svg/);
 });
 
 test('host terminal control commands are hidden from xterm', () => {

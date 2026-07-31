@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Chi API on vmbro</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<main>
+			<p class="eyebrow">NATIVE HTTP · EDITABLE JAVASCRIPT</p>
+			<h1>Chi meets QuickJS</h1>
+			<p>The Go binary handles HTTP and static assets. QuickJS runs your API routes.</p>
+			<button id="hello">Call GET /api/hello</button>
+			<pre id="output">Ready.</pre>
+		</main>
+		<script>
+			const output = document.querySelector('#output');
+			document.querySelector('#hello').onclick = async () => {
+				const response = await fetch('/api/hello?from=browser');
+				output.textContent = await response.text();
+			};
+		</script>
+	</body>
+</html>

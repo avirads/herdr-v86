@@ -28,11 +28,11 @@
     },
     "dev": {
       "name": "Dev",
-      "description": "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.",
+      "description": "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.",
       "url": "vm-dev-i386-ext4.img",
       "size": 99614720,
-      "version": "2026.07.31.9",
-      "sha256": "bcbc3bc290af396169a56cbfc0cf76989ab4d80f566c3632191452cc7be291b1"
+      "version": "2026.07.31.10",
+      "sha256": "0017dd5d26b113eafcd23277dcf739d5134bd8deca1db6009766e38d702d2b33"
     },
     "performance": {
       "name": "Performance testing",

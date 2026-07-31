@@ -18,6 +18,13 @@ test('fapstaff exposes the running Dev IDE through the public HTTPS origin', () 
   assert.match(config, /Cache-Control "no-store"/);
 });
 
+test('fapstaff exposes the scaffolded app preview on the guest app port', () => {
+  assert.match(config, /location = \/preview \{/);
+  assert.match(config, /location \/preview\/ \{/);
+  assert.match(config, /proxy_pass http:\/\/10\.77\.0\.15:3100\//);
+  assert.match(config, /return 301 \/preview\//);
+});
+
 test('fapstaff exposes the scoped gateway session and WebSocket routes', () => {
   assert.match(config, /location = \/v1\/sessions \{/);
   assert.match(config, /location = \/v1\/ethernet \{/);
