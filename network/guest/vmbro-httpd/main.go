@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"hash/fnv"
 	"fmt"
 	"io"
 	"log"
@@ -118,6 +119,121 @@ type supervisor struct {
 	framework    string
 	cmd          *exec.Cmd
 	logTail      []string
+	hub          *eventHub
+	lastSnap     string
+}
+
+// eventHub fans out a change notification to every connected SSE client.
+type eventHub struct {
+	mu   sync.Mutex
+	subs map[chan struct{}]struct{}
+}
+
+func newEventHub() *eventHub {
+	return &eventHub{subs: make(map[chan struct{}]struct{})}
+}
+
+func (h *eventHub) subscribe() chan struct{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	ch := make(chan struct{}, 1)
+	h.subs[ch] = struct{}{}
+	return ch
+}
+
+func (h *eventHub) unsubscribe(ch chan struct{}) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.subs, ch)
+}
+
+func (h *eventHub) notify() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for ch := range h.subs {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// workspaceSnapshot fingerprints the workspace files so a polling loop can
+// detect edits. Build outputs and supervisor metadata are excluded so they do
+// not trigger rebuilds of their own.
+func workspaceSnapshot(workspace string) string {
+	hash := fnv.New64a()
+	_ = filepath.Walk(workspace, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, err := filepath.Rel(workspace, path)
+		if err != nil || rel == "." {
+			return nil
+		}
+		if info.IsDir() {
+			switch filepath.Base(path) {
+			case ".vmbro", "dist", ".git", "node_modules":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		_, _ = fmt.Fprintf(hash, "%s|%d|%d|", rel, info.Size(), info.ModTime().UnixNano())
+		return nil
+	})
+	return fmt.Sprintf("%x", hash.Sum64())
+}
+
+// watchWorkspace polls the workspace for edits and, once the tree is quiet for
+// a short interval, rebuilds (if the framework has a build step) and notifies
+// the IDE shell so it can reload the preview. Build outputs and supervisor
+// metadata are excluded by workspaceSnapshot so the rebuild itself does not
+// loop. The baseline is re-established after scaffold/build/restart so those
+// explicit actions do not trigger a redundant rebuild.
+func (s *supervisor) watchWorkspace() {
+	ticker := time.NewTicker(700 * time.Millisecond)
+	defer ticker.Stop()
+	var lastChange time.Time
+	for range ticker.C {
+		snap := workspaceSnapshot(s.workspace)
+		s.mu.Lock()
+		changed := snap != s.lastSnap
+		if changed {
+			s.lastSnap = snap
+			lastChange = time.Now()
+		}
+		quiet := !lastChange.IsZero() && time.Since(lastChange) >= 1200*time.Millisecond
+		if quiet {
+			lastChange = time.Time{}
+		}
+		s.mu.Unlock()
+		if changed {
+			continue
+		}
+		if quiet {
+			s.handleWorkspaceChange()
+		}
+	}
+}
+
+func (s *supervisor) handleWorkspaceChange() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.addLog("workspace changed — rebuilding")
+	if err := s.build(); err != nil {
+		s.addLog("rebuild failed: " + err.Error())
+		s.hub.notify()
+		s.resetWatcher()
+		return
+	}
+	s.addLog("rebuild finished")
+	s.resetWatcher()
+	s.hub.notify()
+}
+
+// resetWatcher re-baselines the watcher after an explicit scaffold/build/restart.
+func (s *supervisor) resetWatcher() {
+	s.lastSnap = workspaceSnapshot(s.workspace)
 }
 
 func (s *supervisor) frameworkConfig(id string) *Framework {
@@ -481,6 +597,7 @@ func (s *supervisor) handleScaffold(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"ok": "false", "message": err.Error()})
 		return
 	}
+	s.resetWatcher()
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true", "framework": s.framework})
 }
 
@@ -495,6 +612,7 @@ func (s *supervisor) handleBuild(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"ok": "false", "message": err.Error()})
 		return
 	}
+	s.resetWatcher()
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
@@ -505,6 +623,7 @@ func (s *supervisor) handleRestart(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"ok": "false", "message": err.Error()})
 		return
 	}
+	s.resetWatcher()
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
@@ -518,6 +637,39 @@ func (s *supervisor) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		"port":      s.appPort,
 		"logTail":   append([]string(nil), s.logTail...),
 	})
+}
+
+// handleEvents streams Server-Sent Events to the IDE shell so it can live-reload
+// the preview when the workspace changes. Keep-alive comments prevent nginx
+// from timing out the proxy connection.
+func (s *supervisor) handleEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeText(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	ch := s.hub.subscribe()
+	defer s.hub.unsubscribe(ch)
+	_, _ = fmt.Fprintf(w, "event: ready\ndata: {}\n\n")
+	flusher.Flush()
+	keepalive := time.NewTicker(20 * time.Second)
+	defer keepalive.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ch:
+			_, _ = fmt.Fprintf(w, "event: reload\ndata: {}\n\n")
+			flusher.Flush()
+		case <-keepalive.C:
+			_, _ = fmt.Fprint(w, ": keepalive\n\n")
+			flusher.Flush()
+		}
+	}
 }
 
 func supervisorRoutes(s *supervisor) func(http.ResponseWriter, *http.Request) {
@@ -540,6 +692,8 @@ func supervisorRoutes(s *supervisor) func(http.ResponseWriter, *http.Request) {
 			s.handleRestart(w, r)
 		case path == "/api/project/status" && r.Method == http.MethodGet:
 			s.handleStatus(w, r)
+		case path == "/api/events" && r.Method == http.MethodGet:
+			s.handleEvents(w, r)
 		default:
 			writeText(w, http.StatusNotFound, "no such IDE API route")
 		}
@@ -567,6 +721,7 @@ func main() {
 			templatesDir: templates,
 			appPort:      appPort,
 			logTail:      make([]string, 0, 200),
+			hub:          newEventHub(),
 		}
 		router := chi.NewRouter()
 		router.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
@@ -598,6 +753,8 @@ func main() {
 				super.addLog("supervisor init failed: " + err.Error())
 				log.Printf("supervisor init: %v", err)
 			}
+			super.resetWatcher()
+			go super.watchWorkspace()
 		}()
 		log.Fatal((&http.Server{
 			Addr:              address,

@@ -495,6 +495,27 @@ async function refreshLogs() {
 	}
 }
 
+// ── Live reload (SSE) ────────────────────────────────────────────────────────
+// The supervisor broadcasts a "reload" event after it detects a workspace edit
+// and (for frameworks with a build step) finishes rebuilding. The preview and
+// console then refresh automatically, no manual Build needed.
+let eventsSource = null;
+
+function connectEvents() {
+	if (eventsSource || typeof EventSource === 'undefined') return;
+	eventsSource = new EventSource('api/events');
+	eventsSource.addEventListener('ready', () => setStatus('watching for changes'));
+	eventsSource.addEventListener('reload', async () => {
+		setStatus('change detected — reloading preview…');
+		await refreshLogs();
+		reloadPreview();
+		setStatus('preview updated', 'ok');
+	});
+	eventsSource.onerror = () => {
+		/* EventSource reconnects automatically */
+	};
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 async function boot() {
 	reloadPreview();
@@ -517,6 +538,7 @@ async function boot() {
 	await buildTree();
 	await initEditor();
 	openDefaultFile();
+	connectEvents();
 }
 
 el.btnBuild.addEventListener('click', async () => {
