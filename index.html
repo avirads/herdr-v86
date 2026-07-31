@@ -443,8 +443,6 @@ const launchRole = new URLSearchParams(location.search).get("role");
 if (launchRole !== "agent" && launchRole !== "host") {
   document.getElementById("choose-host").onclick = () => {
     const url = new URL(location.href);
-    const requestedTier = url.searchParams.get("tier") || localStorage.getItem("vm.imageTier");
-    if (requestedTier === "dev") window.open("dev-app.html", "herdr-dev-app");
     url.searchParams.set("role", "agent");
     location.assign(url);
   };
@@ -555,19 +553,15 @@ function failBoot(message) {
 // The guest autostarts `vmbro-dev` (esbuild bundle + Chi server on :3000), which
 // takes noticeably longer than the shell prompt. Rather than report "Ready" at
 // the prompt and leave the app compiling invisibly, keep the overlay through the
-// app-start phase and hand off to the app tab only once port 3000 is listening.
+// app-start phase and enter the IDE only once port 3000 is listening.
 const DEV_APP_URL = "http://10.77.0.15:3000/";
 const DEVAPP_READY_MARKER = "DEVAPP-READY-OK";
 let devAppPhase = false;
 let devAppTicker = null;
 let devAppTimeout = null;
-function openDevAppTab() {
-  // Reuses the "herdr-dev-app" tab pre-opened from the role screen when present;
-  // otherwise opens a fresh one (subject to the browser's popup policy when the
-  // deep-link boot has no recent user gesture — the toolbar button is the fallback).
-  const opened = window.open(DEV_APP_URL, "herdr-dev-app");
-  if (!opened) status("Dev app ready — click “Open Dev App” to open it in a new tab");
-  return !!opened;
+function enterDevIDE() {
+  status("Dev app ready — entering IDE");
+  location.assign(DEV_APP_URL);
 }
 function startDevAppPhase() {
   devAppPhase = true;
@@ -598,7 +592,7 @@ function finishDevApp(ready) {
   clearTimeout(devAppTimeout);
   if (ready) setBootProgress(100, "Dev app ready");
   finishBoot();
-  if (ready) openDevAppTab();
+  if (ready) enterDevIDE();
   else status("Dev app is still compiling — use “Open Dev App” when it is ready");
 }
 const APP_VERSION = "2026.07.29.1";
