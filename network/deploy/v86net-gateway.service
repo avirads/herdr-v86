@@ -6,7 +6,7 @@ Requires=v86net-network.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/v86net-gateway -backend native -listen 127.0.0.1:8086 -tap v86tap0 -admin-token-file /etc/v86net/admin.token -allow-origin https://fapstaff.com
+ExecStart=/usr/local/bin/v86net-gateway -backend native -listen 127.0.0.1:8086 -tap v86tap0 -admin-token-file /etc/v86net/admin.token -allow-origin https://fapstaff.com -allow-origin-sessions
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true

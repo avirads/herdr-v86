@@ -22,6 +22,8 @@
   #status { font-size: 12px; color: #8b949e; }
   #term { box-sizing: border-box; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 0; padding: 0 8px 8px; visibility: hidden; overflow: hidden; }
   #term .xterm { height: 100%; }
+  #dev-ide { box-sizing: border-box; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 0; border: 0; background: #090c14; }
+  #dev-ide[hidden] { display: none; }
   #role-overlay { box-sizing: border-box; position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; overflow-y: auto; background: #0d1117; padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
   #role-overlay[hidden] { display: none; }
   .role-panel { width: min(760px, 100%); }
@@ -51,7 +53,7 @@
   .model-downloads .tool-link:hover, .model-downloads .tool-link:focus-visible { border-color: #58a6ff; outline: none; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
-  #tools button { min-height: 44px; min-width: 52px; padding: 9px 12px; font-size: 14px; touch-action: manipulation; }
+  #tools button { width: 44px; height: 44px; min-height: 44px; min-width: 44px; display: grid; place-items: center; padding: 0; font-size: 20px; line-height: 1; touch-action: manipulation; }
   #voice-button.listening { color: #fff; background: #da3633; border-color: #f85149; }
   #voice-button.loading { color: #f0f6fc; border-color: #58a6ff; }
   #voice-status { font-size: 12px; color: #8b949e; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -156,7 +158,7 @@
     #voice-progress { top: auto; bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 20px); padding: 14px; }
     #model-progress { top: max(10px, env(safe-area-inset-top)); width: calc(100vw - 20px); }
     #tools { margin-left: 0; }
-    #tools button { min-height: 48px; min-width: 58px; padding: 10px 14px; font-size: 15px; }
+    #tools button { width: 48px; height: 48px; min-height: 48px; min-width: 48px; font-size: 21px; }
     #term { padding: 0 4px max(4px, env(safe-area-inset-bottom)); }
     #boot-ring { width: 96px; height: 96px; }
     #boot-loader { height: 96px; }
@@ -213,12 +215,13 @@
   <div id="browser-status">AutoBro: not connected</div>
   <div id="voice-status">Voice: ready to load</div>
   <div id="tools">
-    <button id="copy-terminal" type="button" title="Copy selected text, or the visible terminal when nothing is selected (Ctrl+Shift+C)">Copy</button>
-    <button id="paste-terminal" type="button" title="Paste clipboard text into the shell (Ctrl+Shift+V)">Paste</button>
-    <button id="voice-button" type="button" title="Dictate locally with Moonshine">🎙 Voice</button>
-    <button id="toggle-theme" type="button" title="Switch light or dark theme">Theme</button>
-    <button id="refresh-app" type="button" title="Refresh VMVM">Refresh</button>
-    <button id="open-settings" title="Reset model or AutoBro configuration">Settings</button>
+    <button id="copy-terminal" type="button" title="Copy terminal" aria-label="Copy terminal">⧉</button>
+    <button id="paste-terminal" type="button" title="Paste into terminal" aria-label="Paste into terminal">⎘</button>
+    <button id="voice-button" type="button" title="Dictate locally with Moonshine" aria-label="Voice input">🎙</button>
+    <button id="share-ide" type="button" title="Copy public IDE link" aria-label="Copy public IDE link">↗</button>
+    <button id="toggle-theme" type="button" title="Switch light or dark theme" aria-label="Switch theme">◐</button>
+    <button id="refresh-app" type="button" title="Refresh VMVM" aria-label="Refresh VMVM">↻</button>
+    <button id="open-settings" type="button" title="Settings" aria-label="Settings">⚙</button>
   </div>
 </header>
 <div id="vm-runtime-warning" role="alert" hidden>
@@ -414,6 +417,7 @@
 <input id="file-input" type="file" hidden>
 <input id="project-file-input" type="file" accept=".tgz,.gz,application/gzip" hidden>
 <input id="llm-file-input" type="file" accept=".litertlm,.task" hidden>
+<iframe id="dev-ide" title="VMVM Dev IDE" hidden></iframe>
 <div id="term"></div>
 <div id="screen_container">
   <div style="white-space:pre; font:14px monospace"></div>
@@ -485,7 +489,7 @@ const VM_IMAGE_FALLBACK = {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "vm-barebones-i386-ext4.img", size: 67108864, version: "2026.07.29.1" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "vm-essentials-i386-ext4.img", size: 83886080, version: "2026.07.29.1" },
     "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.07.29.1" },
-    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.7" },
+    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.9" },
     "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.07.29.1" },
     "vapt": { name: "VAPT — native scanner", description: "Performance plus Vaptr, the self-contained native scanner (no external tools; runs in the v86 guest).", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.07.30.1" },
   },
@@ -526,21 +530,25 @@ bootTicker = setInterval(() => {
     bootMessage.textContent = `Starting Dev VMVM [${vmImageDisplaySource}] — first boot may take several minutes…`;
   }
 }, 700);
-function finishBoot() {
+function finishBoot(showTerminal = true) {
   clearInterval(bootTicker);
   localStorage.setItem(diskCacheKey, DISK_VERSION);
   bootOverlay.classList.remove("error");
   setBootProgress(100, "Ready");
   setTimeout(() => {
-    term.clear();
-    term.write("\x1b[2J\x1b[H");
-    emulator.serial0_send("\n");
     bootReady = true;
     shellReady = true;
     bootOverlay.classList.add("done");
-    document.getElementById("term").style.visibility = "visible";
-    status("Shell ready");
-    term.focus();
+    if (showTerminal) {
+      term.clear();
+      term.write("\x1b[2J\x1b[H");
+      emulator.serial0_send("\n");
+      document.getElementById("term").style.visibility = "visible";
+      status("Shell ready");
+      term.focus();
+    } else {
+      status("Dev IDE ready");
+    }
   }, 300);
 }
 function failBoot(message) {
@@ -553,7 +561,7 @@ function failBoot(message) {
 // takes noticeably longer than the shell prompt. Rather than report "Ready" at
 // the prompt and leave the app compiling invisibly, keep the overlay through the
 // app-start phase and enter the IDE only once port 3000 is listening.
-const DEV_APP_URL = "http://10.77.0.15:3000/";
+const DEV_APP_URL = new URL("/ide/", location.origin).href;
 const DEVAPP_READY_MARKER = "DEVAPP-READY-OK";
 let devAppPhase = false;
 let devAppTicker = null;
@@ -562,7 +570,10 @@ function enterDevIDE() {
   status("Dev app ready — entering IDE");
   const target = new URL(DEV_APP_URL);
   target.searchParams.set("theme", document.documentElement.dataset.theme || "dark");
-  location.assign(target);
+  const frame = document.getElementById("dev-ide");
+  frame.src = target.href;
+  frame.hidden = false;
+  document.getElementById("term").style.display = "none";
 }
 function startDevAppPhase() {
   devAppPhase = true;
@@ -596,8 +607,8 @@ function finishDevApp(ready) {
     return;
   }
   setBootProgress(100, "Dev app ready");
-  finishBoot();
   enterDevIDE();
+  finishBoot(false);
 }
 const APP_VERSION = "2026.07.29.1";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
@@ -1859,9 +1870,19 @@ document.getElementById("toggle-theme").onclick = () => {
   const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   document.documentElement.dataset.theme = next;
   localStorage.setItem("vm.theme", next);
+  document.getElementById("dev-ide").contentWindow?.postMessage({ type: "vmvm-theme", theme: next }, location.origin);
   status(`${next[0].toUpperCase()}${next.slice(1)} theme`);
 };
 document.getElementById("refresh-app").onclick = () => location.reload();
+document.getElementById("share-ide").onclick = async () => {
+  const shareURL = new URL("/ide/", location.origin).href;
+  try {
+    await navigator.clipboard.writeText(shareURL);
+    status("Public IDE link copied — available while this VM is running");
+  } catch {
+    window.prompt("Copy the public IDE link", shareURL);
+  }
+};
 
 async function importFileIntoVm(file, afterImport = "") {
   if (!file) return;
@@ -1904,17 +1925,30 @@ projectFileInput.onchange = async () => {
 const networkConfig = new URLSearchParams(location.hash.slice(1));
 const gatewayURL = networkConfig.get("gateway");
 const sessionToken = networkConfig.get("token");
+async function connectWebSocketGateway(url, token) {
+  const { V86WebSocketNetwork } = await import("./network/browser/v86-websocket-network.js");
+  window.v86Network = new V86WebSocketNetwork(emulator, {
+    url,
+    token,
+    onStatus: networkStatus,
+  }).start();
+}
 if (gatewayURL && sessionToken) {
   history.replaceState(null, "", location.pathname + location.search);
-  import("./network/browser/v86-websocket-network.js")
-    .then(({ V86WebSocketNetwork }) => {
-      window.v86Network = new V86WebSocketNetwork(emulator, {
-        url: gatewayURL,
-        token: sessionToken,
-        onStatus: networkStatus,
-      }).start();
-    })
+  connectWebSocketGateway(gatewayURL, sessionToken)
     .catch(error => networkStatus("error — " + error.message));
+} else if (vmImageTier === "dev" && location.protocol === "https:" && location.hostname === "fapstaff.com") {
+  fetch("/v1/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ttlSeconds: 3600 }),
+  })
+    .then(async response => {
+      if (!response.ok) throw new Error(`session request failed (${response.status})`);
+      const session = await response.json();
+      await connectWebSocketGateway(`wss://${location.host}/v1/ethernet`, session.token);
+    })
+    .catch(error => networkStatus("error — public IDE network unavailable: " + error.message));
 }
 
 emulator.add_listener("emulator-ready", () => {

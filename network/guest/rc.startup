@@ -32,7 +32,11 @@ tier_level="$(cat /etc/vmvm/tier-level 2>/dev/null || echo 1)"
 if [ "$tier_level" -ge 2 ]; then
   ip link set lo up 2>/dev/null || true
   ip link set eth0 up 2>/dev/null || true
-  udhcpc -i eth0 -q -t 10 -T 1 >/var/log/udhcpc.log 2>&1 &
+  # The public /ide/ reverse proxy has a stable guest target. A fixed address
+  # also avoids DHCP lease changes when v86 generates a new NIC MAC on boot.
+  ip address replace 10.77.0.15/24 dev eth0 2>/dev/null || true
+  ip route replace default via 10.77.0.1 dev eth0 2>/dev/null || true
+  printf 'nameserver 10.77.0.1\n' > /etc/resolv.conf
 fi
 
 # The Dev tier is an appliance-style development image: compile and serve its

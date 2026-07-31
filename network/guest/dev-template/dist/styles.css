@@ -25,6 +25,7 @@ button:hover, .button:hover { background: #8b5cf6; }
 button:disabled { opacity: .55; cursor: wait; }
 button.secondary { border: 1px solid #3a4666; background: #202840; }
 .quiet { padding: .4rem .65rem; border: 1px solid #3a4666; color: #b8c5dc; background: transparent; font-size: .75rem; }
+.icon-button { width: 36px; height: 36px; display: grid; place-items: center; padding: 0; font-size: 1.05rem; line-height: 1; }
 .button.secondary { border: 1px solid #3a4666; background: #202840; }
 .model-help { margin: .75rem 0 0; color: #9aa6bd; font-size: .8rem; }
 .model-help a { color: #c4b5fd; }

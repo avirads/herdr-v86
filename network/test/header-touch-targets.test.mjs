@@ -5,8 +5,8 @@ import test from 'node:test';
 const html = await readFile(new URL('../../index.html', import.meta.url), 'utf8');
 
 test('header tools have comfortable pointer and mobile touch targets', () => {
-  assert.match(html, /#tools button \{ min-height: 44px; min-width: 52px;/);
-  assert.match(html, /#tools button \{ min-height: 48px; min-width: 58px;/);
+  assert.match(html, /#tools button \{ width: 44px; height: 44px; min-height: 44px; min-width: 44px;/);
+  assert.match(html, /#tools button \{ width: 48px; height: 48px; min-height: 48px; min-width: 48px;/);
   assert.match(html, /touch-action: manipulation/);
 });
 

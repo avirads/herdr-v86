@@ -43,6 +43,7 @@ type gateway struct {
 	policy          packetPolicy
 	maxSessionBytes uint64
 	allowOrigins    map[string]bool
+	publicSessions  bool
 }
 
 func main() {
@@ -56,6 +57,7 @@ func main() {
 	legacyTokenFile := flag.String("token-file", "", "read legacy browser token from a file")
 	prepareAdapter := flag.Bool("prepare-adapter", false, "create/open the native packet adapter and exit")
 	allowOrigin := flag.String("allow-origin", "", "comma-separated browser origins allowed to use legacy tokens")
+	publicSessions := flag.Bool("allow-origin-sessions", false, "allow configured browser origins to create their own short-lived sessions")
 	tlsCert := flag.String("tls-cert", "", "TLS certificate file; requires -tls-key")
 	tlsKey := flag.String("tls-key", "", "TLS private key file; requires -tls-cert")
 	allowQuery := flag.Bool("allow-query-token", false, "allow legacy tokens in WebSocket query parameters")
@@ -110,7 +112,7 @@ func main() {
 	g := &gateway{
 		backend: *backend, tapName: *tapName, legacyToken: *legacyToken, allowQuery: *allowQuery,
 		adminToken: *adminToken, defaultTTL: *defaultTTL, maxTTL: *maxTTL,
-		sessions: newSessionStore(), policy: packetPolicy{allowPrivate: *allowPrivate, guestNetwork: guestPrefix.Masked()},
+		sessions: newSessionStore(), publicSessions: *publicSessions, policy: packetPolicy{allowPrivate: *allowPrivate, guestNetwork: guestPrefix.Masked()},
 		maxSessionBytes: *maxSessionBytes,
 		allowOrigins:    make(map[string]bool),
 	}
@@ -200,7 +202,9 @@ func (g *gateway) handleSessions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !g.authorizeAdmin(r) {
+	requestOrigin := r.Header.Get("Origin")
+	publicRequest := g.publicSessions && g.allowOrigins[requestOrigin]
+	if !g.authorizeAdmin(r) && !publicRequest {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -211,6 +215,9 @@ func (g *gateway) handleSessions(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&request); err != nil && err.Error() != "EOF" {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
+	}
+	if publicRequest {
+		request.Origin = requestOrigin
 	}
 	ttl := g.defaultTTL
 	if request.TTLSeconds > 0 {

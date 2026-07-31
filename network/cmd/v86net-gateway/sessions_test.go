@@ -48,6 +48,35 @@ func TestSessionHTTPAuthorizationAndCreation(t *testing.T) {
 	}
 }
 
+func TestAllowedOriginMayCreatePublicSession(t *testing.T) {
+	gateway := &gateway{
+		publicSessions: true,
+		allowOrigins:   map[string]bool{"https://fapstaff.com": true},
+		defaultTTL:     time.Minute,
+		maxTTL:         time.Hour,
+		sessions:       newSessionStore(),
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/sessions", strings.NewReader(`{"origin":"https://attacker.example","ttlSeconds":60}`))
+	request.Header.Set("Origin", "https://fapstaff.com")
+	response := httptest.NewRecorder()
+	gateway.handleSessions(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"origin":"https://fapstaff.com"`) {
+		t.Fatalf("session did not use the request origin: %s", response.Body.String())
+	}
+
+	blockedRequest := httptest.NewRequest(http.MethodPost, "/v1/sessions", strings.NewReader("{}"))
+	blockedRequest.Header.Set("Origin", "https://attacker.example")
+	blockedResponse := httptest.NewRecorder()
+	gateway.handleSessions(blockedResponse, blockedRequest)
+	if blockedResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("expected disallowed origin to receive 401, got %d", blockedResponse.Code)
+	}
+}
+
 func TestSessionRevocation(t *testing.T) {
 	store := newSessionStore()
 	created, err := store.create("", time.Minute)
