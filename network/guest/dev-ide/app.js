@@ -83,11 +83,11 @@ async function loadFrameworks() {
 		const button = document.createElement('button');
 		button.type = 'button';
 		button.className = 'framework';
-		button.dataset.id = fw.ID;
+		button.dataset.id = fw.id;
 		button.innerHTML =
 			'<span class="f-name"></span><span class="f-blurb"></span>';
-		button.querySelector('.f-name').textContent = fw.Label;
-		button.querySelector('.f-blurb').textContent = fw.Blurb;
+		button.querySelector('.f-name').textContent = fw.label;
+		button.querySelector('.f-blurb').textContent = fw.blurb;
 		button.addEventListener('click', () => scaffold(fw));
 		el.frameworkList.appendChild(button);
 	}
@@ -99,8 +99,8 @@ function markActiveFramework() {
 		button.classList.toggle('active', button.dataset.id === currentFramework);
 	}
 	el.frameworkBadge.textContent = currentFramework || '—';
-	const fw = frameworks.find((f) => f.ID === currentFramework);
-	el.title.textContent = fw ? fw.Label : 'Project';
+	const fw = frameworks.find((f) => f.id === currentFramework);
+	el.title.textContent = fw ? fw.label : 'Project';
 }
 
 // ── File tree ────────────────────────────────────────────────────────────────
@@ -430,17 +430,17 @@ async function saveActive() {
 
 // ── Project actions ──────────────────────────────────────────────────────────
 async function scaffold(fw) {
-	if (currentFramework === fw.ID) return;
+	if (currentFramework === fw.id) return;
 	const confirmed = confirm(
-		`Create a new ${fw.Label} project? This replaces the current workspace files.`
+		`Create a new ${fw.label} project? This replaces the current workspace files.`
 	);
 	if (!confirmed) return;
-	setStatus('Scaffolding ' + fw.Label + '…');
+	setStatus('Scaffolding ' + fw.label + '…');
 	try {
 		const result = await api('/project/scaffold', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ framework: fw.ID }),
+			body: JSON.stringify({ framework: fw.id }),
 		});
 		currentFramework = result.framework;
 		markActiveFramework();
@@ -450,7 +450,7 @@ async function scaffold(fw) {
 		openDefaultFile();
 		reloadPreview();
 		setStatus('Ready — ' + currentFramework, 'ok');
-		toast('Scaffolded ' + fw.Label);
+		toast('Scaffolded ' + fw.label);
 	} catch (error) {
 		setStatus('Scaffold failed', 'bad');
 		toast(error.message, true);
@@ -462,10 +462,10 @@ function closeAllTabs() {
 }
 
 function openDefaultFile() {
-	const fw = frameworks.find((f) => f.ID === currentFramework);
-	if (!fw || !fw.DefaultFile) return;
-	const row = el.fileTree.querySelector(`.tree-row[data-path="${CSS.escape(fw.DefaultFile)}"]`);
-	openFile(fw.DefaultFile, row);
+	const fw = frameworks.find((f) => f.id === currentFramework);
+	if (!fw || !fw.defaultFile) return;
+	const row = el.fileTree.querySelector(`.tree-row[data-path="${CSS.escape(fw.defaultFile)}"]`);
+	openFile(fw.defaultFile, row);
 }
 
 async function runAction(name, endpoint, doneMessage) {
