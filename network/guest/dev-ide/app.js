@@ -19,6 +19,9 @@ const el = {
 	logOutput: $('log-output'),
 	preview: $('preview'),
 	previewReload: $('preview-reload'),
+	sidebarToggle: $('sidebar-toggle'),
+	sidebar: $('sidebar'),
+	sidebarBackdrop: $('sidebar-backdrop'),
 	toast: $('toast'),
 };
 
@@ -356,6 +359,7 @@ async function openFile(path, row) {
 	}
 	selectTab(path);
 	highlightRow(path, row);
+	if (window.innerWidth <= 900) toggleSidebar(false);
 }
 
 function selectTab(path) {
@@ -540,6 +544,17 @@ async function boot() {
 	openDefaultFile();
 	connectEvents();
 }
+
+function toggleSidebar(open) {
+	document.body.classList.toggle('sidebar-open', open);
+	el.sidebarToggle.setAttribute('aria-expanded', String(open));
+	el.sidebarBackdrop.hidden = !open;
+}
+
+el.sidebarToggle.addEventListener('click', () => {
+	toggleSidebar(!document.body.classList.contains('sidebar-open'));
+});
+el.sidebarBackdrop.addEventListener('click', () => toggleSidebar(false));
 
 el.btnBuild.addEventListener('click', async () => {
 	await saveActive();

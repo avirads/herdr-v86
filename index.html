@@ -189,6 +189,16 @@
     #vm-runtime-warning-actions { margin-left: 0; }
     #vm-runtime-warning-actions button { flex: 1 1 auto; min-height: 44px; }
   }
+  @media (max-width: 420px) {
+    header { padding-top: max(8px, env(safe-area-inset-top)); padding-left: 8px; padding-right: 8px; }
+    header h1 { font-size: 13px; }
+    #tools { gap: 4px; }
+    #tools button { width: 46px; height: 46px; min-height: 46px; min-width: 46px; font-size: 19px; }
+    #voice-progress, #model-progress { width: calc(100vw - 16px); }
+    dialog { width: calc(100vw - 16px); padding: 14px; }
+    .remote-actions { margin-top: 12px; }
+  }
+  button { -webkit-tap-highlight-color: transparent; }
 </style>
 </head>
 <body>
