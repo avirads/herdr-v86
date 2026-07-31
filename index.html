@@ -58,7 +58,6 @@
   #tools button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; border-color: #58a6ff; color: #f0f6fc; }
   #tools button:active:not(:disabled) { transform: translateY(1px); background: #21262d; border-color: #58a6ff; }
   #tools button:disabled { opacity: 0.45; cursor: default; }
-  #tools button.shared { color: #3fb950; border-color: #3fb950; }
   #tools .tool-label { font-size: 9px; line-height: 1; letter-spacing: .03em; text-transform: uppercase; color: inherit; opacity: .9; white-space: nowrap; }
   #voice-button.listening { color: #fff; background: #da3633; border-color: #f85149; }
   #voice-button.loading { color: #f0f6fc; border-color: #58a6ff; }
@@ -141,7 +140,6 @@
   :root[data-theme="light"] #tools button:hover:not(:disabled) { color: #1f2328; background: #eaeef2; border-color: #c3cdd9; }
   :root[data-theme="light"] #tools button:focus-visible { outline-color: #0969da; border-color: #0969da; color: #1f2328; }
   :root[data-theme="light"] #tools button:active:not(:disabled) { background: #e2e8ee; border-color: #0969da; }
-  :root[data-theme="light"] #tools button.shared { color: #1a7f37; border-color: #1a7f37; }
   :root[data-theme="light"] .provider-section,
   :root[data-theme="light"] dialog input,
   :root[data-theme="light"] dialog select,
@@ -266,27 +264,12 @@
       </svg>
       <span class="tool-label">Voice</span>
     </button>
-    <button id="share-ide" type="button" title="Share a snapshot of the live preview" aria-label="Share a snapshot of the live preview">
-      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-        <polyline points="15 3 21 3 21 9"/>
-        <line x1="10" y1="14" x2="21" y2="3"/>
-      </svg>
-      <span class="tool-label">Share</span>
-    </button>
     <button id="toggle-theme" type="button" title="Switch light or dark theme" aria-label="Switch theme">
       <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="5"/>
         <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
       </svg>
       <span class="tool-label">Theme</span>
-    </button>
-    <button id="refresh-app" type="button" title="Refresh VMVM" aria-label="Refresh VMVM">
-      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="23 4 23 10 17 10"/>
-        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-      </svg>
-      <span class="tool-label">Refresh</span>
     </button>
     <button id="open-settings" type="button" title="Settings" aria-label="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -563,7 +546,7 @@ const VM_IMAGE_FALLBACK = {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "vm-barebones-i386-ext4.img", size: 67108864, version: "2026.07.29.1" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "vm-essentials-i386-ext4.img", size: 83886080, version: "2026.07.29.1" },
     "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.07.29.1" },
-    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.14" },
+    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.15" },
     "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.07.29.1" },
     "vapt": { name: "VAPT — native scanner", description: "Performance plus Vaptr, the self-contained native scanner (no external tools; runs in the v86 guest).", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.07.30.1" },
   },
@@ -1954,53 +1937,6 @@ document.getElementById("toggle-theme").onclick = () => {
   localStorage.setItem("vm.theme", next);
   document.getElementById("dev-ide").contentWindow?.postMessage({ type: "vmvm-theme", theme: next }, location.origin);
   status(`${next[0].toUpperCase()}${next.slice(1)} theme`);
-};
-document.getElementById("refresh-app").onclick = () => location.reload();
-// Share captures the current Dev IDE preview pane (a PNG snapshot of the app
-// as it renders right now) instead of a generic IDE link. It tries the Web
-// Share API with the image file, then clipboard image, then downloads it, and
-// finally falls back to copying the live /preview/ URL for the running VM.
-document.getElementById("share-ide").onclick = async () => {
-  const button = document.getElementById("share-ide");
-  const preview = document.getElementById("dev-ide")?.contentDocument?.getElementById("preview");
-  let shared = false;
-  if (preview && preview.contentWindow) {
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = preview.clientWidth;
-      canvas.height = preview.clientHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (blob) {
-        const file = new File([blob], "vmvm-preview.png", { type: "image/png" });
-        const canShare = navigator.canShare && navigator.canShare({ files: [file] });
-        if (canShare) {
-          await navigator.share({ files: [file], title: "VMVM preview" });
-          shared = true;
-        } else {
-          await navigator.clipboard.write([
-            new ClipboardItem({ "image/png": blob }),
-          ]);
-          shared = true;
-          status("Preview snapshot copied to clipboard");
-        }
-      }
-    } catch {
-      /* fall through to URL share below */
-    }
-  }
-  if (!shared) {
-    const shareURL = new URL("/preview/", location.origin).href;
-    try {
-      await navigator.clipboard.writeText(shareURL);
-      status("Preview link copied — shares the running app while this VM is up");
-    } catch {
-      window.prompt("Copy the preview link", shareURL);
-    }
-  }
-  button.classList.add("shared");
-  setTimeout(() => button.classList.remove("shared"), 1200);
 };
 
 async function importFileIntoVm(file, afterImport = "") {

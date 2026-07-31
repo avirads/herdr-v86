@@ -103,9 +103,8 @@ test('VMVM branding, themes, and refresh controls are present', () => {
   assert.match(html, /assets\/vmvm-logo\.png/);
   assert.match(html, /id="toggle-theme"/);
   assert.match(html, /localStorage\.setItem\("vm\.theme", next\)/);
-  assert.match(html, /id="refresh-app"/);
-  assert.match(html, /id="share-ide"/);
-  assert.match(html, /navigator\.clipboard\.writeText\(shareURL\)/);
+  assert.doesNotMatch(html, /id="refresh-app"/);
+  assert.doesNotMatch(html, /id="share-ide"/);
   assert.match(html, /aria-label="Settings">\s*<svg/);
 });
 

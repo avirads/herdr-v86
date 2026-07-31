@@ -75,7 +75,9 @@ function previewUrl() {
 }
 
 function reloadPreview() {
-	el.preview.src = previewUrl();
+	// A cache-busting query makes a same-URL reload actually re-fetch the app
+	// server, so the iframe always reflects the freshly built output.
+	el.preview.src = previewUrl() + (previewUrl().includes('?') ? '&' : '?') + 't=' + Date.now();
 }
 
 // ── Frameworks ───────────────────────────────────────────────────────────────
@@ -508,7 +510,8 @@ let eventsSource = null;
 function connectEvents() {
 	if (eventsSource || typeof EventSource === 'undefined') return;
 	eventsSource = new EventSource('api/events');
-	eventsSource.addEventListener('ready', () => setStatus('watching for changes'));
+	eventsSource.onopen = () => setStatus('watching for changes', 'ok');
+	eventsSource.addEventListener('ready', () => setStatus('watching for changes', 'ok'));
 	eventsSource.addEventListener('reload', async () => {
 		setStatus('change detected — reloading preview…');
 		await refreshLogs();
@@ -516,7 +519,12 @@ function connectEvents() {
 		setStatus('preview updated', 'ok');
 	});
 	eventsSource.onerror = () => {
-		/* EventSource reconnects automatically */
+		if (eventsSource && eventsSource.readyState !== EventSource.CONNECTING) {
+			setStatus('live reload reconnecting…');
+			eventsSource.close();
+			eventsSource = null;
+			setTimeout(connectEvents, 3000);
+		}
 	};
 }
 

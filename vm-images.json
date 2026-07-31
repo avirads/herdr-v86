@@ -31,8 +31,8 @@
       "description": "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.",
       "url": "vm-dev-i386-ext4.img",
       "size": 99614720,
-      "version": "2026.07.31.14",
-      "sha256": "ae95b914a869b7ee4bbcef4cfdfa0a208b6e0465c49156255286be05c2f531d4"
+      "version": "2026.07.31.15",
+      "sha256": "af46be83d4daaa7bca2253df4660bf4c26d7abd93a4ec9be3a4f3c41f2f52dc7"
     },
     "performance": {
       "name": "Performance testing",
