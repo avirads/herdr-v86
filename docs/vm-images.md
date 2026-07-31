@@ -9,7 +9,7 @@ the default and preserves the capabilities of the former single image.
 | Barebones | Alpine, BusyBox, serial shell, boot support, and `/root/project` |
 | Essentials | Barebones plus CA certificates, `curl`, `jq`, QuickJS, networking, and the UART browser transport |
 | AI Tools | Essentials plus `tmux`, Herdr, Git, ripgrep, shfmt, ctags, make, patch, Zerostack, Rig, the `vm*` browser commands, vmlang, and vmmastra |
-| Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, and a ready-to-run Mastra + Hono + Astro starter in `/root/project` |
+| Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, and the browsercode-style Dev IDE (Monaco editor, file tree, console, live preview) with 7 framework templates in `/opt/vmbro/templates` |
 | Performance testing | AI Tools plus Grafana k6 |
 
 Each subsequent tier is built from the same clean rootfs and invokes every
@@ -27,16 +27,23 @@ The browser keeps a separate cache-version marker for each tier.
 Guest filesystems are independent. Export a project before changing tiers and
 import it after restart when files must move between images.
 
-The Dev tier starts its bundled project with:
+The Dev tier exposes a public IDE at `/ide/` (reverse-proxied to the running VM's
+port 3000) and serves the scaffolded app's live preview at `/preview/` (port
+3100). It starts its bundled project with:
 
 ```sh
 vmbro-dev
 ```
 
-Astro output is precompiled with the official browser WASM compiler before it is
-placed in the image. Guest edits to the Hono API can be rebuilt with native
-esbuild. Mastra, LiteRT-LM, WebGPU, and model weights remain browser-host
-facilities and are not duplicated inside the ext4 image.
+First boot is fast because the starter is precompiled at image build time:
+`dist/server.js` and `.vmbro/astro-render.js` are produced by chrooted esbuild
+(and QuickJS for the Astro render) before the image is finalized, and
+`.vmbro/build-stamp` lets the supervisor skip the rebuild entirely. The
+supervisor binds port 3000 immediately and scaffolds/builds in the background,
+so the IDE shell comes up as soon as the guest reaches its shell prompt. Guest
+edits to the Hono API can be rebuilt with native esbuild. Mastra, LiteRT-LM,
+WebGPU, and model weights remain browser-host facilities and are not duplicated
+inside the ext4 image.
 
 ## Browser and host facilities
 
