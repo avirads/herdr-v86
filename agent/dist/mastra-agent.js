@@ -256029,6 +256029,27 @@ You have tools. Work one step at a time. Reply with exactly ONE JSON object and 
 Always put every tool parameter inside "arguments"; never place path, content, or command beside "name".
 Available tools: ${JSON.stringify(catalog)}${forced}`;
 }
+var BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+function tryDecodeBase64(text10) {
+  const compact = text10.replace(/\s+/g, "");
+  if (compact.length < 24 || compact.length % 4 !== 0) return void 0;
+  if (!BASE64_RE.test(compact)) return void 0;
+  if (typeof atob === "function") {
+    try {
+      return atob(compact);
+    } catch {
+      return void 0;
+    }
+  }
+  if (typeof import_buffer.Buffer !== "undefined") {
+    try {
+      return import_buffer.Buffer.from(compact, "base64").toString("utf8");
+    } catch {
+      return void 0;
+    }
+  }
+  return void 0;
+}
 function parseLooseJson(text10) {
   const trimmed = String(text10 ?? "").trim();
   if (!trimmed) return void 0;
@@ -256037,6 +256058,11 @@ function parseLooseJson(text10) {
   try {
     return JSON.parse(stripped);
   } catch {
+  }
+  const decoded = tryDecodeBase64(stripped);
+  if (decoded) {
+    const inner = parseLooseJson(decoded);
+    if (inner) return inner;
   }
   try {
     return JSON.parse(stripped + "}");
@@ -257179,6 +257205,7 @@ var DEFAULT_INSTRUCTIONS = [
   'Write generated shell scripts to an absolute workspace path, make them executable, run "shfmt -w ABSOLUTE_PATH" and "sh -n ABSOLUTE_PATH", then execute them with representative arguments. Run ShellCheck only when it is externally available.',
   "Each tool call is a slow round-trip to the VM. Prefer few, batched commands over many small ones, and do not re-read a file you have already read.",
   "After creating or editing executable code, run it or an appropriate syntax checker and inspect the exit code and output.",
+  "The guest's JS runtimes are qjs (QuickJS) and vmjs. Both are plain-script interpreters with NO CommonJS: never emit module.exports, exports., require, process, __dirname, or __filename in guest JavaScript. Write self-contained scripts whose test code runs on load, or use a leading export line only with qjs --module. Run scripts with qjs FILE and vmjs < FILE.",
   `After creating or editing JavaScript, test the completed file with both "time qjs FILE" and "time vmjs < FILE"; inspect each command's exit code and output, and report the total elapsed time measured for each runtime.`,
   "If verification fails, repair the code and rerun verification. Report success only after verification passes."
 ].join("\n");

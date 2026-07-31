@@ -117,6 +117,32 @@ export function toolProtocolInstruction(tools, toolChoice) {
 // Response parsing
 // ---------------------------------------------------------------------------
 
+// The 2B model escapes our JSON protocol by base64-encoding the whole object
+// (embedded quotes and newlines are what it is dodging). If the text is a
+// valid base64 payload, decode it and recurse. Guard the length and charset so
+// ordinary prose never gets swallowed.
+const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+function tryDecodeBase64(text) {
+  const compact = text.replace(/\s+/g, '');
+  if (compact.length < 24 || compact.length % 4 !== 0) return undefined;
+  if (!BASE64_RE.test(compact)) return undefined;
+  if (typeof atob === 'function') {
+    try {
+      return atob(compact);
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof Buffer !== 'undefined') {
+    try {
+      return Buffer.from(compact, 'base64').toString('utf8');
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 function parseLooseJson(text) {
   const trimmed = String(text ?? '').trim();
   if (!trimmed) return undefined;
@@ -128,6 +154,14 @@ function parseLooseJson(text) {
     return JSON.parse(stripped);
   } catch {
     /* fall through */
+  }
+  // The model sometimes base64-encodes the protocol object instead of
+  // escaping its content. Decode and recurse only when the payload decodes
+  // into something that looks like a JSON object we can act on.
+  const decoded = tryDecodeBase64(stripped);
+  if (decoded) {
+    const inner = parseLooseJson(decoded);
+    if (inner) return inner;
   }
   // The 2B model sometimes drops the outer closing } — the JSON is
   //   {"tool_call":{...}}

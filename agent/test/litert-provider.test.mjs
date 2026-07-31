@@ -214,6 +214,28 @@ test('JSON that is not a tool call stays text when tools are bound', () => {
   assert.equal(result.content[0].type, 'text');
 });
 
+test('a base64-encoded tool call is decoded, not leaked as junk text', () => {
+  // The 2B model base64-encodes its protocol object to dodge escaping
+  // embedded quotes and newlines. If we do not decode it, the base64 blob
+  // leaks straight into the terminal as garbage.
+  const encoded = Buffer.from(
+    '{"tool_call":{"name":"mastra_workspace_write_file","arguments":{"path":"prime_checker.js","content":"function isPrime(n){ return n>1; }"}}}',
+  ).toString('base64');
+  const result = parseCompletion(completion(encoded), { hasTools: true });
+  assert.equal(result.finishReason, 'tool-calls');
+  assert.equal(result.content.length, 1);
+  assert.equal(result.content[0].toolName, 'mastra_workspace_write_file');
+  const input = JSON.parse(result.content[0].input);
+  assert.equal(input.path, 'prime_checker.js');
+  assert.match(input.content, /isPrime/);
+});
+
+test('base64 detection does not swallow ordinary prose', () => {
+  const result = parseCompletion(completion('the file is at /root/project now'), { hasTools: true });
+  assert.equal(result.finishReason, 'stop');
+  assert.equal(result.content[0].text, 'the file is at /root/project now');
+});
+
 // --- doGenerate -----------------------------------------------------------
 
 test('doGenerate returns a spec-shaped result', async () => {
