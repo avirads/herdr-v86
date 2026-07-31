@@ -5,7 +5,6 @@ import test from 'node:test';
 const root = new URL('../../', import.meta.url);
 const manifest = JSON.parse(await readFile(new URL('vm-images.json', root), 'utf8'));
 const html = await readFile(new URL('index.html', root), 'utf8');
-const devApp = await readFile(new URL('dev-app.html', root), 'utf8');
 const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 
@@ -65,21 +64,14 @@ test('Settings selects a manifest image and warns before restart', () => {
   assert.match(html, /next\.searchParams\.set\("tier", nextTier\)/);
 });
 
-test('Dev tier exposes its port 3000 app launcher', () => {
-  assert.match(html, /id="open-dev-app"[^>]*hidden>Open Dev App<\/button>/);
-  assert.match(html, /devAppButton\.hidden = vmImageTier !== "dev"/);
-  assert.match(html, /http:\/\/10\.77\.0\.15:3000\//);
-});
-
 test('Dev tier starts and opens its app automatically', () => {
   assert.match(startup, /\[ "\$\(cat \/etc\/vmvm\/tier 2>\/dev\/null\)" = "dev" \]/);
   assert.match(startup, /\(sleep 5; cd \/root\/project && PORT=3000 \/usr\/local\/bin\/vmbro-dev >\/var\/log\/vmbro-dev\.log 2>&1\) &/);
-  assert.match(devApp, /location\.replace\(appURL\)/);
-  assert.match(devApp, /http:\/\/10\.77\.0\.15:3000\//);
   // The current VM tab enters the IDE only once the guest server is listening.
   assert.match(html, /if \(vmImageTier === "dev"\) startDevAppPhase\(\)/);
   assert.match(html, /location\.assign\(DEV_APP_URL\)/);
   assert.match(html, /finishDevApp\(true\)/);
+  assert.doesNotMatch(html, /Open Dev App|id="open-dev-app"|devAppButton/);
 });
 
 test('Dev tier boot progress reflects the app compile/serve phase', () => {

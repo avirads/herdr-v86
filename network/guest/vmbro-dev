@@ -17,7 +17,7 @@ esbuild src/server.ts \
   --outfile=dist/server.js
 
 echo "Vmbro dev project listening on http://127.0.0.1:${port}/"
-echo "From the Herdr toolbar, select Open Dev App (guest http://10.77.0.15:${port}/)."
+echo "VMVM will enter the Dev IDE at guest http://10.77.0.15:${port}/ when ready."
 exec nc -lk -p "$port" -e vmbro-httpd \
   --cgi \
   --root "$project/dist" \

@@ -216,7 +216,6 @@
     <button id="copy-terminal" type="button" title="Copy selected text, or the visible terminal when nothing is selected (Ctrl+Shift+C)">Copy</button>
     <button id="paste-terminal" type="button" title="Paste clipboard text into the shell (Ctrl+Shift+V)">Paste</button>
     <button id="voice-button" type="button" title="Dictate locally with Moonshine">🎙 Voice</button>
-    <button id="open-dev-app" type="button" title="Open the Dev VM app running on guest port 3000" hidden>Open Dev App</button>
     <button id="toggle-theme" type="button" title="Switch light or dark theme">Theme</button>
     <button id="refresh-app" type="button" title="Refresh VMVM">Refresh</button>
     <button id="open-settings" title="Reset model or AutoBro configuration">Settings</button>
@@ -486,7 +485,7 @@ const VM_IMAGE_FALLBACK = {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "vm-barebones-i386-ext4.img", size: 67108864, version: "2026.07.29.1" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "vm-essentials-i386-ext4.img", size: 83886080, version: "2026.07.29.1" },
     "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.07.29.1" },
-    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.5" },
+    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.6" },
     "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.07.29.1" },
     "vapt": { name: "VAPT — native scanner", description: "Performance plus Vaptr, the self-contained native scanner (no external tools; runs in the v86 guest).", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.07.30.1" },
   },
@@ -590,10 +589,13 @@ function finishDevApp(ready) {
   devAppPhase = false;
   clearInterval(devAppTicker);
   clearTimeout(devAppTimeout);
-  if (ready) setBootProgress(100, "Dev app ready");
+  if (!ready) {
+    failBoot("Dev IDE did not start within five minutes. Reload to retry.");
+    return;
+  }
+  setBootProgress(100, "Dev app ready");
   finishBoot();
-  if (ready) enterDevIDE();
-  else status("Dev app is still compiling — use “Open Dev App” when it is ready");
+  enterDevIDE();
 }
 const APP_VERSION = "2026.07.29.1";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
@@ -1859,19 +1861,6 @@ document.getElementById("toggle-theme").onclick = () => {
 };
 document.getElementById("refresh-app").onclick = () => location.reload();
 
-const devAppButton = document.getElementById("open-dev-app");
-devAppButton.hidden = vmImageTier !== "dev";
-devAppButton.onclick = () => {
-  const devURL = "http://10.77.0.15:3000/";
-  const opened = window.open(devURL, "_blank", "noopener");
-  if (!opened) {
-    status("Dev app popup blocked — allow popups, then select Open Dev App again");
-    return;
-  }
-  status(location.protocol === "https:"
-    ? "Opening Dev app on guest port 3000 — the native network helper is required from HTTPS"
-    : "Opening Dev app on guest port 3000");
-};
 async function importFileIntoVm(file, afterImport = "") {
   if (!file) return;
   if (file.size > MAX_TRANSFER_BYTES) return status("import limited to 8 MiB");

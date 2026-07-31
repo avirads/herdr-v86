@@ -31,8 +31,8 @@
       "description": "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.",
       "url": "vm-dev-i386-ext4.img",
       "size": 99614720,
-      "version": "2026.07.31.5",
-      "sha256": "f56240d4bc23bdd84ff81c6155880861a20c1c06275566a8d0f62177cee177c3"
+      "version": "2026.07.31.6",
+      "sha256": "8fc01f646260aa5bbc615a699de474dc3122fc6d0bc4b02d7ee3cbce5563ba9b"
     },
     "performance": {
       "name": "Performance testing",
