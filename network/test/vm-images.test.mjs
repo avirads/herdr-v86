@@ -101,3 +101,9 @@ test('VMVM branding, themes, and refresh controls are present', () => {
   assert.match(html, /localStorage\.setItem\("vm\.theme", next\)/);
   assert.match(html, /id="refresh-app"/);
 });
+
+test('host terminal control commands are hidden from xterm', () => {
+  assert.match(html, /hiddenSerialMarkers = \[[^\]]*"__V86TERM_CONTROL__"/);
+  assert.match(html, /: __V86TERM_CONTROL__; stty rows \$\{rows\} cols \$\{cols\}/);
+  assert.match(html, /: __V86TERM_CONTROL__; export HISTFILE=/);
+});

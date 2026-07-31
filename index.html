@@ -833,7 +833,7 @@ function fitTerminal() {
   if (cols === term.cols && rows === term.rows) return;
   term.resize(cols, rows);
   if (sttySent) {
-    for (const ch of `stty rows ${rows} cols ${cols}\n`) emulator.serial0_send(ch);
+    for (const ch of `: __V86TERM_CONTROL__; stty rows ${rows} cols ${cols}\n`) emulator.serial0_send(ch);
   }
 }
 function scheduleTerminalFit() {
@@ -889,7 +889,7 @@ let agentHistoryDraft = "";
 const agentInputHistory = [];
 let voiceTranscriber;
 let voiceListening = false;
-const hiddenSerialMarkers = ["__V86AGENT_RESPONSE__", "__V86RPC__", "vmagent-rpc agent-"];
+const hiddenSerialMarkers = ["__V86AGENT_RESPONSE__", "__V86RPC__", "__V86TERM_CONTROL__", "vmagent-rpc agent-"];
 let serialDisplayLine = "";
 let suppressSerialLine = false;
 async function writeAgentTerminal(output) {
@@ -2027,7 +2027,7 @@ emulator.add_listener("serial0-output-byte", (byte) => {
     if (serialHasShellPrompt(recentOutput)) {
       sttySent = true;
       fitTerminal();
-      for (const ch of `export HISTFILE=/root/.ash_history HISTSIZE=200; set -o emacs 2>/dev/null || true; stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project /mnt/host-transfer; mount | grep -q ' /mnt/host-transfer ' || mount -t 9p host9p /mnt/host-transfer -o trans=virtio,version=9p2000.L,cache=loose; cd /root/project\n`) {
+      for (const ch of `: __V86TERM_CONTROL__; export HISTFILE=/root/.ash_history HISTSIZE=200; set -o emacs 2>/dev/null || true; stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project /mnt/host-transfer; mount | grep -q ' /mnt/host-transfer ' || mount -t 9p host9p /mnt/host-transfer -o trans=virtio,version=9p2000.L,cache=loose; cd /root/project\n`) {
         emulator.serial0_send(ch);
       }
       if (vmImageTier === "dev") startDevAppPhase();
