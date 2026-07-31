@@ -52,8 +52,9 @@ cleanup() {
   mountpoint -q "$MOUNT_DIR/sys" && umount "$MOUNT_DIR/sys" || true
   mountpoint -q "$MOUNT_DIR/proc" && umount "$MOUNT_DIR/proc" || true
   if mountpoint -q "$MOUNT_DIR"; then
-    umount "$MOUNT_DIR" 2>/dev/null || umount -l "$MOUNT_DIR" || true
+    umount "$MOUNT_DIR" 2>/dev/null || { sync; umount -l "$MOUNT_DIR"; }
   fi
+  sync
 }
 trap cleanup EXIT
 
@@ -158,6 +159,17 @@ install_dev() {
   # Pre-seed the framework marker so the supervisor does not re-scaffold on first boot.
   install -d "$MOUNT_DIR/root/project/.vmbro"
   printf 'mastra-hono-astro\n' > "$MOUNT_DIR/root/project/.vmbro/framework"
+  # Pre-build the starter inside the chroot (native speed) and stamp it, so the
+  # emulated guest skips the esbuild/Astro run on first boot and its preview is
+  # ready immediately instead of after minutes of emulated compilation.
+  chroot "$MOUNT_DIR" /bin/sh -ec '
+    cd /root/project
+    mkdir -p dist .vmbro
+    esbuild src/server.ts --bundle --format=esm --platform=neutral --target=es2020 --outfile=dist/server.js
+    esbuild lib/render-astro.js --bundle --format=esm --platform=neutral --target=es2022 --external:std --outfile=.vmbro/astro-render.js
+    qjs --module .vmbro/astro-render.js
+    printf "mastra-hono-astro\n" > .vmbro/build-stamp
+  '
 }
 
 install_vapt() {
@@ -208,7 +220,9 @@ verify_tier() {
       test -f /root/project/src/pages/index.astro
       test -f /root/project/src/server.ts
       test -f /root/project/dist/index.html
+      test -f /root/project/dist/server.js
       test -f /root/project/.vmbro/framework
+      test -f /root/project/.vmbro/build-stamp
       test -d /opt/vmbro/ide
       test -f /opt/vmbro/ide/index.html
       test -f /opt/vmbro/ide/app.js
@@ -258,6 +272,19 @@ build_tier() {
   write_tier_metadata "$tier" "$number"
   verify_tier "$tier" "$number"
   cleanup
+  # Make sure the loop device is truly detached and all dirty buffers are on
+  # disk before e2fsck reads the image; otherwise e2fsck sees a half-flushed
+  # filesystem, recovers the journal and moves the tree to /lost+found.
+  for attempt in 1 2 3 4 5; do
+    mountpoint -q "$MOUNT_DIR" || break
+    sleep 1
+    umount "$MOUNT_DIR" 2>/dev/null || true
+    sync
+  done
+  if mountpoint -q "$MOUNT_DIR"; then
+    echo "warning: $MOUNT_DIR still mounted before e2fsck" >&2
+  fi
+  sync
   e2fsck -fy "$image"
   echo "Built $image"
 }

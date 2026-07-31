@@ -20,7 +20,7 @@ const expected = [
 
 test('VM image manifest defines six ordered cumulative tiers', () => {
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.defaultTier, 'ai-tools');
+  assert.equal(manifest.defaultTier, 'barebones');
   assert.deepEqual(Object.keys(manifest.tiers), expected.map(([tier]) => tier));
   for (const [tier, size] of expected) {
     const image = manifest.tiers[tier];

@@ -395,6 +395,29 @@ func (g *gateway) serveEthernet(w http.ResponseWriter, r *http.Request, current 
 			g.bytesToGuest.Add(uint64(n))
 		}
 	}()
+	// Idle WebSocket tunnels are killed by reverse proxies (nginx
+	// proxy_read_timeout), NATs and corporate firewalls that drop connections
+	// with no traffic. Send a protocol-level ping periodically so the tunnel
+	// stays alive indefinitely; the browser answers pings with pongs
+	// automatically, which also keeps nginx's read timer from expiring.
+	go func() {
+		ticker := time.NewTicker(25 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
+				err := conn.Ping(pingCtx)
+				pingCancel()
+				if err != nil {
+					closeWith(err)
+					return
+				}
+			}
+		}
+	}()
 
 	err = <-errCh
 	log.Printf("VM disconnected from %s: %v", g.tapName, err)

@@ -205,7 +205,25 @@ func (s *supervisor) build() error {
 	if config.Build == "" {
 		return nil
 	}
-	return s.runCommand("build", config.Build, 120*time.Second)
+	if err := s.runCommand("build", config.Build, 120*time.Second); err != nil {
+		return err
+	}
+	stamp := filepath.Join(s.workspace, ".vmbro", "build-stamp")
+	_ = os.WriteFile(stamp, []byte(s.framework), 0o644)
+	return nil
+}
+
+// buildFresh reports whether the workspace was already built for this
+// framework (a .vmbro/build-stamp written after a successful build, or a
+// framework with no build step at all). The image is pre-baked with the
+// starter already compiled, so skipping the rebuild makes first boot fast.
+func (s *supervisor) buildFresh() bool {
+	config := s.frameworkConfig(s.framework)
+	if config == nil || config.Build == "" {
+		return true
+	}
+	stamp, err := os.ReadFile(filepath.Join(s.workspace, ".vmbro", "build-stamp"))
+	return err == nil && strings.TrimSpace(string(stamp)) == s.framework
 }
 
 // loadWorkspace scaffolds the baked-in starter if no framework marker exists yet.
@@ -222,8 +240,10 @@ func (s *supervisor) loadWorkspace() error {
 			return err
 		}
 	}
-	if err := s.build(); err != nil {
-		return err
+	if !s.buildFresh() {
+		if err := s.build(); err != nil {
+			return err
+		}
 	}
 	return s.startApp()
 }
@@ -254,6 +274,8 @@ func (s *supervisor) scaffoldLocked(id string) error {
 	if err := os.WriteFile(filepath.Join(s.workspace, ".vmbro", "framework"), []byte(id), 0o644); err != nil {
 		return err
 	}
+	// A scaffold replaces the workspace, so the pre-baked build stamp is stale.
+	_ = os.Remove(filepath.Join(s.workspace, ".vmbro", "build-stamp"))
 	s.framework = id
 	return nil
 }
@@ -546,9 +568,6 @@ func main() {
 			appPort:      appPort,
 			logTail:      make([]string, 0, 200),
 		}
-		if err := super.loadWorkspace(); err != nil {
-			log.Fatalf("supervisor init: %v", err)
-		}
 		router := chi.NewRouter()
 		router.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
 		if root != "" {
@@ -568,6 +587,18 @@ func main() {
 		}
 		address := fmt.Sprintf("%s:%d", bind, port)
 		log.Printf("vmbro-httpd (Dev IDE) listening on http://%s supervising %s", address, supervise)
+		// Scaffold, build and start the app server in the background so the IDE
+		// shell (and its port 3000 listener) comes up immediately. In the emulated
+		// i386 guest the esbuild/Astro build can take minutes; blocking the bind
+		// makes the host boot overlay stall at 98% waiting for a port that does
+		// not exist yet. Failures are streamed to the IDE console instead of
+		// killing the process.
+		go func() {
+			if err := super.loadWorkspace(); err != nil {
+				super.addLog("supervisor init failed: " + err.Error())
+				log.Printf("supervisor init: %v", err)
+			}
+		}()
 		log.Fatal((&http.Server{
 			Addr:              address,
 			Handler:           router,

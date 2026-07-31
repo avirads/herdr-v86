@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultTier": "ai-tools",
+  "defaultTier": "barebones",
   "tiers": {
     "barebones": {
       "name": "Barebones",
@@ -31,8 +31,8 @@
       "description": "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.",
       "url": "vm-dev-i386-ext4.img",
       "size": 99614720,
-      "version": "2026.07.31.10",
-      "sha256": "0017dd5d26b113eafcd23277dcf739d5134bd8deca1db6009766e38d702d2b33"
+      "version": "2026.07.31.11",
+      "sha256": "d53ef4b79a677d54457a684b11757cdd2883016b422d7486ae548cb63ae6eeb6"
     },
     "performance": {
       "name": "Performance testing",

@@ -10,3 +10,9 @@ models/
 # not shipped in the native-only vapt tier (vaptr is self-contained).
 network/guest/vapt-bin/
 network/guest/vaptr-all-tools.json
+
+# Go gateway build artifact (linux/amd64), rebuilt per deploy
+network/v86net-gateway-linux-amd64
+
+network/guest/vmbro-httpd/vmbro-httpd-linux-386
+
