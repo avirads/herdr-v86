@@ -4,18 +4,29 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VMVM (v86)</title>
+<link rel="icon" type="image/png" href="assets/vmvm-logo.png">
 <link rel="stylesheet" href="xterm.css">
+<script>
+  document.documentElement.dataset.theme =
+    localStorage.getItem("vm.theme") ||
+    (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+</script>
 <style>
+  :root { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
   html { width: 100%; height: 100%; background: #0d1117; overflow: hidden; }
   body { box-sizing: border-box; margin: 0; width: 100%; height: 100vh; height: 100dvh; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
   header { box-sizing: border-box; flex: 0 0 auto; width: 100%; padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
-  header h1 { font-size: 15px; margin: 0; }
+  header h1 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .brand-logo { width: 28px; height: 28px; object-fit: contain; }
   #status { font-size: 12px; color: #8b949e; }
   #term { box-sizing: border-box; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 0; padding: 0 8px 8px; visibility: hidden; overflow: hidden; }
   #term .xterm { height: 100%; }
   #role-overlay { box-sizing: border-box; position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; overflow-y: auto; background: #0d1117; padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
   #role-overlay[hidden] { display: none; }
   .role-panel { width: min(760px, 100%); }
+  .role-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; color: #f0f6fc; font-size: 18px; font-weight: 750; letter-spacing: .02em; }
+  .role-brand .brand-logo { width: 40px; height: 40px; }
   .role-panel > h1 { margin: 0 0 7px; color: #f0f6fc; font-size: clamp(24px, 5vw, 34px); }
   .role-panel > p { margin: 0 0 22px; color: #8b949e; line-height: 1.5; }
   .role-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -100,6 +111,32 @@
   #remote-dialog { width: min(560px, calc(100vw - 32px)); }
   #remote-status { display: flex; align-items: center; gap: 8px; }
   .spinner { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin .8s linear infinite; }
+  :root[data-theme="light"] html,
+  :root[data-theme="light"] body,
+  :root[data-theme="light"] #role-overlay,
+  :root[data-theme="light"] #boot-overlay { background: #f6f8fa; color: #24292f; }
+  :root[data-theme="light"] header,
+  :root[data-theme="light"] dialog,
+  :root[data-theme="light"] .role-card { background: #fff; color: #24292f; border-color: #d0d7de; }
+  :root[data-theme="light"] .role-panel > h1,
+  :root[data-theme="light"] .role-brand,
+  :root[data-theme="light"] .role-card strong,
+  :root[data-theme="light"] dialog h2,
+  :root[data-theme="light"] .provider-section h3,
+  :root[data-theme="light"] #boot-percent { color: #1f2328; }
+  :root[data-theme="light"] #status,
+  :root[data-theme="light"] #boot-message,
+  :root[data-theme="light"] .role-panel > p,
+  :root[data-theme="light"] .role-card span { color: #57606a; }
+  :root[data-theme="light"] button,
+  :root[data-theme="light"] .model-downloads .tool-link { color: #24292f; background: #f6f8fa; border-color: #d0d7de; }
+  :root[data-theme="light"] .provider-section,
+  :root[data-theme="light"] dialog input,
+  :root[data-theme="light"] dialog select,
+  :root[data-theme="light"] dialog textarea { color: #24292f; background: #fff; border-color: #d0d7de; }
+  :root[data-theme="light"] .settings-heading { background: #fff; }
+  :root[data-theme="light"] #boot-ring { background: conic-gradient(#0969da var(--progress, 1%), #d8dee4 0); }
+  :root[data-theme="light"] #boot-ring::before { background: #f6f8fa; }
   @keyframes spin { to { transform: rotate(360deg); } }
   #remote-key-row { display: flex; gap: 6px; align-items: stretch; }
   #remote-key { flex: 1; min-width: 0; font: 12px monospace; }
@@ -145,6 +182,7 @@
 <body>
 <div id="role-overlay" role="dialog" aria-modal="true" aria-labelledby="role-title">
   <div class="role-panel">
+    <div class="role-brand"><img class="brand-logo" src="assets/vmvm-logo.png" alt="">VMVM</div>
     <h1 id="role-title">How do you want to use VM?</h1>
     <p>Choose Agent to start the local VM and model tools, or Human to connect to an agent that is already running its AI model.</p>
     <div class="role-options">
@@ -169,7 +207,7 @@
   </div>
 </div>
 <header>
-  <h1>VM</h1>
+  <h1><img class="brand-logo" src="assets/vmvm-logo.png" alt="">VMVM</h1>
   <div id="status">loading v86…</div>
   <div id="llm-status">Local AI model: not configured</div>
   <div id="browser-status">AutoBro: not connected</div>
@@ -179,6 +217,8 @@
     <button id="paste-terminal" type="button" title="Paste clipboard text into the shell (Ctrl+Shift+V)">Paste</button>
     <button id="voice-button" type="button" title="Dictate locally with Moonshine">🎙 Voice</button>
     <button id="open-dev-app" type="button" title="Open the Dev VM app running on guest port 3000" hidden>Open Dev App</button>
+    <button id="toggle-theme" type="button" title="Switch light or dark theme">Theme</button>
+    <button id="refresh-app" type="button" title="Refresh VMVM">Refresh</button>
     <button id="open-settings" title="Reset model or AutoBro configuration">Settings</button>
   </div>
 </header>
@@ -383,6 +423,9 @@
 
 <script>
 "use strict";
+// Module-scoped so the IIFE's terminal .catch() can stop it and surface the
+// real failure instead of letting it animate to a red 90% stall.
+let bootTicker = null;
 (async () => {
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -445,7 +488,7 @@ const VM_IMAGE_FALLBACK = {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "vm-barebones-i386-ext4.img", size: 67108864, version: "2026.07.29.1" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "vm-essentials-i386-ext4.img", size: 83886080, version: "2026.07.29.1" },
     "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.07.29.1" },
-    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.3" },
+    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.4" },
     "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.07.29.1" },
     "vapt": { name: "VAPT — native scanner", description: "Performance plus Vaptr, the self-contained native scanner (no external tools; runs in the v86 guest).", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.07.30.1" },
   },
@@ -479,7 +522,7 @@ function setBootProgress(value, message) {
   bootPercent.textContent = `${bootProgress}%`;
   if (message) bootMessage.textContent = message;
 }
-const bootTicker = setInterval(() => {
+bootTicker = setInterval(() => {
   if (bootProgress < 90) {
     setBootProgress(bootProgress + 1, `Starting VMVM [${vmImageDisplaySource}]…`);
   } else if (!shellReady && vmImageTier === "dev") {
@@ -507,6 +550,56 @@ function failBoot(message) {
   clearInterval(bootTicker);
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
+}
+// --- Dev tier: fold the app compile/serve into the boot progress, then open it ---
+// The guest autostarts `vmbro-dev` (esbuild bundle + Chi server on :3000), which
+// takes noticeably longer than the shell prompt. Rather than report "Ready" at
+// the prompt and leave the app compiling invisibly, keep the overlay through the
+// app-start phase and hand off to the app tab only once port 3000 is listening.
+const DEV_APP_URL = "http://10.77.0.15:3000/";
+const DEVAPP_READY_MARKER = "DEVAPP-READY-OK";
+let devAppPhase = false;
+let devAppTicker = null;
+let devAppTimeout = null;
+function openDevAppTab() {
+  // Reuses the "herdr-dev-app" tab pre-opened from the role screen when present;
+  // otherwise opens a fresh one (subject to the browser's popup policy when the
+  // deep-link boot has no recent user gesture — the toolbar button is the fallback).
+  const opened = window.open(DEV_APP_URL, "herdr-dev-app");
+  if (!opened) status("Dev app ready — click “Open Dev App” to open it in a new tab");
+  return !!opened;
+}
+function startDevAppPhase() {
+  devAppPhase = true;
+  clearInterval(bootTicker);
+  setBootProgress(90, "Shell ready — compiling Dev app (esbuild)…");
+  const messages = [
+    "Compiling Dev app (esbuild)…",
+    "Bundling server and Astro pages…",
+    "Starting Chi server on port 3000…",
+  ];
+  let step = 0;
+  devAppTicker = setInterval(() => {
+    if (bootProgress < 98) setBootProgress(bootProgress + 1);
+    bootMessage.textContent = messages[Math.min(step++, messages.length - 1)];
+  }, 1500);
+  // Ask the guest to announce once the dev server is actually listening. The
+  // marker is split with '' so the echoed command line cannot match the detector.
+  const waitCommand =
+    "( while ! (netstat -tln 2>/dev/null || ss -tln 2>/dev/null) | grep -q ':3000'; do sleep 1; done; echo DEVAPP-''READY-OK ) &\n";
+  for (const ch of waitCommand) emulator.serial0_send(ch);
+  // Never trap the user on the overlay: reveal the shell even if the app stalls.
+  devAppTimeout = setTimeout(() => finishDevApp(false), 300000);
+}
+function finishDevApp(ready) {
+  if (!devAppPhase) return;
+  devAppPhase = false;
+  clearInterval(devAppTicker);
+  clearTimeout(devAppTimeout);
+  if (ready) setBootProgress(100, "Dev app ready");
+  finishBoot();
+  if (ready) openDevAppTab();
+  else status("Dev app is still compiling — use “Open Dev App” when it is ready");
 }
 const APP_VERSION = "2026.07.29.1";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
@@ -1764,9 +1857,16 @@ document.getElementById("export-file").onclick = async () => {
   }
 };
 document.getElementById("open-help").onclick = () => { settingsDialog.close(); window.open("docs/guest-tools.html", "_blank", "noopener"); };
+document.getElementById("toggle-theme").onclick = () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("vm.theme", next);
+  status(`${next[0].toUpperCase()}${next.slice(1)} theme`);
+};
+document.getElementById("refresh-app").onclick = () => location.reload();
 
 const devAppButton = document.getElementById("open-dev-app");
-devAppButton.hidden = selectedVMImage !== "dev";
+devAppButton.hidden = vmImageTier !== "dev";
 devAppButton.onclick = () => {
   const devURL = "http://10.77.0.15:3000/";
   const opened = window.open(devURL, "_blank", "noopener");
@@ -1903,6 +2003,7 @@ function serialHasShellPrompt(output) {
 emulator.add_listener("serial0-output-byte", (byte) => {
   const serialCharacter = String.fromCharCode(byte);
   serialFaultContext = (serialFaultContext + serialCharacter).slice(-2048);
+  if (devAppPhase && serialFaultContext.includes(DEVAPP_READY_MARKER)) finishDevApp(true);
   if (!gotSerial) {
     gotSerial = true;
     setBootProgress(68, `Starting VMVM [${vmImageDisplaySource}]…`);
@@ -1935,7 +2036,8 @@ emulator.add_listener("serial0-output-byte", (byte) => {
       for (const ch of `export HISTFILE=/root/.ash_history HISTSIZE=200; set -o emacs 2>/dev/null || true; stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project /mnt/host-transfer; mount | grep -q ' /mnt/host-transfer ' || mount -t 9p host9p /mnt/host-transfer -o trans=virtio,version=9p2000.L,cache=loose; cd /root/project\n`) {
         emulator.serial0_send(ch);
       }
-      finishBoot();
+      if (vmImageTier === "dev") startDevAppPhase();
+      else finishBoot();
     }
   }
 });
@@ -2051,6 +2153,10 @@ function handleTerminalData(data) {
 term.onData(handleTerminalData);
 term.focus();
 })().catch(error => {
+  // Stop the progress ticker first: otherwise it keeps overwriting the message
+  // below with "Starting VMVM…" and animating toward its 90% cap, masking the
+  // real failure as a red stall at 90%.
+  clearInterval(bootTicker);
   document.getElementById("status").textContent = "BOOT FAILED: " + error.message;
   const overlay = document.getElementById("boot-overlay");
   overlay?.classList.add("error");

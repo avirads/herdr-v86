@@ -271,8 +271,9 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
 
 ## Automated verification
 
-On a privileged Linux host with Chrome, Node, Go, TUN/TAP, nftables, and
-dnsmasq:
+The deployed VM and Dev IDE do not require Node.js. Maintainer-only automated
+verification uses the repository test toolchain on a privileged Linux host
+with Chrome, Go, TUN/TAP, nftables, and dnsmasq:
 
 ```bash
 sudo ./test/run-e2e-linux.sh

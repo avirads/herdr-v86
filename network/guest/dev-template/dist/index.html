@@ -3,23 +3,53 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width" />
-		<title>Astro + Hono</title>
+		<title>VMVM Dev IDE</title>
+		<link rel="icon" type="image/png" href="/vmvm-logo.png" />
 		<link rel="stylesheet" href="/styles.css" />
+		<script>
+			document.documentElement.dataset.theme =
+				localStorage.getItem('dev.theme') ||
+				(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+		</script>
 	</head>
 	<body>
-		<main>
-			<p class="eyebrow">ASTRO FRONTEND · HONO API</p>
-			<h1>Astro + Hono</h1>
-			<p>Static Astro output in front, Hono routes behind native Chi.</p>
-			<button id="hello">Call the API</button>
-			<pre id="output">Ready.</pre>
+		<main class="shell">
+			<header>
+				<div class="brand">
+					<img src="/vmvm-logo.png" alt="" />
+					<div>
+						<p class="eyebrow">ASTRO · HONO · WEBGPU</p>
+						<h1>VMVM Dev IDE</h1>
+						<p class="subtitle">Node-free TypeScript development inside the browser VM.</p>
+					</div>
+				</div>
+				<div class="header-actions">
+					<span class="status">Dev server ready</span>
+					<button id="theme" class="quiet" type="button">Theme</button>
+					<button id="refresh" class="quiet" type="button">Refresh</button>
+				</div>
+			</header>
+			<section class="connection">
+				<div class="model">
+					<strong>Astro + Hono runtime</strong>
+					<small>Native esbuild and Chi serving the guest workspace on port 3000.</small>
+				</div>
+				<button id="hello" type="button">Check API</button>
+			</section>
+			<pre id="output" class="messages">Ready.</pre>
 		</main>
 		<script>
 			const output = document.querySelector('#output');
 			document.querySelector('#hello').addEventListener('click', async () => {
-				const response = await fetch('/api/hello');
+				const response = await fetch('/api/health');
 				output.textContent = JSON.stringify(await response.json(), null, 2);
 			});
+			document.querySelector('#theme').addEventListener('click', () => {
+				const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+				document.documentElement.dataset.theme = next;
+				localStorage.setItem('dev.theme', next);
+			});
+			document.querySelector('#refresh').addEventListener('click', () => location.reload());
 		</script>
 	</body>
 </html>

@@ -67,7 +67,7 @@ test('Settings selects a manifest image and warns before restart', () => {
 
 test('Dev tier exposes its port 3000 app launcher', () => {
   assert.match(html, /id="open-dev-app"[^>]*hidden>Open Dev App<\/button>/);
-  assert.match(html, /devAppButton\.hidden = selectedVMImage !== "dev"/);
+  assert.match(html, /devAppButton\.hidden = vmImageTier !== "dev"/);
   assert.match(html, /http:\/\/10\.77\.0\.15:3000\//);
 });
 
@@ -77,9 +77,28 @@ test('Dev tier starts and opens its app automatically', () => {
   assert.match(html, /window\.open\("dev-app\.html", "herdr-dev-app"\)/);
   assert.match(devApp, /location\.replace\(appURL\)/);
   assert.match(devApp, /http:\/\/10\.77\.0\.15:3000\//);
+  // The app tab is opened only once the guest server is actually listening.
+  assert.match(html, /if \(vmImageTier === "dev"\) startDevAppPhase\(\)/);
+  assert.match(html, /window\.open\(DEV_APP_URL, "herdr-dev-app"\)/);
+  assert.match(html, /finishDevApp\(true\)/);
+});
+
+test('Dev tier boot progress reflects the app compile/serve phase', () => {
+  assert.match(html, /Compiling Dev app \(esbuild\)…/);
+  assert.match(html, /Starting Chi server on port 3000…/);
+  // Readiness is gated on port 3000 actually listening, not a blind timer.
+  assert.match(html, /grep -q ':3000'/);
+  assert.match(html, /includes\(DEVAPP_READY_MARKER\)/);
 });
 
 test('Dev tier allows the larger image enough time to produce VM output', () => {
   assert.match(html, /vmImageTier === "dev" \? 300000 : 120000/);
   assert.match(html, /first boot may take several minutes/);
+});
+
+test('VMVM branding, themes, and refresh controls are present', () => {
+  assert.match(html, /assets\/vmvm-logo\.png/);
+  assert.match(html, /id="toggle-theme"/);
+  assert.match(html, /localStorage\.setItem\("vm\.theme", next\)/);
+  assert.match(html, /id="refresh-app"/);
 });

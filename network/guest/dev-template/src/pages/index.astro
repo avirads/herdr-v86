@@ -13,12 +13,19 @@ const title = 'Mastra Weather Agent';
 	<body>
 		<main class="shell">
 			<header>
-				<div>
+				<div class="brand">
+					<img src="/vmvm-logo.png" alt="" />
+					<div>
 					<p class="eyebrow">ASTRO · HONO · VMM ASTRA · WEBGPU</p>
 					<h1>{title}</h1>
 					<p class="subtitle">Mastra streaming through Gemma 4 E2B, entirely in your browser.</p>
+					</div>
 				</div>
-				<span id="status" class="status">Starting LiteRT-LM…</span>
+				<div class="header-actions">
+					<span id="status" class="status">Starting LiteRT-LM…</span>
+					<button id="theme" class="quiet" type="button">Theme</button>
+					<button id="refresh" class="quiet" type="button">Refresh</button>
+				</div>
 			</header>
 
 			<section class="connection" aria-label="Local model">
@@ -56,10 +63,22 @@ const title = 'Mastra Weather Agent';
 			const prompt = document.querySelector('#prompt');
 			const send = document.querySelector('#send');
 			const modelFile = document.querySelector('#model-file');
+			const theme = document.querySelector('#theme');
+			const refresh = document.querySelector('#refresh');
 			let client;
 			let agent;
 			let generating = false;
 			const history = [];
+
+			document.documentElement.dataset.theme =
+				localStorage.getItem('dev.theme') ||
+				(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+			theme.addEventListener('click', () => {
+				const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+				document.documentElement.dataset.theme = next;
+				localStorage.setItem('dev.theme', next);
+			});
+			refresh.addEventListener('click', () => location.reload());
 
 			const addMessage = (role, text = '') => {
 				const item = document.createElement('li');

@@ -109,9 +109,10 @@ to the remote full gateway and also offers normal-user local userspace
 networking, optional Wintun networking, and offline mode. See
 [`portable/README.md`](portable/README.md).
 
-The disk image is loaded with `async: true`, so the web server **must support
-HTTP Range requests** (206). GitHub Pages, nginx, caddy, and `npx http-server`
-work; `python -m http.server` does not (returns 200/full-body, v86 aborts the
+The runtime is browser-native and does not require Node.js. The disk image is
+loaded with `async: true`, so the web server **must support HTTP Range
+requests** (206). nginx, caddy, and other Range-capable static servers work;
+`python -m http.server` does not (returns 200/full-body, v86 aborts the
 read, and the guest kernel spirals into ATA timeouts before dropping to PIO).
 
 The demo checks Range delivery before starting. If the check fails, it downloads
