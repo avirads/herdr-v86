@@ -16,3 +16,5 @@ network/v86net-gateway-linux-amd64
 
 network/guest/vmbro-httpd/vmbro-httpd-linux-386
 
+build-dev.log
+
