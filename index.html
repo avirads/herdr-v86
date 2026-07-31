@@ -358,6 +358,7 @@
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
             <option value="gemini">Gemini</option>
+            <option value="copilot">GitHub Copilot</option>
             <option value="compatible">OpenAI-compatible</option>
           </select>
         </label>
@@ -1591,6 +1592,7 @@ const providerTypeDefaults = {
   openai: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com/v1",
   gemini: "https://generativelanguage.googleapis.com/v1beta",
+  copilot: "https://api.githubcopilot.com",
   compatible: "http://localhost:11434/v1",
 };
 function refreshCloudProviderSettings(selectedId = "") {
@@ -1619,6 +1621,13 @@ cloudProviderSelect.onchange = () => {
 cloudProviderFields.type.onchange = () => {
   if (!cloudProviderFields.baseUrl.value || Object.values(providerTypeDefaults).includes(cloudProviderFields.baseUrl.value)) {
     cloudProviderFields.baseUrl.value = providerTypeDefaults[cloudProviderFields.type.value];
+  }
+  if (cloudProviderFields.type.value === "copilot") {
+    cloudProviderFields.apiKey.placeholder = "GitHub token with Copilot access (ghu_/gho_…)";
+    if (!cloudProviderFields.model.value) cloudProviderFields.model.value = "gpt-4o";
+    cloudProviderStatus.textContent = "GitHub Copilot: paste a GitHub OAuth token that has Copilot enabled. It is exchanged for a short-lived Copilot token per request.";
+  } else {
+    cloudProviderFields.apiKey.placeholder = "kept for this tab";
   }
 };
 document.getElementById("save-cloud-provider").onclick = () => {

@@ -2,6 +2,16 @@ const PROVIDERS_KEY = "vmvm.llm.providers";
 const DEFAULTS_KEY = "vmvm.llm.agentDefaults";
 const SECRET_PREFIX = "vmvm.llm.secret.";
 
+// GitHub Copilot hands out a short-lived (~30 min) bearer token in exchange for a
+// GitHub OAuth token. Cache the exchanged token per GitHub token so we don't hit
+// the exchange endpoint on every chat turn. Keyed by the GitHub token string.
+const COPILOT_TOKENS = new Map();
+const COPILOT_EDITOR_HEADERS = {
+  "editor-version": "vscode/1.95.0",
+  "editor-plugin-version": "copilot-chat/0.22.0",
+  "user-agent": "GitHubCopilotChat/0.22.0",
+};
+
 const clean = value => String(value ?? "").trim();
 
 function normalizedBaseUrl(value) {
@@ -63,7 +73,46 @@ class CloudLlmClient {
   async chat(body = {}) {
     if (this.config.type === "anthropic") return this.anthropic(body);
     if (this.config.type === "gemini") return this.gemini(body);
+    if (this.config.type === "copilot") return this.copilot(body);
     return this.openai(body);
+  }
+
+  // Exchanges the user's GitHub OAuth token (this.apiKey) for a Copilot bearer
+  // token, cached until shortly before it expires.
+  async copilotToken() {
+    const now = Date.now();
+    const cached = COPILOT_TOKENS.get(this.apiKey);
+    if (cached && cached.expiry - 60000 > now) return cached.token;
+    const data = await this.request("https://api.github.com/copilot_internal/v2/token", {
+      method: "GET",
+      headers: { authorization: `token ${this.apiKey}`, accept: "application/json", ...COPILOT_EDITOR_HEADERS },
+    });
+    if (!data.token) throw new Error("GitHub did not return a Copilot token — is Copilot enabled for this account?");
+    const token = data.token;
+    const expiry = data.expires_at ? data.expires_at * 1000 : now + 25 * 60 * 1000;
+    COPILOT_TOKENS.set(this.apiKey, { token, expiry });
+    return token;
+  }
+
+  async copilot(body) {
+    const token = await this.copilotToken();
+    const base = normalizedBaseUrl(this.config.baseUrl || "https://api.githubcopilot.com");
+    const request = {
+      ...body,
+      model: body.model && body.model !== "webgpu" ? body.model : this.modelName,
+      stream: false,
+    };
+    return this.request(`${base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        "copilot-integration-id": "vscode-chat",
+        "openai-intent": "conversation-panel",
+        ...COPILOT_EDITOR_HEADERS,
+      },
+      body: JSON.stringify(request),
+    });
   }
 
   async openai(body) {
@@ -178,7 +227,7 @@ export class LlmProviderRouter {
       id, label: clean(config.label) || id, type: clean(config.type),
       baseUrl: normalizedBaseUrl(config.baseUrl), model: clean(config.model),
     };
-    if (!["openai", "compatible", "anthropic", "gemini"].includes(next.type)) throw new Error("Unsupported provider type");
+    if (!["openai", "compatible", "anthropic", "gemini", "copilot"].includes(next.type)) throw new Error("Unsupported provider type");
     if (!next.model) throw new Error("A model name is required");
     const providers = this.providers().filter(item => item.id !== id);
     providers.push(next);
