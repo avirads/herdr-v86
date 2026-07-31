@@ -83,6 +83,9 @@
   #vm-runtime-warning-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 7px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
   .tool-link { color: #58a6ff; align-self: center; font-size: 12px; white-space: nowrap; }
+  .about-link { display: inline-block; margin-top: 20px; color: #58a6ff; font-size: 13px; text-underline-offset: 3px; }
+  .about-link:hover, .about-link:focus-visible { color: #79c0ff; }
+  .about-link:focus-visible { outline: 2px solid #58a6ff; outline-offset: 3px; border-radius: 4px; }
   dialog { color: #c9d1d9; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 18px; width: min(420px, calc(100vw - 48px)); }
   dialog::backdrop { background: rgb(0 0 0 / .65); }
   dialog h2 { margin: 0 0 14px; font-size: 17px; }
@@ -137,6 +140,8 @@
   :root[data-theme="light"] .role-card span { color: #57606a; }
   :root[data-theme="light"] button,
   :root[data-theme="light"] .model-downloads .tool-link { color: #24292f; background: #f6f8fa; border-color: #d0d7de; }
+  :root[data-theme="light"] .about-link { color: #0969da; }
+  :root[data-theme="light"] .about-link:hover, :root[data-theme="light"] .about-link:focus-visible { color: #0550ae; }
   :root[data-theme="light"] #tools button:hover:not(:disabled) { color: #1f2328; background: #eaeef2; border-color: #c3cdd9; }
   :root[data-theme="light"] #tools button:focus-visible { outline-color: #0969da; border-color: #0969da; color: #1f2328; }
   :root[data-theme="light"] #tools button:active:not(:disabled) { background: #e2e8ee; border-color: #0969da; }
@@ -226,6 +231,7 @@
         <small>Connect to agent →</small>
       </button>
     </div>
+    <a class="about-link" href="docs/about.html">About this project — architecture, components &amp; licenses</a>
   </div>
 </div>
 <div id="boot-overlay" role="status" aria-live="polite">
