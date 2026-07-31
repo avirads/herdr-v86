@@ -52,8 +52,13 @@
   .model-downloads .tool-link:hover, .model-downloads .tool-link:focus-visible { border-color: #58a6ff; outline: none; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
-  #tools button { width: 56px; height: 52px; min-height: 52px; min-width: 56px; display: grid; grid-template-rows: 1fr auto; place-items: center; gap: 3px; padding: 5px 0 4px; font-size: 20px; line-height: 1; touch-action: manipulation; }
+  #tools button { width: 56px; height: 52px; min-height: 52px; min-width: 56px; display: grid; grid-template-rows: 1fr auto; place-items: center; gap: 3px; padding: 5px 0 4px; font-size: 20px; line-height: 1; touch-action: manipulation; border: 1px solid transparent; background: transparent; transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.08s; }
   #tools button svg { width: 20px; height: 20px; display: block; }
+  #tools button:hover:not(:disabled) { color: #f0f6fc; background: #1b222c; border-color: #30363d; }
+  #tools button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; border-color: #58a6ff; color: #f0f6fc; }
+  #tools button:active:not(:disabled) { transform: translateY(1px); background: #21262d; border-color: #58a6ff; }
+  #tools button:disabled { opacity: 0.45; cursor: default; }
+  #tools button.shared { color: #3fb950; border-color: #3fb950; }
   #tools .tool-label { font-size: 9px; line-height: 1; letter-spacing: .03em; text-transform: uppercase; color: inherit; opacity: .9; white-space: nowrap; }
   #voice-button.listening { color: #fff; background: #da3633; border-color: #f85149; }
   #voice-button.loading { color: #f0f6fc; border-color: #58a6ff; }
@@ -133,6 +138,10 @@
   :root[data-theme="light"] .role-card span { color: #57606a; }
   :root[data-theme="light"] button,
   :root[data-theme="light"] .model-downloads .tool-link { color: #24292f; background: #f6f8fa; border-color: #d0d7de; }
+  :root[data-theme="light"] #tools button:hover:not(:disabled) { color: #1f2328; background: #eaeef2; border-color: #c3cdd9; }
+  :root[data-theme="light"] #tools button:focus-visible { outline-color: #0969da; border-color: #0969da; color: #1f2328; }
+  :root[data-theme="light"] #tools button:active:not(:disabled) { background: #e2e8ee; border-color: #0969da; }
+  :root[data-theme="light"] #tools button.shared { color: #1a7f37; border-color: #1a7f37; }
   :root[data-theme="light"] .provider-section,
   :root[data-theme="light"] dialog input,
   :root[data-theme="light"] dialog select,
@@ -247,7 +256,7 @@
       </svg>
       <span class="tool-label">Voice</span>
     </button>
-    <button id="share-ide" type="button" title="Copy public IDE link" aria-label="Copy public IDE link">
+    <button id="share-ide" type="button" title="Share a snapshot of the live preview" aria-label="Share a snapshot of the live preview">
       <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
         <polyline points="15 3 21 3 21 9"/>
@@ -1937,14 +1946,51 @@ document.getElementById("toggle-theme").onclick = () => {
   status(`${next[0].toUpperCase()}${next.slice(1)} theme`);
 };
 document.getElementById("refresh-app").onclick = () => location.reload();
+// Share captures the current Dev IDE preview pane (a PNG snapshot of the app
+// as it renders right now) instead of a generic IDE link. It tries the Web
+// Share API with the image file, then clipboard image, then downloads it, and
+// finally falls back to copying the live /preview/ URL for the running VM.
 document.getElementById("share-ide").onclick = async () => {
-  const shareURL = new URL("/ide/", location.origin).href;
-  try {
-    await navigator.clipboard.writeText(shareURL);
-    status("Public IDE link copied — available while this VM is running");
-  } catch {
-    window.prompt("Copy the public IDE link", shareURL);
+  const button = document.getElementById("share-ide");
+  const preview = document.getElementById("dev-ide")?.contentDocument?.getElementById("preview");
+  let shared = false;
+  if (preview && preview.contentWindow) {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = preview.clientWidth;
+      canvas.height = preview.clientHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (blob) {
+        const file = new File([blob], "vmvm-preview.png", { type: "image/png" });
+        const canShare = navigator.canShare && navigator.canShare({ files: [file] });
+        if (canShare) {
+          await navigator.share({ files: [file], title: "VMVM preview" });
+          shared = true;
+        } else {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": blob }),
+          ]);
+          shared = true;
+          status("Preview snapshot copied to clipboard");
+        }
+      }
+    } catch {
+      /* fall through to URL share below */
+    }
   }
+  if (!shared) {
+    const shareURL = new URL("/preview/", location.origin).href;
+    try {
+      await navigator.clipboard.writeText(shareURL);
+      status("Preview link copied — shares the running app while this VM is up");
+    } catch {
+      window.prompt("Copy the preview link", shareURL);
+    }
+  }
+  button.classList.add("shared");
+  setTimeout(() => button.classList.remove("shared"), 1200);
 };
 
 async function importFileIntoVm(file, afterImport = "") {

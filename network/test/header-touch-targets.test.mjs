@@ -5,9 +5,16 @@ import test from 'node:test';
 const html = await readFile(new URL('../../index.html', import.meta.url), 'utf8');
 
 test('header tools have comfortable pointer and mobile touch targets', () => {
-  assert.match(html, /#tools button \{ width: 44px; height: 44px; min-height: 44px; min-width: 44px;/);
-  assert.match(html, /#tools button \{ width: 48px; height: 48px; min-height: 48px; min-width: 48px;/);
+  assert.match(html, /#tools button \{ width: 56px; height: 52px; min-height: 52px; min-width: 56px;/);
+  assert.match(html, /#tools button \{ width: 52px; height: 50px; min-height: 50px; min-width: 52px;/);
   assert.match(html, /touch-action: manipulation/);
+});
+
+test('header tools expose visible hover, focus-visible and active states', () => {
+  assert.match(html, /#tools button:hover:not\(:disabled\)/);
+  assert.match(html, /#tools button:focus-visible/);
+  assert.match(html, /#tools button:active:not\(:disabled\)/);
+  assert.match(html, /#tools button:disabled/);
 });
 
 test('the enlarged tool group contains the four requested controls', () => {
