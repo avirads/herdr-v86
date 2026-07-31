@@ -70,9 +70,13 @@ const title = 'Mastra Weather Agent';
 			let generating = false;
 			const history = [];
 
-			document.documentElement.dataset.theme =
-				localStorage.getItem('dev.theme') ||
-				(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+			const requestedTheme = new URLSearchParams(location.search).get('theme');
+			const initialTheme = ['light', 'dark'].includes(requestedTheme)
+				? requestedTheme
+				: localStorage.getItem('dev.theme') ||
+					(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+			document.documentElement.dataset.theme = initialTheme;
+			localStorage.setItem('dev.theme', initialTheme);
 			theme.addEventListener('click', () => {
 				const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
 				document.documentElement.dataset.theme = next;

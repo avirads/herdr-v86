@@ -7,9 +7,13 @@
 		<link rel="icon" type="image/png" href="/vmvm-logo.png" />
 		<link rel="stylesheet" href="/styles.css" />
 		<script>
-			document.documentElement.dataset.theme =
-				localStorage.getItem('dev.theme') ||
-				(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+			const requestedTheme = new URLSearchParams(location.search).get('theme');
+			const initialTheme = ['light', 'dark'].includes(requestedTheme)
+				? requestedTheme
+				: localStorage.getItem('dev.theme') ||
+					(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+			document.documentElement.dataset.theme = initialTheme;
+			localStorage.setItem('dev.theme', initialTheme);
 		</script>
 	</head>
 	<body>
