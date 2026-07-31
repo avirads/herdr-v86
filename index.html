@@ -53,7 +53,9 @@
   .model-downloads .tool-link:hover, .model-downloads .tool-link:focus-visible { border-color: #58a6ff; outline: none; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
-  #tools button { width: 44px; height: 44px; min-height: 44px; min-width: 44px; display: grid; place-items: center; padding: 0; font-size: 20px; line-height: 1; touch-action: manipulation; }
+  #tools button { width: 56px; height: 52px; min-height: 52px; min-width: 56px; display: grid; grid-template-rows: 1fr auto; place-items: center; gap: 3px; padding: 5px 0 4px; font-size: 20px; line-height: 1; touch-action: manipulation; }
+  #tools button svg { width: 20px; height: 20px; display: block; }
+  #tools .tool-label { font-size: 9px; line-height: 1; letter-spacing: .03em; text-transform: uppercase; color: inherit; opacity: .9; white-space: nowrap; }
   #voice-button.listening { color: #fff; background: #da3633; border-color: #f85149; }
   #voice-button.loading { color: #f0f6fc; border-color: #58a6ff; }
   #voice-status { font-size: 12px; color: #8b949e; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -158,7 +160,7 @@
     #voice-progress { top: auto; bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 20px); padding: 14px; }
     #model-progress { top: max(10px, env(safe-area-inset-top)); width: calc(100vw - 20px); }
     #tools { margin-left: 0; }
-    #tools button { width: 48px; height: 48px; min-height: 48px; min-width: 48px; font-size: 21px; }
+    #tools button { width: 52px; height: 50px; min-height: 50px; min-width: 52px; font-size: 21px; }
     #term { padding: 0 4px max(4px, env(safe-area-inset-bottom)); }
     #boot-ring { width: 96px; height: 96px; }
     #boot-loader { height: 96px; }
@@ -182,6 +184,15 @@
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="toolbar-icon-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#58a6ff"/>
+      <stop offset="55%" stop-color="#bc8cff"/>
+      <stop offset="100%" stop-color="#ff7b72"/>
+    </linearGradient>
+  </defs>
+</svg>
 <div id="role-overlay" role="dialog" aria-modal="true" aria-labelledby="role-title">
   <div class="role-panel">
     <div class="role-brand"><img class="brand-logo" src="assets/vmvm-logo.png" alt="">VMVM</div>
@@ -215,13 +226,57 @@
   <div id="browser-status">AutoBro: not connected</div>
   <div id="voice-status">Voice: ready to load</div>
   <div id="tools">
-    <button id="copy-terminal" type="button" title="Copy terminal" aria-label="Copy terminal">⧉</button>
-    <button id="paste-terminal" type="button" title="Paste into terminal" aria-label="Paste into terminal">⎘</button>
-    <button id="voice-button" type="button" title="Dictate locally with Moonshine" aria-label="Voice input">🎙</button>
-    <button id="share-ide" type="button" title="Copy public IDE link" aria-label="Copy public IDE link">↗</button>
-    <button id="toggle-theme" type="button" title="Switch light or dark theme" aria-label="Switch theme">◐</button>
-    <button id="refresh-app" type="button" title="Refresh VMVM" aria-label="Refresh VMVM">↻</button>
-    <button id="open-settings" type="button" title="Settings" aria-label="Settings">⚙</button>
+    <button id="copy-terminal" type="button" title="Copy terminal" aria-label="Copy terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="9" width="12" height="12" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      <span class="tool-label">Copy</span>
+    </button>
+    <button id="paste-terminal" type="button" title="Paste into terminal" aria-label="Paste into terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+      </svg>
+      <span class="tool-label">Paste</span>
+    </button>
+    <button id="voice-button" type="button" title="Dictate locally with Moonshine" aria-label="Voice input">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" y1="19" x2="12" y2="22"/>
+      </svg>
+      <span class="tool-label">Voice</span>
+    </button>
+    <button id="share-ide" type="button" title="Copy public IDE link" aria-label="Copy public IDE link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+        <polyline points="15 3 21 3 21 9"/>
+        <line x1="10" y1="14" x2="21" y2="3"/>
+      </svg>
+      <span class="tool-label">Share</span>
+    </button>
+    <button id="toggle-theme" type="button" title="Switch light or dark theme" aria-label="Switch theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="5"/>
+        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      <span class="tool-label">Theme</span>
+    </button>
+    <button id="refresh-app" type="button" title="Refresh VMVM" aria-label="Refresh VMVM">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="23 4 23 10 17 10"/>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </svg>
+      <span class="tool-label">Refresh</span>
+    </button>
+    <button id="open-settings" type="button" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+      </svg>
+      <span class="tool-label">Settings</span>
+    </button>
   </div>
 </header>
 <div id="vm-runtime-warning" role="alert" hidden>
@@ -388,7 +443,7 @@
     <div id="remote-key-row">
       <input id="remote-key" readonly autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Generating…">
       <button id="remote-copy" type="button" hidden title="Copy pairing key" aria-label="Copy pairing key">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="9" y="9" width="13" height="13" rx="2"/>
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
         </svg>
@@ -1087,7 +1142,7 @@ const voiceProgressMessage = document.getElementById("voice-progress-message");
 function setVoiceListening(listening) {
   voiceListening = listening;
   voiceButton.classList.toggle("listening", listening);
-  voiceButton.textContent = listening ? "■ Stop" : "🎙 Voice";
+  voiceButton.title = listening ? "Stop dictation" : "Dictate locally with Moonshine";
   voiceButton.setAttribute("aria-pressed", String(listening));
 }
 function showVoiceProgress(message, { error = false } = {}) {
@@ -1097,14 +1152,14 @@ function showVoiceProgress(message, { error = false } = {}) {
   voiceProgressMessage.textContent = message;
   voiceButton.classList.toggle("loading", !error);
   voiceButton.setAttribute("aria-busy", String(!error));
-  if (!voiceListening) voiceButton.textContent = error ? "🎙 Voice" : "Loading voice…";
+  if (!voiceListening) voiceButton.title = error ? "Voice input unavailable" : "Loading Moonshine Tiny…";
 }
 function hideVoiceProgress() {
   voiceProgress.hidden = true;
   voiceProgress.classList.remove("error");
   voiceButton.classList.remove("loading");
   voiceButton.setAttribute("aria-busy", "false");
-  if (!voiceListening) voiceButton.textContent = "🎙 Voice";
+  if (!voiceListening) voiceButton.title = "Dictate locally with Moonshine";
 }
 async function createVoiceTranscriber() {
   if (!isSecureContext || !navigator.mediaDevices?.getUserMedia)
