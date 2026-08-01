@@ -1,0 +1,336 @@
+#!/bin/sh
+# k6obs — run a k6 test and ship its metrics out live and at the end.
+#
+# ONE RECORD SHAPE, MANY SINKS
+#
+# Every record this emits is a FLAT JSON object, and every flush is a JSON
+# array of them. That is deliberate: JSON-over-HTTP is the only ingest
+# mechanism that is first-class on both sides of this pipeline.
+#
+#   OpenObserve   POST {base}/api/{org}/{stream}/_json     body: [ {...}, ... ]
+#   Power BI      POST {Fabric Eventstream custom endpoint} body: [ {...}, ... ]
+#
+# The bodies are byte-identical, so --bi-url is just a second POST of the same
+# payload rather than a second format. OpenObserve's other ingest paths
+# (Prometheus remote write, OTLP, Elasticsearch _bulk, syslog) are all richer,
+# but Power BI speaks none of them, so they cannot be the shared contract.
+#
+# Power BI's own *streaming datasets* are not used on purpose: Microsoft has
+# announced their retirement (creation stops 2027-10-31), and the replacement
+# — Fabric Real-Time Intelligence — ingests through an Eventstream custom
+# endpoint, which is again plain JSON over HTTP. Pointing --bi-url at that
+# endpoint is forward-compatible; pointing it at a streaming dataset push URL
+# still works today.
+#
+# Records carry BOTH `_timestamp` (what OpenObserve indexes on) and
+# `timestamp` (a conventional column name for BI tools, which treat a leading
+# underscore as awkward). Same value, RFC3339, which both accept.
+#
+# TRANSPORT
+#
+# With the WebSocket ethernet gateway attached the guest has a real default
+# route (rc.startup points it at 10.77.0.1) and curl works normally. Without
+# it there is no route at all, and the only egress is vmfetch, which hands the
+# request to the browser — HTTPS/localhost only, and subject to CORS. This
+# picks whichever is actually available.
+#
+# WHY ROLLUPS RATHER THAN RAW POINTS
+#
+# k6's JSON output is one line per metric sample per VU iteration: thousands
+# of lines a second under load. Each flush collapses a window into one record
+# per metric, so the volume is a handful of records regardless of load. Raw
+# points would not fit down a serial line and would not be useful in a BI
+# table either.
+
+set -eu
+
+usage() {
+  cat >&2 <<'EOF'
+usage: k6obs [options] run [k6 options] SCRIPT
+
+Runs `k6 run` and ingests its metrics, live during the test and at the end.
+
+OpenObserve:
+  --oo-url URL        base URL, e.g. https://oo.example.com
+  --oo-org NAME       organization        (default: default)
+  --oo-stream NAME    stream              (default: k6)
+  --oo-user EMAIL     basic-auth user
+  --oo-pass PASS      basic-auth password
+  --oo-token VALUE    raw Authorization value, instead of user/pass
+
+Power BI / Fabric (same JSON body, second endpoint):
+  --bi-url URL        Fabric Eventstream custom endpoint, or a Power BI
+                      streaming-dataset push URL
+  --bi-header H       extra header, repeatable
+
+Common:
+  --interval SEC      live flush period; 0 = final rollup only (default: 10)
+  --mode MODE         rollup | native | both                (default: rollup)
+                        rollup  this script aggregates and POSTs JSON
+                        native  k6's own Prometheus remote-write output goes
+                                straight to OpenObserve. Lower overhead and
+                                finer resolution, but needs the network
+                                gateway and does not feed --bi-url.
+                        both    native for OpenObserve, rollup for --bi-url
+  --tag K=V           extra column on every record; repeatable
+  --transport T       auto | curl | vmfetch                 (default: auto)
+  --keep              keep the raw NDJSON after the run
+  --dry-run           print the payloads instead of sending them
+
+Every option also reads from the environment:
+  K6_OO_URL K6_OO_ORG K6_OO_STREAM K6_OO_USER K6_OO_PASS K6_OO_TOKEN
+  K6_BI_URL K6_OBS_INTERVAL K6_OBS_MODE K6_OBS_TAGS
+
+Anything not recognised is passed straight through to k6, so
+  k6obs --oo-url https://oo.example.com run --vus 5 --duration 30s load.js
+is `k6 run --vus 5 --duration 30s load.js` with ingestion attached.
+EOF
+  exit "${1:-2}"
+}
+
+oo_url="${K6_OO_URL:-}"
+oo_org="${K6_OO_ORG:-default}"
+oo_stream="${K6_OO_STREAM:-k6}"
+oo_user="${K6_OO_USER:-}"
+oo_pass="${K6_OO_PASS:-}"
+oo_token="${K6_OO_TOKEN:-}"
+bi_url="${K6_BI_URL:-}"
+bi_headers=''
+interval="${K6_OBS_INTERVAL:-10}"
+mode="${K6_OBS_MODE:-rollup}"
+tags="${K6_OBS_TAGS:-}"
+transport=auto
+keep=0
+dry=0
+
+quote() { printf %s "$1" | sed "s/'/'\\\\''/g; s/^/'/; s/\$/'/"; }
+
+args=''
+saw_run=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    # This wrapper always invokes `k6 run`, so swallow the subcommand if the
+    # caller wrote it. Without this the pass-through args keep their own "run"
+    # and k6 is handed `run run load.js`, which it rejects with
+    # "accepts 1 arg(s), received 2". Both spellings now work:
+    #   k6obs --oo-url ... run load.js
+    #   k6obs --oo-url ... load.js
+    run)
+      if [ "$saw_run" -eq 0 ]; then saw_run=1; shift
+      else args="${args}${args:+ }$(quote "$1")"; shift; fi ;;
+    --oo-url)     oo_url=$2;    shift 2 ;;
+    --oo-org)     oo_org=$2;    shift 2 ;;
+    --oo-stream)  oo_stream=$2; shift 2 ;;
+    --oo-user)    oo_user=$2;   shift 2 ;;
+    --oo-pass)    oo_pass=$2;   shift 2 ;;
+    --oo-token)   oo_token=$2;  shift 2 ;;
+    --bi-url)     bi_url=$2;    shift 2 ;;
+    --bi-header)  bi_headers="${bi_headers}${bi_headers:+
+}$2"; shift 2 ;;
+    --interval)   interval=$2;  shift 2 ;;
+    --mode)       mode=$2;      shift 2 ;;
+    --tag)        tags="${tags}${tags:+,}$2"; shift 2 ;;
+    --transport)  transport=$2; shift 2 ;;
+    --keep)       keep=1;       shift ;;
+    --dry-run)    dry=1;        shift ;;
+    -h|--help)    usage 0 ;;
+    *)            args="${args}${args:+ }$(quote "$1")"; shift ;;
+  esac
+done
+
+[ -n "$args" ] || usage 2
+case "$mode" in rollup|native|both) ;; *) echo "k6obs: --mode must be rollup, native or both" >&2; exit 2 ;; esac
+case "$interval" in ''|*[!0-9]*) echo "k6obs: --interval must be whole seconds" >&2; exit 2 ;; esac
+if [ -z "$oo_url" ] && [ -z "$bi_url" ] && [ "$dry" -eq 0 ]; then
+  echo "k6obs: need --oo-url or --bi-url (or --dry-run)" >&2
+  exit 2
+fi
+
+# curl only helps if the gateway is actually attached; without a default route
+# it will sit there and time out, which would stall every flush.
+have_route() { ip route show default 2>/dev/null | grep -q .; }
+if [ "$transport" = auto ]; then
+  if have_route && command -v curl >/dev/null 2>&1; then transport=curl; else transport=vmfetch; fi
+fi
+if [ "$mode" != rollup ] && ! have_route; then
+  echo "k6obs: --mode $mode needs the network gateway; falling back to rollup" >&2
+  mode=rollup
+fi
+
+run_id="k6-$$-$(date +%s)"
+work="/tmp/k6obs.$$"
+raw="$work/metrics.ndjson"
+console="$work/k6.log"
+mkdir -p "$work"
+[ "$keep" -eq 1 ] || trap 'rm -rf "$work"' EXIT INT TERM
+
+oo_auth=''
+if [ -n "$oo_token" ]; then
+  oo_auth="Authorization: $oo_token"
+elif [ -n "$oo_user" ]; then
+  oo_auth="Authorization: Basic $(printf '%s:%s' "$oo_user" "$oo_pass" | base64 | tr -d '\n')"
+fi
+oo_ingest="${oo_url%/}/api/$oo_org/$oo_stream/_json"
+
+post() {
+  endpoint=$1 auth=$2 extra=$3 body=$4
+  [ -n "$endpoint" ] || return 0
+  [ -n "$body" ] || return 0
+  [ "$body" != "[]" ] || return 0
+  if [ "$dry" -eq 1 ]; then
+    printf 'k6obs[dry-run] POST %s\n%s\n' "$endpoint" "$body"
+    return 0
+  fi
+  if [ "$transport" = curl ]; then
+    set -- -sS -m 30 -X POST -H 'Content-Type: application/json'
+    [ -z "$auth" ] || set -- "$@" -H "$auth"
+    # Header list is newline-separated; feed each one separately.
+    if [ -n "$extra" ]; then
+      printf '%s\n' "$extra" | while IFS= read -r header; do
+        [ -n "$header" ] || continue
+        printf '%s\n' "$header"
+      done > "$work/hdrs"
+      while IFS= read -r header; do set -- "$@" -H "$header"; done < "$work/hdrs"
+    fi
+    curl "$@" --data-binary "$body" "$endpoint" >/dev/null 2>&1 \
+      || echo "k6obs: ingest to $endpoint failed (test unaffected)" >&2
+  else
+    set -- -o - -X POST -H 'Content-Type: application/json'
+    [ -z "$auth" ] || set -- "$@" -H "$auth"
+    vmfetch "$@" -d "$body" "$endpoint" >/dev/null 2>&1 \
+      || echo "k6obs: ingest to $endpoint failed (test unaffected)" >&2
+  fi
+}
+
+fanout() {
+  body=$1
+  post "$oo_ingest" "$oo_auth" '' "$body"
+  post "$bi_url" '' "$bi_headers" "$body"
+}
+
+# Roll a window of k6 points up into one flat record per metric.
+#
+# awk rather than jq: jq is present, but this is the hot path over thousands
+# of lines an interval on an emulated i686, and the aggregation is pure
+# arithmetic. jq is used below where correctness matters more than speed.
+#
+# The value regex is anchored on the preceding "time" field because k6 writes
+# data as {"time":...,"value":...,"tags":{...}} — without the anchor a tag
+# literally named "value" would be picked up as the sample.
+rollup() {
+  awk -v run="$run_id" -v extra="$tags" -v phase="$1" '
+    /"type":"Point"/ {
+      metric = ""; value = ""; stamp = ""
+      if (match($0, /"metric":"[^"]*"/)) metric = substr($0, RSTART + 10, RLENGTH - 11)
+      if (match($0, /"time":"[^"]*","value":[-0-9.eE+]+/)) {
+        part = substr($0, RSTART, RLENGTH)
+        split(part, halves, /","value":/)
+        stamp = substr(halves[1], 9)
+        value = halves[2]
+      } else if (match($0, /"value":[-0-9.eE+]+/)) {
+        value = substr($0, RSTART + 8, RLENGTH - 8)
+      }
+      if (metric == "" || value == "") next
+      count[metric] += 1
+      sum[metric] += value
+      if (!(metric in min) || value < min[metric]) min[metric] = value
+      if (!(metric in max) || value > max[metric]) max[metric] = value
+      if (stamp != "") last[metric] = stamp
+    }
+    END {
+      if (length(count) == 0) exit 0
+      printf "["
+      first = 1
+      for (m in count) {
+        if (!first) printf ","
+        first = 0
+        printf "{\"run_id\":\"%s\",\"phase\":\"%s\",\"metric\":\"%s\"", run, phase, m
+        printf ",\"count\":%d,\"sum\":%.6f,\"min\":%.6f,\"max\":%.6f,\"avg\":%.6f",
+               count[m], sum[m], min[m], max[m], sum[m] / count[m]
+        if (m in last) printf ",\"_timestamp\":\"%s\",\"timestamp\":\"%s\"", last[m], last[m]
+        n = split(extra, pairs, ",")
+        for (i = 1; i <= n; i++) {
+          if (pairs[i] == "") continue
+          eq = index(pairs[i], "=")
+          if (eq < 2) continue
+          printf ",\"%s\":\"%s\"", substr(pairs[i], 1, eq - 1), substr(pairs[i], eq + 1)
+        }
+        printf "}"
+      }
+      printf "]"
+    }
+  '
+}
+
+# Only read the new tail each flush, so a file that grows all test is not
+# re-read from the top every interval.
+offset=0
+flush() {
+  [ -f "$raw" ] || return 0
+  size=$(wc -c < "$raw" 2>/dev/null || echo 0)
+  [ "$size" -gt "$offset" ] || return 0
+  tail -c "+$((offset + 1))" "$raw" > "$work/chunk" 2>/dev/null || return 0
+  offset=$size
+  fanout "$(rollup "$1" < "$work/chunk")"
+  rm -f "$work/chunk"
+}
+
+k6_args="--out json=$raw"
+if [ "$mode" != rollup ] && [ -n "$oo_url" ]; then
+  # k6 writes Prometheus remote-write straight to OpenObserve itself. Its own
+  # HTTP stack, its own aggregation, no shell in the path.
+  K6_PROMETHEUS_RW_SERVER_URL="${oo_url%/}/api/$oo_org/prometheus/api/v1/write"
+  export K6_PROMETHEUS_RW_SERVER_URL
+  [ -z "$oo_user" ] || { K6_PROMETHEUS_RW_USERNAME=$oo_user; export K6_PROMETHEUS_RW_USERNAME; }
+  [ -z "$oo_pass" ] || { K6_PROMETHEUS_RW_PASSWORD=$oo_pass; export K6_PROMETHEUS_RW_PASSWORD; }
+  [ "$interval" -eq 0 ] || { K6_PROMETHEUS_RW_PUSH_INTERVAL="${interval}s"; export K6_PROMETHEUS_RW_PUSH_INTERVAL; }
+  k6_args="$k6_args --out experimental-prometheus-rw"
+  echo "k6obs: native remote-write -> $K6_PROMETHEUS_RW_SERVER_URL"
+fi
+
+echo "k6obs: run_id=$run_id mode=$mode transport=$transport"
+[ -z "$oo_url" ] || echo "k6obs:   openobserve -> $oo_ingest"
+[ -z "$bi_url" ] || echo "k6obs:   power bi    -> $bi_url"
+
+# k6 runs detached with stdin closed. Under the vmfetch transport this is
+# mandatory, not stylistic: vmfetch writes to /dev/tty and reads the reply off
+# the console, so this script has to keep the terminal to itself.
+eval "k6 run $k6_args $args" > "$console" 2>&1 < /dev/null &
+k6_pid=$!
+
+# In native-only mode k6 is already streaming; no need to wake up and roll up.
+if [ "$interval" -gt 0 ] && [ "$mode" != native ]; then
+  while kill -0 "$k6_pid" 2>/dev/null; do
+    sleep "$interval"
+    flush live
+  done
+fi
+
+k6_status=0
+wait "$k6_pid" 2>/dev/null || k6_status=$?
+
+[ "$mode" = native ] || flush final
+
+# k6's human-readable summary as one record, so a run is queryable as a whole
+# and not only as a pile of windows. jq does the escaping — the summary is
+# arbitrary text with quotes, backslashes and ANSI in it, and hand-rolled sed
+# escaping is exactly how that goes wrong.
+if [ -s "$console" ] && command -v jq >/dev/null 2>&1; then
+  # The summary must carry the SAME tags as the rollups. Without them a
+  # dashboard filtered on suite/env silently drops the one record that says
+  # whether the run passed — which is the row you most want to keep.
+  fanout "$(jq -Rs \
+    --arg run "$run_id" --arg code "$k6_status" --arg tags "$tags" \
+    --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+      [{ run_id: $run, phase: "summary", exit_code: ($code | tonumber),
+         _timestamp: $now, timestamp: $now, summary: . }
+       + ( $tags
+           | split(",")
+           | map(select(index("=") != null) | { (.[:index("=")]): .[index("=")+1:] })
+           | add // {} )]
+    ' < "$console")"
+fi
+
+cat "$console"
+[ "$keep" -eq 0 ] || echo "k6obs: raw metrics kept at $raw" >&2
+exit "$k6_status"

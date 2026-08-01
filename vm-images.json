@@ -36,11 +36,11 @@
     },
     "performance": {
       "name": "Performance testing",
-      "description": "AI Tools plus Grafana k6.",
+      "description": "AI Tools plus Grafana k6 and k6obs OpenObserve streaming.",
       "url": "vm-performance-i386-ext4.img",
       "size": 96468992,
-      "version": "2026.07.29.3",
-      "sha256": "11f7ecaa6ab7e363534f5959fe5ad0aeb5b97fb52618f4e136542fd01f51a160"
+      "version": "2026.08.01.1",
+      "sha256": "20aa07fea3b48180651df1c847971cc709bb0174b10160123b5178cd2ed9b02d"
     },
     "vapt": {
       "name": "VAPT — native scanner",
