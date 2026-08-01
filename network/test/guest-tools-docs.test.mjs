@@ -32,6 +32,13 @@ test('responsive help contains official upstream project links', () => {
   assert.match(html, /k6 run --vus 5 --duration 30s/);
 });
 
+test('responsive help includes the k6obs OpenObserve guide', () => {
+  assert.match(markdown, /## `k6obs` — stream k6 results to OpenObserve/);
+  assert.match(html, /id="k6obs-stream-k6-results-to-openobserve"/);
+  assert.match(html, /k6obs --oo-url https:\/\/openobserve\.example\.com/);
+  assert.match(html, /Prometheus remote-write output goes straight to OpenObserve/);
+});
+
 test('Deep Agents guide has a responsive generated page', () => {
   assert.match(deepAgentMarkdown, /\[DeepAgentsJS\]\(https:\/\/github\.com\/langchain-ai\/deepagentsjs\)/);
   assert.match(deepAgentHtml, /<meta name="viewport" content="width=device-width, initial-scale=1">/);

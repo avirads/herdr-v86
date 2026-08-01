@@ -203,10 +203,68 @@ Use k6 for JavaScript HTTP/API performance and load tests:</p>
 <pre><code class="language-sh">k6 new load-test.js
 k6 run --vus 5 --duration 30s load-test.js
 </code></pre>
+<h2 id="k6obs-stream-k6-results-to-openobserve"><code>k6obs</code> — stream k6 results to OpenObserve</h2>
+<p><code>k6obs</code> wraps <code>k6 run</code> and ships the metrics out <strong>while the test runs</strong> and
+again when it finishes. Anything it does not recognise is passed straight
+through to k6, so an existing command works unchanged by swapping the binary:</p>
+<pre><code class="language-sh">k6obs --oo-url https://openobserve.example.com \
+      --oo-user you@example.com --oo-pass secret \
+      --interval 10 --tag env=ci \
+      run --vus 5 --duration 30s load-test.js
+</code></pre>
+<p>Every option also reads from the environment (<code>K6_OO_URL</code>, <code>K6_OO_USER</code>,
+<code>K6_OO_PASS</code>, <code>K6_OO_TOKEN</code>, <code>K6_OO_STREAM</code>, <code>K6_OBS_INTERVAL</code>,
+<code>K6_OBS_MODE</code>, <code>K6_OBS_TAGS</code>), so a pipeline can configure it once. Use
+<code>--dry-run</code> to print the payloads instead of sending them.</p>
+<h3 id="what-it-sends">What it sends</h3>
+<p>k6's JSON output is one line per metric sample per virtual user — thousands of
+lines a second. <code>k6obs</code> collapses each interval into <strong>one flat record per
+metric</strong> (<code>count</code>, <code>sum</code>, <code>min</code>, <code>max</code>, <code>avg</code>), which is what makes the volume
+independent of load. A final rollup and k6's own summary (with its exit code)
+follow at the end. Records are tagged with a <code>run_id</code> so one test is queryable
+as a unit, plus whatever <code>--tag K=V</code> pairs you add.</p>
+<p>Records are posted as a JSON array to
+<code>{--oo-url}/api/{org}/{stream}/_json</code>. Because that body is plain
+JSON-over-HTTP, the same payload can go to a second sink with <code>--bi-url</code> —
+useful for a Microsoft Fabric <strong>Eventstream custom endpoint</strong>, which is the
+supported path into Power BI now that Power BI's own streaming datasets are
+being retired. Each record carries both <code>_timestamp</code> (what OpenObserve indexes
+on) and <code>timestamp</code>, because BI tools dislike a leading underscore.</p>
+<h3 id="modes-and-transport">Modes and transport</h3>
+<table>
+<thead>
+<tr>
+<th><code>--mode</code></th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rollup</code> (default)</td>
+<td><code>k6obs</code> aggregates and posts the JSON above. Works with or without the network gateway, and is the only mode that can also feed <code>--bi-url</code>.</td>
+</tr>
+<tr>
+<td><code>native</code></td>
+<td>k6's own Prometheus remote-write output goes straight to OpenObserve. Lower overhead and finer resolution, but <strong>requires the network gateway</strong> and does not feed <code>--bi-url</code>.</td>
+</tr>
+<tr>
+<td><code>both</code></td>
+<td><code>native</code> for OpenObserve, <code>rollup</code> for <code>--bi-url</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Transport is chosen automatically: <code>curl</code> when the WebSocket ethernet gateway
+is attached, otherwise <a href="#vmfetch--browser-backed-http-client"><code>vmfetch</code></a> via
+the browser. The <code>vmfetch</code> path inherits its limits — <strong>HTTPS only, and the
+OpenObserve endpoint must send CORS headers</strong> permitting <code>Authorization</code>,
+since the request originates from the page. Without the gateway, <code>--mode native</code> is unavailable and falls back to <code>rollup</code> with a warning.</p>
+<p>Ingestion failures never fail the test: they are reported on stderr and the k6
+run continues, so telemetry problems cannot corrupt a performance result.</p>
 <h2 id="vaptr-authorized-web-vapt-orchestration"><code>vaptr</code> — authorized web VAPT orchestration</h2>
 <p>The cumulative <strong>VAPT — native scanner</strong> VMVM image adds the static 32-bit
 <a href="https://github.com/avirads/vmvapt"><code>vaptr</code></a> orchestrator. No external tools are
-bundled — every stage runs in-process through vaptr's built-in <code>native</code> backends:</p>
+bundled — every stage runs in-process through vaptr's built-in <code>native</code>
+backends:</p>
 <pre><code class="language-text">fingerprint  crawl  content discovery  parameter discovery  vulnerability checks
 </code></pre>
 <p>Because there are no heavyweight helper binaries (httpx, katana, nuclei, ffuf,
@@ -503,7 +561,7 @@ they are not unmodified upstream command-line distributions.</p>
 <ul>
 <li>Project file inspection and editing rooted at the invocation directory.</li>
 <li>BusyBox utilities plus <code>jq</code>, <code>rg</code>, <code>git</code>, <code>curl</code>, <code>tar</code>, <code>gzip</code>, <code>qjs</code>,
-<code>vmjs</code>, <code>shfmt</code>, <code>ctags</code>, <code>make</code>, <code>patch</code>, and Grafana <code>k6</code>.</li>
+<code>vmjs</code>, <code>shfmt</code>, <code>ctags</code>, <code>make</code>, <code>patch</code>, Grafana <code>k6</code>, and <code>k6obs</code>.</li>
 <li><code>vmproject import/export</code> and the matching Settings controls for moving a
 project into or out of the VM.</li>
 <li><code>vmfetch</code>, <code>vmgithub</code>, <code>vmclip</code>, and <code>vmexport</code> when ordinary guest networking
