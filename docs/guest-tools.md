@@ -144,6 +144,59 @@ k6 new load-test.js
 k6 run --vus 5 --duration 30s load-test.js
 ```
 
+## `k6obs` — stream k6 results to OpenObserve
+
+`k6obs` wraps `k6 run` and ships the metrics out **while the test runs** and
+again when it finishes. Anything it does not recognise is passed straight
+through to k6, so an existing command works unchanged by swapping the binary:
+
+```sh
+k6obs --oo-url https://openobserve.example.com \
+      --oo-user you@example.com --oo-pass secret \
+      --interval 10 --tag env=ci \
+      run --vus 5 --duration 30s load-test.js
+```
+
+Every option also reads from the environment (`K6_OO_URL`, `K6_OO_USER`,
+`K6_OO_PASS`, `K6_OO_TOKEN`, `K6_OO_STREAM`, `K6_OBS_INTERVAL`,
+`K6_OBS_MODE`, `K6_OBS_TAGS`), so a pipeline can configure it once. Use
+`--dry-run` to print the payloads instead of sending them.
+
+### What it sends
+
+k6's JSON output is one line per metric sample per virtual user — thousands of
+lines a second. `k6obs` collapses each interval into **one flat record per
+metric** (`count`, `sum`, `min`, `max`, `avg`), which is what makes the volume
+independent of load. A final rollup and k6's own summary (with its exit code)
+follow at the end. Records are tagged with a `run_id` so one test is queryable
+as a unit, plus whatever `--tag K=V` pairs you add.
+
+Records are posted as a JSON array to
+`{--oo-url}/api/{org}/{stream}/_json`. Because that body is plain
+JSON-over-HTTP, the same payload can go to a second sink with `--bi-url` —
+useful for a Microsoft Fabric **Eventstream custom endpoint**, which is the
+supported path into Power BI now that Power BI's own streaming datasets are
+being retired. Each record carries both `_timestamp` (what OpenObserve indexes
+on) and `timestamp`, because BI tools dislike a leading underscore.
+
+### Modes and transport
+
+| `--mode` | Behaviour |
+|---|---|
+| `rollup` (default) | `k6obs` aggregates and posts the JSON above. Works with or without the network gateway, and is the only mode that can also feed `--bi-url`. |
+| `native` | k6's own Prometheus remote-write output goes straight to OpenObserve. Lower overhead and finer resolution, but **requires the network gateway** and does not feed `--bi-url`. |
+| `both` | `native` for OpenObserve, `rollup` for `--bi-url`. |
+
+Transport is chosen automatically: `curl` when the WebSocket ethernet gateway
+is attached, otherwise [`vmfetch`](#vmfetch--browser-backed-http-client) via
+the browser. The `vmfetch` path inherits its limits — **HTTPS only, and the
+OpenObserve endpoint must send CORS headers** permitting `Authorization`,
+since the request originates from the page. Without the gateway, `--mode
+native` is unavailable and falls back to `rollup` with a warning.
+
+Ingestion failures never fail the test: they are reported on stderr and the k6
+run continues, so telemetry problems cannot corrupt a performance result.
+
 ## `vaptr` — authorized web VAPT orchestration
 
 The cumulative **VAPT — native scanner** VMVM image adds the static 32-bit
@@ -451,7 +504,7 @@ Shared facilities available to the agents include:
 
 - Project file inspection and editing rooted at the invocation directory.
 - BusyBox utilities plus `jq`, `rg`, `git`, `curl`, `tar`, `gzip`, `qjs`,
-  `vmjs`, `shfmt`, `ctags`, `make`, `patch`, and Grafana `k6`.
+  `vmjs`, `shfmt`, `ctags`, `make`, `patch`, Grafana `k6`, and `k6obs`.
 - `vmproject import/export` and the matching Settings controls for moving a
   project into or out of the VM.
 - `vmfetch`, `vmgithub`, `vmclip`, and `vmexport` when ordinary guest networking

@@ -130,6 +130,10 @@ install_ai_tools() {
 install_performance() {
   require_file "$K6_BINARY"
   install -D -m 0755 "$K6_BINARY" "$MOUNT_DIR/usr/local/bin/k6"
+  # Ships k6 results to OpenObserve (and optionally Power BI) live during the
+  # run and at the end. Pure shell, so it costs ~12 KB against the ~9.6 MB the
+  # performance image has spare.
+  install -D -m 0755 "$PROJECT_DIR/network/guest/k6obs" "$MOUNT_DIR/usr/local/bin/k6obs"
 }
 
 install_dev() {
