@@ -1,0 +1,168 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>k6obs — real k6 run ingested into OpenObserve</title>
+<pre id="serial"></pre>
+<pre id="log"></pre>
+<div id="screen_container"><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+// End-to-end proof of the k6 -> OpenObserve path, with nothing stubbed:
+//
+//   real k6 (linux/386, in the guest)
+//     -> --out json  NDJSON on the guest filesystem
+//     -> k6obs rolls a window up into flat JSON records
+//     -> vmfetch  (guest serial RPC)
+//     -> V86HostBridge.fetch  (a genuine browser fetch)
+//     -> https://oo.oast.fapstaff.com/api/default/{stream}/_json
+//
+// The assertion this page can make is that the guest side reported success.
+// Whether the records actually landed is asserted OUTSIDE, by querying
+// OpenObserve for the run_id this page prints — a page cannot prove ingest by
+// looking at its own POST.
+//
+// Note this boots the PERFORMANCE tier image (k6 + k6obs live there), not the
+// network image the other e2es use.
+//
+// The k6 script does no HTTP on purpose. Without the WebSocket ethernet
+// gateway attached the guest has no route, so a script hitting a URL would
+// measure nothing but failures. Iterations, VUs and iteration_duration are
+// real k6 metrics and exercise the whole pipeline; load against a real target
+// needs the gateway and is a separate exercise.
+import { V86HostBridge } from '../browser/v86-host-bridge.js';
+
+const params = new URLSearchParams(location.search);
+const OO_URL = params.get('oo') || 'https://oo.oast.fapstaff.com';
+const OO_AUTH = params.get('auth') || '';
+const STREAM = params.get('stream') || 'k6';
+
+const logEl = document.querySelector('#log');
+const steps = [];
+const log = (m) => { steps.push(m); logEl.textContent = steps.join('\n'); };
+
+let serial = '';
+let seeded = false;
+let submitted = false;
+const report = (payload) => {
+  if (submitted) return;
+  submitted = true;
+  return fetch('/__result', { method: 'POST', body: JSON.stringify({ ...payload, steps, serial: serial.slice(-4000) }) });
+};
+setTimeout(() => report({ ok: false, error: 'timed out after 600s' }), 600_000);
+
+const emulator = new V86({
+  wasm_path: '../../v86-network.wasm',
+  memory_size: 512 << 20,
+  vga_memory_size: 2 << 20,
+  bios: { url: '../../seabios.bin' },
+  vga_bios: { url: '../../vgabios.bin' },
+  bzimage: { url: '../../bzImage-network' },
+  cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet loglevel=4',
+  hda: { url: '../../vm-performance-i386-ext4.img', async: true, size: 96468992 },
+  uart1: true,
+  screen_container: document.querySelector('#screen_container'),
+  autostart: true,
+});
+
+// vmfetch is served by the bridge's own FETCH handler, so simply constructing
+// the bridge is what gives the guest real outbound HTTPS here.
+const hostBridge = new V86HostBridge(emulator);
+hostBridge.setAgentHandler(async () => {});
+setInterval(() => hostBridge.send('vmagent-poll').catch(() => {}), 500);
+
+// Count what the browser actually sent on the guest's behalf: the honest
+// measure of whether ingest left the machine.
+let fetches = [];
+const realFetch = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  const url = String(typeof input === 'string' ? input : input?.url || '');
+  if (url.includes('/_json')) {
+    try {
+      const response = await realFetch(input, init);
+      fetches.push({ url, status: response.status });
+      return response;
+    } catch (error) {
+      fetches.push({ url, error: String(error?.message || error) });
+      throw error;
+    }
+  }
+  return realFetch(input, init);
+};
+
+const RUN_TAG = `e2e-${Date.now()}`;
+
+emulator.add_listener('serial0-output-byte', (byte) => {
+  serial = (serial + String.fromCharCode(byte)).slice(-120000);
+  document.querySelector('#serial').textContent = serial.slice(-2500);
+  if (!seeded && /(?:vm:~#|~\s*[#%])\s*$/.test(serial)) {
+    seeded = true;
+    start();
+  }
+});
+
+function send(line) { emulator.serial0_send(line + '\n'); }
+const waitFor = (re, ms) => new Promise((resolve, reject) => {
+  const startedAt = Date.now();
+  const timer = setInterval(() => {
+    if (re.test(serial)) { clearInterval(timer); resolve(true); }
+    else if (Date.now() - startedAt > ms) { clearInterval(timer); reject(new Error(`timeout waiting for ${re}`)); }
+  }, 500);
+});
+
+async function start() {
+  try {
+    log('guest up — checking the tools are installed');
+    send('command -v k6 >/dev/null && command -v k6obs >/dev/null && echo TOOLS_OK || echo TOOLS_MISSING');
+    await waitFor(/\bTOOLS_OK\b/, 30_000);
+    log('  k6 and k6obs present');
+
+    log('writing a k6 script');
+    // Small and deterministic: this measures the ingest pipeline, not the guest CPU.
+    send("mkdir -p /root/perf && cd /root/perf && printf 'import { sleep } from \"k6\";\\nexport const options = { vus: 2, duration: \"12s\" };\\nexport default function () {\\n  let t = 0;\\n  for (let i = 0; i < 2000; i++) t += i;\\n  sleep(0.2);\\n}\\n' > load.js && echo SCRIPT_OK");
+    await waitFor(/\bSCRIPT_OK\b/, 30_000);
+
+    log(`running k6obs -> ${OO_URL} (stream ${STREAM}, tag ${RUN_TAG})`);
+    log('  flushing every 5s during the run, plus a final rollup and summary');
+    const auth = OO_AUTH ? ` --oo-token 'Basic ${OO_AUTH}'` : '';
+    send(`cd /root/perf && k6obs --oo-url '${OO_URL}' --oo-stream '${STREAM}'${auth} --interval 5 --tag suite=${RUN_TAG} --transport vmfetch run load.js; echo K6OBS_DONE_$?`);
+
+    await waitFor(/\bK6OBS_DONE_\d+\b/, 420_000);
+    const exitMatch = serial.match(/\bK6OBS_DONE_(\d+)\b/);
+    const exitCode = exitMatch ? Number(exitMatch[1]) : -1;
+    const runIdMatch = serial.match(/run_id=(k6-\d+-\d+)/);
+    const runId = runIdMatch ? runIdMatch[1] : null;
+
+    log('');
+    log(`k6obs exit: ${exitCode}`);
+    log(`run_id: ${runId ?? '(not printed)'}`);
+    log(`browser POSTs to /_json: ${fetches.length}`);
+    for (const f of fetches) log(`  ${f.status ?? f.error}  ${f.url}`);
+
+    const posted = fetches.filter(f => f.status === 200).length;
+    const ingestFailures = /k6obs: ingest .* failed/.test(serial);
+    const k6Ran = /iteration_duration|iterations|VUs\s/.test(serial);
+
+    const checks = {
+      toolsInstalled: true,
+      k6Ran,
+      k6obsExitZero: exitCode === 0,
+      browserPostsAttempted: fetches.length,
+      browserPosts200: posted,
+      noIngestFailures: !ingestFailures,
+      runId,
+      suiteTag: RUN_TAG,
+    };
+    log('');
+    log(`checks: k6Ran=${k6Ran} exit0=${exitCode === 0} posts200=${posted}/${fetches.length}`);
+    log(`VERIFY EXTERNALLY: SELECT * FROM ${STREAM} WHERE suite = '${RUN_TAG}'`);
+
+    await report({
+      ok: k6Ran && exitCode === 0 && posted > 0 && !ingestFailures,
+      checks,
+      error: posted > 0 ? undefined : 'no successful POST reached OpenObserve',
+    });
+  } catch (error) {
+    log(`FAILED: ${error?.message || error}`);
+    await report({ ok: false, error: String(error?.stack || error) });
+  }
+}
+</script>
