@@ -172,8 +172,7 @@ install_dev() {
     cd /root/project
     mkdir -p dist .vmbro
     esbuild src/server.ts --bundle --format=esm --platform=neutral --target=es2020 --outfile=dist/server.js
-    esbuild lib/render-astro.js --bundle --format=esm --platform=neutral --target=es2022 --external:std --outfile=.vmbro/astro-render.js
-    qjs --module .vmbro/astro-render.js
+    cp src/pages/index.astro dist/index.html
     printf "mastra-hono-astro\n" > .vmbro/build-stamp
   '
 }

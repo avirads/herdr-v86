@@ -559,10 +559,10 @@ const VM_IMAGE_FALLBACK = {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "vm-barebones-i386-ext4.img", size: 67108864, version: "2026.07.29.1" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "vm-essentials-i386-ext4.img", size: 83886080, version: "2026.07.29.1" },
     "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.07.29.1" },
-    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.08.03.7" },
+    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.08.03.8" },
     "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.08.01.1" },
     "vapt": { name: "VAPT — native scanner", description: "AI Tools plus Grafana k6 and Vaptr; k6obs and external tools are not bundled in this tier.", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.07.30.1" },
-    "star": { name: "Star", description: "All guest features: AI Tools, Dev IDE and templates, k6/k6obs performance testing, and Vaptr.", url: "vm-star-i386-ext4.img", size: 134217728, version: "2026.08.03.7" },
+    "star": { name: "Star", description: "All guest features: AI Tools, Dev IDE and templates, k6/k6obs performance testing, and Vaptr.", url: "vm-star-i386-ext4.img", size: 134217728, version: "2026.08.03.8" },
   },
 };
 let vmImageManifest = VM_IMAGE_FALLBACK;
@@ -638,6 +638,7 @@ const DEVAPP_READY_MARKER = "DEVAPP-READY-OK";
 let devAppPhase = false;
 let devAppTicker = null;
 let devAppTimeout = null;
+let devNetworkReady = Promise.resolve();
 const devViewButton = document.getElementById("toggle-dev-view");
 const devFrame = document.getElementById("dev-ide");
 const termHost = document.getElementById("term");
@@ -697,13 +698,32 @@ function startDevAppPhase() {
   // Never trap the user on the overlay: reveal the shell even if the app stalls.
   devAppTimeout = setTimeout(() => finishDevApp(false), 300000);
 }
-function finishDevApp(ready) {
+async function finishDevApp(ready) {
   if (!devAppPhase) return;
   devAppPhase = false;
   clearInterval(devAppTicker);
   clearTimeout(devAppTimeout);
   if (!ready) {
     failBoot("Dev IDE did not start within five minutes. Reload to retry.");
+    return;
+  }
+  setBootProgress(99, "Dev app ready — connecting its public route…");
+  try {
+    await devNetworkReady;
+    let routeReady = false;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      try {
+        const response = await fetch(DEV_APP_URL, { cache: "no-store" });
+        if (response.ok) {
+          routeReady = true;
+          break;
+        }
+      } catch { /* The TAP route can take a moment after WebSocket opens. */ }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    if (!routeReady) throw new Error("the public IDE route did not become reachable");
+  } catch (error) {
+    failBoot(`Dev IDE network unavailable: ${error.message}. Reload to retry.`);
     return;
   }
   setBootProgress(100, "Dev app ready");
@@ -2044,13 +2064,15 @@ async function connectWebSocketGateway(url, token) {
     token,
     onStatus: networkStatus,
   }).start();
+  await window.v86Network.waitUntilConnected();
 }
 if (gatewayURL && sessionToken) {
   history.replaceState(null, "", location.pathname + location.search);
-  connectWebSocketGateway(gatewayURL, sessionToken)
+  devNetworkReady = connectWebSocketGateway(gatewayURL, sessionToken);
+  devNetworkReady
     .catch(error => networkStatus("error — " + error.message));
 } else if (hasDevEnvironment && location.protocol === "https:" && location.hostname === "fapstaff.com") {
-  fetch("/v1/sessions", {
+  devNetworkReady = fetch("/v1/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ttlSeconds: 3600 }),
@@ -2060,7 +2082,10 @@ if (gatewayURL && sessionToken) {
       const session = await response.json();
       await connectWebSocketGateway(`wss://${location.host}/v1/ethernet`, session.token);
     })
-    .catch(error => networkStatus("error — public IDE network unavailable: " + error.message));
+    .catch(error => {
+      networkStatus("error — public IDE network unavailable: " + error.message);
+      throw error;
+    });
 }
 
 emulator.add_listener("emulator-ready", () => {

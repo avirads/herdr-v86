@@ -42,8 +42,10 @@ vmbro-dev
 ```
 
 First boot is fast because the starter is precompiled at image build time:
-`dist/server.js` and `.vmbro/astro-render.js` are produced by chrooted esbuild
-(and QuickJS for the Astro render) before the image is finalized, and
+`dist/server.js` is produced by chrooted esbuild and the static Astro-compatible
+page is copied from `src/pages/index.astro` to `dist/index.html` before the image
+is finalized. This keeps the editable page as the single source of truth, so
+HMR rebuilds the page the user actually edited. The
 `.vmbro/build-stamp` lets the supervisor skip the rebuild entirely. The
 supervisor binds port 3000 immediately and scaffolds/builds in the background,
 so the IDE shell comes up as soon as the guest reaches its shell prompt. Guest

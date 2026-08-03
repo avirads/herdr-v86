@@ -84,6 +84,9 @@ test('Dev tier starts and opens its app automatically', () => {
   assert.match(html, /devFrame\.src = target\.href/);
   assert.match(html, /finishBoot\(false\)/);
   assert.match(html, /finishDevApp\(true\)/);
+	assert.match(html, /await devNetworkReady/);
+	assert.match(html, /fetch\(DEV_APP_URL, \{ cache: "no-store" \}\)/);
+	assert.match(html, /the public IDE route did not become reachable/);
   assert.doesNotMatch(html, /Open Dev App|id="open-dev-app"|devAppButton/);
 });
 
@@ -135,6 +138,8 @@ test('Dev IDE autosaves editor changes so Astro rebuild and preview reload can r
   assert.match(devSupervisor, /func \(s \*supervisor\) handleWorkspaceChange\(\)/);
   assert.match(devSupervisor, /if err := s\.startApp\(\); err != nil \{/);
   assert.match(devSupervisor, /rebuild finished — app server restarted/);
+	assert.match(devSupervisor, /cp " \+ ws \+ "\/src\/pages\/index\.astro " \+ ws \+ "\/dist\/index\.html"/);
+	assert.doesNotMatch(mastraAstro, /^---$/m);
 });
 
 test('Mastra Astro reuses the VMVM model and reveals setup only when none is loaded', () => {

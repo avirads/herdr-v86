@@ -105,9 +105,7 @@ func esbuildAstroBuild(ws string) string {
 	return "mkdir -p " + ws + "/dist " + ws + "/.vmbro && " +
 		"esbuild " + ws + "/src/server.ts --bundle --format=esm --platform=neutral --target=es2020 " +
 		"--outfile=" + ws + "/dist/server.js && " +
-		"esbuild " + ws + "/lib/render-astro.js --bundle --format=esm --platform=neutral --target=es2022 " +
-		"--external:std --outfile=" + ws + "/.vmbro/astro-render.js && " +
-		"qjs --module " + ws + "/.vmbro/astro-render.js"
+		"cp " + ws + "/src/pages/index.astro " + ws + "/dist/index.html"
 }
 
 // supervisor manages the scaffolded app server as a child process.
