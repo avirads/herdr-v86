@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const root = new URL("../../", import.meta.url);
 const html = await readFile(new URL("index.html", root), "utf8");
 const worker = await readFile(new URL("service-worker.js", root), "utf8");
+const nginx = await readFile(new URL("network/deploy/fapstaff-peerjs.nginx", root), "utf8");
 const manifest = JSON.parse(await readFile(new URL("app.webmanifest", root), "utf8"));
 
 test("VMVM exposes an installable standalone PWA manifest", () => {
@@ -14,6 +15,7 @@ test("VMVM exposes an installable standalone PWA manifest", () => {
   assert.ok(manifest.icons.some(icon => icon.sizes === "192x192"));
   assert.ok(manifest.icons.some(icon => icon.sizes === "512x512"));
   assert.ok(manifest.icons.some(icon => icon.purpose === "maskable"));
+	assert.match(nginx, /location = \/app\.webmanifest \{[\s\S]*default_type application\/manifest\+json;/);
 });
 
 test("Settings provides browser-native installation UX", () => {
