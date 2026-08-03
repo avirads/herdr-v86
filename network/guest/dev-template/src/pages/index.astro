@@ -135,12 +135,32 @@ const title = 'Mastra Weather Agent';
 
 			const boot = async () => {
 				if (!('gpu' in navigator)) throw new Error('WebGPU is unavailable. Use a current WebGPU-enabled browser.');
+				let sharedHost;
 				let sharedClient;
 				let sharedReady;
 				try {
-					sharedClient = top.vmvmLocalModelClient;
-					sharedReady = top.vmvmLocalModelReady;
+					const candidate = top;
+					sharedClient = candidate.vmvmLocalModelClient;
+					sharedReady = candidate.vmvmLocalModelReady;
+					sharedHost = candidate;
 				} catch { /* Direct guest-port preview: use the origin-local cache below. */ }
+				if (!sharedClient && sharedHost) {
+					const announced = await new Promise((resolve) => {
+						const receive = (event) => finish(event.detail);
+						const finish = (detail) => {
+							clearTimeout(timer);
+							sharedHost.removeEventListener('vmvm-local-model-client', receive);
+							resolve(detail || null);
+						};
+						const timer = setTimeout(() => finish(null), 5000);
+						sharedHost.addEventListener('vmvm-local-model-client', receive, { once: true });
+						if (sharedHost.vmvmLocalModelClient) {
+							finish({ client: sharedHost.vmvmLocalModelClient, ready: sharedHost.vmvmLocalModelReady });
+						}
+					});
+					sharedClient = announced?.client;
+					sharedReady = announced?.ready;
+				}
 				if (sharedClient) {
 					client = sharedClient;
 					client.addEventListener('activity', () => {
@@ -156,14 +176,14 @@ const title = 'Mastra Weather Agent';
 					showModelSetup();
 					return;
 				}
-				const { LiteRtLmClient } = await import('/vmmastra/network/browser/litert-lm-client.js');
+				const { LiteRtLmClient } = await import('/network/browser/litert-lm-client.js');
 				client = new LiteRtLmClient();
 				client.addEventListener('activity', (event) => {
 					progress.textContent = event.detail?.message || 'Working…';
 				});
 				// Deployments may host the model at this conventional URL. If it
 				// is absent, retain the portable file-picker + OPFS workflow.
-				const bundledModelUrl = '/vmmastra/models/gemma-4-E2B-it-web.litertlm';
+				const bundledModelUrl = '/models/gemma-4-E2B-it-web.litertlm';
 				const bundledModel = await fetch(bundledModelUrl, { method: 'HEAD' });
 				const result = await client.initialize({
 					bundledModelUrl: bundledModel.ok ? bundledModelUrl : ''

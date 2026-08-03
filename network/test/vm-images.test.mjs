@@ -10,6 +10,7 @@ const devIdeIndex = await readFile(new URL('network/guest/dev-ide/index.html', r
 const devIdeApp = await readFile(new URL('network/guest/dev-ide/app.js', root), 'utf8');
 const devIdeStyles = await readFile(new URL('network/guest/dev-ide/styles.css', root), 'utf8');
 const mastraAstro = await readFile(new URL('network/guest/templates/mastra-hono-astro/src/pages/index.astro', root), 'utf8');
+const devSupervisor = await readFile(new URL('network/guest/vmbro-httpd/main.go', root), 'utf8');
 const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 
@@ -131,17 +132,23 @@ test('Dev IDE autosaves editor changes so Astro rebuild and preview reload can r
   assert.match(devIdeApp, /if \(activeTab === path && openTabs\.get\(path\)\?\.dirty\) saveActive\(\)/);
   assert.match(devIdeApp, /eventsSource\.addEventListener\('reload'/);
   assert.match(devIdeApp, /reloadPreview\(\)/);
+  assert.match(devSupervisor, /func \(s \*supervisor\) handleWorkspaceChange\(\)/);
+  assert.match(devSupervisor, /if err := s\.startApp\(\); err != nil \{/);
+  assert.match(devSupervisor, /rebuild finished — app server restarted/);
 });
 
 test('Mastra Astro reuses the VMVM model and reveals setup only when none is loaded', () => {
   assert.match(html, /globalThis\.vmvmLocalModelClient = client/);
   assert.match(html, /globalThis\.vmvmLocalModelReady = initialization/);
+  assert.match(html, /vmvm-local-model-client/);
   assert.match(mastraAstro, /id="model-setup"[^>]*hidden/);
-  assert.match(mastraAstro, /sharedClient = top\.vmvmLocalModelClient/);
-  assert.match(mastraAstro, /sharedReady = top\.vmvmLocalModelReady/);
+  assert.match(mastraAstro, /sharedHost\.addEventListener\('vmvm-local-model-client'/);
+  assert.match(mastraAstro, /sharedClient = announced\?\.client/);
   assert.match(mastraAstro, /if \(client\.modelName\) \{[\s\S]*setReady\(client\.modelName\);[\s\S]*return;/);
   assert.match(mastraAstro, /else showModelSetup\(\)/);
   assert.match(mastraAstro, /No downloaded model was found/);
+  assert.match(mastraAstro, /import\('\/network\/browser\/litert-lm-client\.js'\)/);
+  assert.doesNotMatch(mastraAstro, /\/vmmastra\/network\/browser\/litert-lm-client\.js/);
 });
 
 test('Dev IDE inherits and persists the VMVM theme', () => {

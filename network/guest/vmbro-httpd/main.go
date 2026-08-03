@@ -226,7 +226,17 @@ func (s *supervisor) handleWorkspaceChange() {
 		s.resetWatcher()
 		return
 	}
-	s.addLog("rebuild finished")
+	// The static files are read from disk on each request, but the Hono handler
+	// is loaded into the long-running QuickJS app server at process start. A
+	// rebuild without a restart therefore leaves src/server.ts changes running
+	// the old handler even though the IDE reports a successful reload.
+	if err := s.startApp(); err != nil {
+		s.addLog("rebuild restart failed: " + err.Error())
+		s.hub.notify()
+		s.resetWatcher()
+		return
+	}
+	s.addLog("rebuild finished — app server restarted")
 	s.resetWatcher()
 	s.hub.notify()
 }
