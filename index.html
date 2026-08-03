@@ -555,6 +555,7 @@ const VM_IMAGE_FALLBACK = {
     "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.15" },
     "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.08.01.1" },
     "vapt": { name: "VAPT — native scanner", description: "Performance plus Vaptr, the self-contained native scanner (no external tools; runs in the v86 guest).", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.07.30.1" },
+    "star": { name: "Star", description: "All guest features: AI Tools, Dev IDE and templates, k6/k6obs performance testing, and Vaptr.", url: "vm-star-i386-ext4.img", size: 134217728, version: "2026.08.03.1" },
   },
 };
 let vmImageManifest = VM_IMAGE_FALLBACK;
@@ -565,6 +566,7 @@ try {
 const bootOptions = new URLSearchParams(location.search);
 const requestedVmTier = bootOptions.get("tier") || localStorage.getItem("vm.imageTier") || vmImageManifest.defaultTier;
 const vmImageTier = vmImageManifest.tiers[requestedVmTier] ? requestedVmTier : vmImageManifest.defaultTier;
+const hasDevEnvironment = vmImageTier === "dev" || vmImageTier === "star";
 const vmImage = vmImageManifest.tiers[vmImageTier];
 localStorage.setItem("vm.imageTier", vmImageTier);
 const DISK_SIZE = vmImage.size;
@@ -589,8 +591,8 @@ function setBootProgress(value, message) {
 bootTicker = setInterval(() => {
   if (bootProgress < 90) {
     setBootProgress(bootProgress + 1, `Starting VMVM [${vmImageDisplaySource}]…`);
-  } else if (!shellReady && vmImageTier === "dev") {
-    bootMessage.textContent = `Starting Dev VMVM [${vmImageDisplaySource}] — first boot may take several minutes…`;
+  } else if (!shellReady && hasDevEnvironment) {
+    bootMessage.textContent = `Starting ${vmImage.name} VMVM [${vmImageDisplaySource}] — first boot may take several minutes…`;
   }
 }, 700);
 function finishBoot(showTerminal = true) {
@@ -1366,6 +1368,7 @@ function updateVmImageDescription() {
     dev: "Dev tier · includes AI Tools",
     performance: "Tier 4 · includes AI Tools",
     vapt: "Tier 5 · includes Performance",
+    star: "Star tier · includes Dev, Performance and VAPT",
   };
   vmImageDescription.textContent = `${cumulative[vmImageTierSelect.value]} — ${selected.description} (${Math.round(selected.size / 1048576)} MiB)`;
   document.getElementById("apply-vm-image").disabled = vmImageTierSelect.value === vmImageTier;
@@ -1998,7 +2001,7 @@ if (gatewayURL && sessionToken) {
   history.replaceState(null, "", location.pathname + location.search);
   connectWebSocketGateway(gatewayURL, sessionToken)
     .catch(error => networkStatus("error — " + error.message));
-} else if (vmImageTier === "dev" && location.protocol === "https:" && location.hostname === "fapstaff.com") {
+} else if (hasDevEnvironment && location.protocol === "https:" && location.hostname === "fapstaff.com") {
   fetch("/v1/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2054,7 +2057,7 @@ window.onerror = (msg, source) => {
   failBoot("Startup error: " + msg);
 };
 let gotSerial = false;
-const noOutputTimeoutMs = vmImageTier === "dev" ? 300000 : 120000;
+const noOutputTimeoutMs = hasDevEnvironment ? 300000 : 120000;
 setTimeout(() => {
   if (!gotSerial) {
     const seconds = noOutputTimeoutMs / 1000;
@@ -2116,7 +2119,7 @@ emulator.add_listener("serial0-output-byte", (byte) => {
       for (const ch of `: __V86TERM_CONTROL__; export HISTFILE=/root/.ash_history HISTSIZE=200; set -o emacs 2>/dev/null || true; stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project /mnt/host-transfer; mount | grep -q ' /mnt/host-transfer ' || mount -t 9p host9p /mnt/host-transfer -o trans=virtio,version=9p2000.L,cache=loose; cd /root/project\n`) {
         emulator.serial0_send(ch);
       }
-      if (vmImageTier === "dev") startDevAppPhase();
+      if (hasDevEnvironment) startDevAppPhase();
       else finishBoot();
     }
   }

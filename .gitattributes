@@ -1,6 +1,7 @@
 *.onnx binary
 *.wasm binary
 *.img binary
+vm-star-i386-ext4.img filter=lfs diff=lfs merge=lfs -text
 # Guest scripts run inside the Alpine VM via #!/bin/sh; a CRLF-converted
 # checkout (core.autocrlf=true on Windows) turns the shebang into
 # "#!/bin/sh\r", which the kernel resolves to a nonexistent interpreter path

@@ -39,11 +39,15 @@ if [ "$tier_level" -ge 2 ]; then
   printf 'nameserver 10.77.0.1\n' > /etc/resolv.conf
 fi
 
-# The Dev tier is an appliance-style development image: compile and serve its
-# starter automatically while the interactive shell remains immediately usable.
-if [ "$(cat /etc/vmvm/tier 2>/dev/null)" = "dev" ] && [ -x /usr/local/bin/vmbro-dev ]; then
+# The Dev and Star tiers are appliance-style development images: compile and
+# serve their starter automatically while the interactive shell remains usable.
+case "$(cat /etc/vmvm/tier 2>/dev/null)" in
+dev|star)
+  if [ -x /usr/local/bin/vmbro-dev ]; then
   # Let init spawn the serial getty first. On slower browsers, starting the
   # compiler immediately can starve the shell-prompt event that completes the
   # host page's boot overlay.
-  (sleep 5; cd /root/project && PORT=3000 /usr/local/bin/vmbro-dev >/var/log/vmbro-dev.log 2>&1) &
-fi
+    (sleep 5; cd /root/project && PORT=3000 /usr/local/bin/vmbro-dev >/var/log/vmbro-dev.log 2>&1) &
+  fi
+  ;;
+esac

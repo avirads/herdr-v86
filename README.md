@@ -17,8 +17,8 @@ Either action hides the shell and returns to the corresponding wizard step.
 After skipping, use **Settings → Configure providers** to configure the model or
 AutoBro independently without repeating the other provider's setup.
 
-- `bzImage-network` + the images in `vm-images.json` — cumulative VMVM
-  tiers from Barebones through Performance testing. AI Tools is the default
+- `bzImage-network` + the images in `vm-images.json` — VMVM tiers from
+  Barebones through Star, which combines every guest feature. AI Tools is the default
   and includes browser-bridge tools, tmux 3.5a, Zerostack, and Rig. See
   [VMVM image tiers](docs/vm-images.md).
 - `network/` — authenticated WebSocket-to-TAP gateway, v86 adapter, guest build

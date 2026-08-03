@@ -16,9 +16,10 @@ const expected = [
   ['dev', 99614720],
   ['performance', 96468992],
   ['vapt', 103809024],
+  ['star', 134217728],
 ];
 
-test('VM image manifest defines six ordered cumulative tiers', () => {
+test('VM image manifest defines seven ordered tiers with an all-features Star image', () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.defaultTier, 'barebones');
   assert.deepEqual(Object.keys(manifest.tiers), expected.map(([tier]) => tier));
@@ -41,9 +42,9 @@ test('built image files match manifest byte sizes', async () => {
 test('tier builder applies each preceding installer and validates boundaries', () => {
   assert.match(builder, /number >= 2 \)\) && install_essentials/);
   assert.match(builder, /number >= 3 \)\) && install_ai_tools/);
-  assert.match(builder, /\[\[ "\$tier" == dev \]\] && install_dev/);
-  assert.match(builder, /\[\[ "\$tier" == performance \|\| "\$tier" == vapt \]\] && install_performance/);
-  assert.match(builder, /\[\[ "\$tier" == vapt \]\] && install_vapt/);
+  assert.match(builder, /\[\[ "\$tier" == dev \|\| "\$tier" == star \]\] && install_dev/);
+  assert.match(builder, /\[\[ "\$tier" == performance \|\| "\$tier" == vapt \|\| "\$tier" == star \]\] && install_performance/);
+  assert.match(builder, /\[\[ "\$tier" == vapt \|\| "\$tier" == star \]\] && install_vapt/);
   assert.match(builder, /! command -v curl; ! command -v vmagent-rpc/);
   assert.match(builder, /! command -v herdr; ! command -v rig; ! command -v git/);
   assert.match(builder, /! command -v k6/);
@@ -58,7 +59,9 @@ test('tier builder applies each preceding installer and validates boundaries', (
 test('Settings selects a manifest image and warns before restart', () => {
   assert.match(html, /id="vm-image-tier"/);
   assert.match(html, /"dev": \{ name: "Dev".*url: "vm-dev-i386-ext4\.img".*size: 99614720/);
+  assert.match(html, /"star": \{ name: "Star".*url: "vm-star-i386-ext4\.img".*size: 134217728/);
   assert.match(html, /dev: "Dev tier · includes AI Tools"/);
+  assert.match(html, /star: "Star tier · includes Dev, Performance and VAPT"/);
   assert.match(html, /id="apply-vm-image"[^>]*>Apply &amp; restart/);
   assert.match(html, /Each image has an independent guest filesystem/);
   assert.match(html, /localStorage\.setItem\("vm\.imageTier", nextTier\)/);
@@ -66,10 +69,11 @@ test('Settings selects a manifest image and warns before restart', () => {
 });
 
 test('Dev tier starts and opens its app automatically', () => {
-  assert.match(startup, /\[ "\$\(cat \/etc\/vmvm\/tier 2>\/dev\/null\)" = "dev" \]/);
+  assert.match(startup, /dev\|star\)/);
   assert.match(startup, /\(sleep 5; cd \/root\/project && PORT=3000 \/usr\/local\/bin\/vmbro-dev >\/var\/log\/vmbro-dev\.log 2>&1\) &/);
   // The current VM tab enters the IDE only once the guest server is listening.
-  assert.match(html, /if \(vmImageTier === "dev"\) startDevAppPhase\(\)/);
+  assert.match(html, /const hasDevEnvironment = vmImageTier === "dev" \|\| vmImageTier === "star"/);
+  assert.match(html, /if \(hasDevEnvironment\) startDevAppPhase\(\)/);
   assert.match(html, /new URL\("\/ide\/", location\.origin\)\.href/);
   assert.match(html, /target\.searchParams\.set\("theme", document\.documentElement\.dataset\.theme \|\| "dark"\)/);
   assert.match(html, /frame\.src = target\.href/);
@@ -95,8 +99,17 @@ test('Dev tier boot progress reflects the app compile/serve phase', () => {
 });
 
 test('Dev tier allows the larger image enough time to produce VM output', () => {
-  assert.match(html, /vmImageTier === "dev" \? 300000 : 120000/);
+  assert.match(html, /hasDevEnvironment \? 300000 : 120000/);
   assert.match(html, /first boot may take several minutes/);
+});
+
+test('Star combines every specialized guest installer and behavior', () => {
+  assert.match(builder, /star\) echo 6/);
+  assert.match(builder, /star\) echo 134217728/);
+  assert.match(builder, /if \[\[ "\$tier" == dev \|\| "\$tier" == star \]\]/);
+  assert.match(builder, /if \[\[ "\$tier" == performance \|\| "\$tier" == vapt \|\| "\$tier" == star \]\]/);
+  assert.match(builder, /if \[\[ "\$tier" == vapt \|\| "\$tier" == star \]\]/);
+  assert.match(startup, /dev\|star\)/);
 });
 
 test('VMVM branding, themes, and refresh controls are present', () => {

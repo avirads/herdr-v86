@@ -11,10 +11,12 @@ the default and preserves the capabilities of the former single image.
 | AI Tools | Essentials plus `tmux`, Herdr, Git, ripgrep, shfmt, ctags, make, patch, Zerostack, Rig, the `vm*` browser commands, vmlang, and vmmastra |
 | Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, and the browsercode-style Dev IDE (Monaco editor, file tree, console, live preview) with 7 framework templates in `/opt/vmbro/templates` |
 | Performance testing | AI Tools plus Grafana k6 and `k6obs`, which streams k6 results to OpenObserve during and after a run |
+| VAPT — native scanner | Performance testing plus the self-contained Vaptr scanner |
+| Star | Every guest feature: AI Tools, Dev IDE and templates, Performance testing, and VAPT |
 
-Each subsequent tier is built from the same clean rootfs and invokes every
-installer and validation step from the preceding tier. Build all images as root
-on Linux or WSL:
+Each image is built from the same clean rootfs. Specialized Dev, Performance,
+and VAPT images branch after AI Tools; Star invokes every installer and combines
+all of their features. Build all images as root on Linux or WSL:
 
 ```sh
 sudo bash network/guest/build-tier-images.sh all

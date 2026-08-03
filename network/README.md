@@ -250,12 +250,13 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
 
 - `../../bzImage-network`: Linux 6.6 i386 kernel with v86-compatible no-APIC
   boot parameters and built-in VirtIO/NE2000 networking.
-- `../../vm-images.json`: the four cumulative Alpine x86 images and their
+- `../../vm-images.json`: the seven Alpine x86 images and their
   exact sizes, versions, and checksums. Essentials adds automatic DHCP, CA
   certificates, curl, jq, and QuickJS. AI Tools adds tmux 3.5a, Git, ripgrep,
   shfmt, ctags, make, patch, browser-backed tools, Rig, Zerostack, vmlang, and
-  vmmastra. Performance testing additionally supplies Grafana k6 2.0.0.
-- `guest/build-tier-images.sh` builds and validates all four images from the
+  vmmastra. Performance testing additionally supplies Grafana k6 2.0.0; Star
+  combines Dev, Performance, and VAPT in one guest.
+- `guest/build-tier-images.sh` builds and validates all seven images from the
   clean Alpine i386 rootfs.
 - `guest/build-zellij-x86.sh` builds the version-pinned Zellij package in an
   isolated Alpine x86 environment. It requires root for the x86 chroot and can

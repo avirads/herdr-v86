@@ -18,7 +18,7 @@ DEV_TEMPLATE="${DEV_TEMPLATE:-$PROJECT_DIR/network/guest/dev-template}"
 DEV_TEMPLATES="${DEV_TEMPLATES:-$PROJECT_DIR/network/guest/templates}"
 DEV_IDE="${DEV_IDE:-$PROJECT_DIR/network/guest/dev-ide}"
 
-TIERS=(barebones essentials ai-tools dev performance vapt)
+TIERS=(barebones essentials ai-tools dev performance vapt star)
 
 tier_number() {
   case "$1" in
@@ -28,6 +28,7 @@ tier_number() {
     dev) echo 4 ;;
     performance) echo 4 ;;
     vapt) echo 5 ;;
+    star) echo 6 ;;
     *) echo "unknown tier: $1" >&2; exit 2 ;;
   esac
 }
@@ -40,6 +41,7 @@ tier_bytes() {
     dev) echo 99614720 ;;
     performance) echo 96468992 ;;
     vapt) echo 103809024 ;;
+    star) echo 134217728 ;;
   esac
 }
 
@@ -218,7 +220,7 @@ verify_tier() {
   else
     chroot "$MOUNT_DIR" /bin/sh -ec '! command -v herdr; ! command -v rig; ! command -v git'
   fi
-  if [[ "$tier" == dev ]]; then
+  if [[ "$tier" == dev || "$tier" == star ]]; then
     chroot "$MOUNT_DIR" /bin/sh -ec '
       command -v esbuild vmbro-httpd vmbro-dev
       test -f /root/project/src/pages/index.astro
@@ -239,12 +241,12 @@ verify_tier() {
   else
     chroot "$MOUNT_DIR" /bin/sh -ec '! command -v vmbro-dev'
   fi
-  if [[ "$tier" == performance || "$tier" == vapt ]]; then
+  if [[ "$tier" == performance || "$tier" == vapt || "$tier" == star ]]; then
     chroot "$MOUNT_DIR" /usr/local/bin/k6 version
   else
     chroot "$MOUNT_DIR" /bin/sh -ec '! command -v k6'
   fi
-  if [[ "$tier" == vapt ]]; then
+  if [[ "$tier" == vapt || "$tier" == star ]]; then
     chroot "$MOUNT_DIR" /bin/sh -ec '
       command -v vaptr >/dev/null
       for tool in httpx katana urlfinder ffuf interactsh-client hakrawler gospider nuclei; do
@@ -270,9 +272,9 @@ build_tier() {
   bootstrap_image "$image" "$bytes"
   (( number >= 2 )) && install_essentials
   (( number >= 3 )) && install_ai_tools
-  [[ "$tier" == dev ]] && install_dev
-  [[ "$tier" == performance || "$tier" == vapt ]] && install_performance
-  [[ "$tier" == vapt ]] && install_vapt
+  [[ "$tier" == dev || "$tier" == star ]] && install_dev
+  [[ "$tier" == performance || "$tier" == vapt || "$tier" == star ]] && install_performance
+  [[ "$tier" == vapt || "$tier" == star ]] && install_vapt
   write_tier_metadata "$tier" "$number"
   verify_tier "$tier" "$number"
   cleanup

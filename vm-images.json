@@ -49,6 +49,14 @@
       "size": 103809024,
       "version": "2026.07.30.1",
       "sha256": "3ef8d537e6500566e143c50193bd71bb2ca0529d747b82e6357d6249cfee23f9"
+    },
+    "star": {
+      "name": "Star",
+      "description": "All guest features in one image: AI Tools, Dev IDE and seven templates, Grafana k6 with k6obs, and the self-contained Vaptr scanner.",
+      "url": "vm-star-i386-ext4.img",
+      "size": 134217728,
+      "version": "2026.08.03.1",
+      "sha256": "59d03ffaf31a9fc86f82b64efd1f858672a2b140603a386c24c9286ac40c18d0"
     }
   }
 }
