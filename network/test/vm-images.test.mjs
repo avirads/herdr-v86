@@ -113,6 +113,17 @@ test('Dev UI exposes the live VM terminal beside its Console view', () => {
   assert.match(devIdeStyles, /\.embedded-terminal \{/);
 });
 
+test('Dev UI gives the output pane more space and focuses Terminal on load', () => {
+  assert.match(devIdeIndex, /id="terminal-tab" class="output-tab active"[^>]*aria-selected="true"/);
+  assert.match(devIdeIndex, /id="log-output"[^>]*hidden/);
+  assert.match(devIdeStyles, /\.log-pane \{[^}]*flex: 0 0 clamp\(260px, 34vh, 390px\);[^}]*min-height: 240px;/s);
+  assert.match(devIdeStyles, /\.log-output \{[^}]*flex: 1 1 auto;[^}]*min-height: 0;/s);
+  assert.match(devIdeApp, /cursor: '#fbbf24'/);
+  assert.match(devIdeApp, /requestAnimationFrame\(\(\) => selectOutputView\('terminal'\)\)/);
+  assert.match(devIdeApp, /embeddedTerm\.scrollToBottom\(\);/);
+  assert.match(devIdeApp, /embeddedTerm\.focus\(\);/);
+});
+
 test('Dev IDE inherits and persists the VMVM theme', () => {
   assert.match(devIndex, /new URLSearchParams\(location\.search\)\.get\('theme'\)/);
   assert.match(devIndex, /\['light', 'dark'\]\.includes\(requestedTheme\)/);

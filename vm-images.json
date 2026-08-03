@@ -31,8 +31,8 @@
       "description": "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.",
       "url": "vm-dev-i386-ext4.img",
       "size": 99614720,
-      "version": "2026.08.03.2",
-      "sha256": "52d45420ba03f90441dc06fc8b798fb0bc796dee870e71ed4234a3e87b9979d6"
+      "version": "2026.08.03.4",
+      "sha256": "430690d7cc3d9c370f0dbbc416ed3c0c38e348910cbd74433dd6e3d61e6fc87b"
     },
     "performance": {
       "name": "Performance testing",
@@ -44,7 +44,7 @@
     },
     "vapt": {
       "name": "VAPT — native scanner",
-      "description": "Performance plus Vaptr, the self-contained native scanner. Fingerprint, crawl, content/parameter discovery and vulnerability checks all run in-process; no external tools (httpx/katana/nuclei/ffuf) are bundled, so it runs inside the v86 guest.",
+      "description": "AI Tools plus Grafana k6 and Vaptr, the self-contained native scanner. k6obs and external tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.",
       "url": "vm-vapt-i386-ext4.img",
       "size": 103809024,
       "version": "2026.07.30.1",
@@ -55,8 +55,8 @@
       "description": "All guest features in one image: AI Tools, Dev IDE and seven templates, Grafana k6 with k6obs, and the self-contained Vaptr scanner.",
       "url": "vm-star-i386-ext4.img",
       "size": 134217728,
-      "version": "2026.08.03.2",
-      "sha256": "367145266fdbdfe0e01e01a7a258e86a7bd91d1d7c897f0299a994e4a41495e2"
+      "version": "2026.08.03.4",
+      "sha256": "37c658c9a1f5b8ac9e6fbcda465db863aa664d26788d6903ac09c5e7f3cc56d2"
     }
   }
 }

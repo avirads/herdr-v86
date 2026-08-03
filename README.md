@@ -6,7 +6,7 @@ automation, file transfer, and optional full IPv4 networking.
 AutoBro browser automation extension: see
 [installation and download instructions](docs/autobro-extension.md).
 
-On load, AI Tools boots by default. Select another cumulative image under
+On load, Barebones boots by default. Select another image under
 **Settings → VMVM Image**; changing it restarts VMVM. Models and AutoBro are
 configured independently from Settings.
 
@@ -18,9 +18,10 @@ After skipping, use **Settings → Configure providers** to configure the model 
 AutoBro independently without repeating the other provider's setup.
 
 - `bzImage-network` + the images in `vm-images.json` — VMVM tiers from
-  Barebones through Star, which combines every guest feature. AI Tools is the default
+  Barebones through Star, which combines every guest feature. Barebones is the default
   and includes browser-bridge tools, tmux 3.5a, Zerostack, and Rig. See
-  [VMVM image tiers](docs/vm-images.md).
+  [VMVM image tiers](docs/vm-images.md) and the
+  [runtime-derived package inventory](docs/runtime-inventory.md).
 - `network/` — authenticated WebSocket-to-TAP gateway, v86 adapter, guest build
   recipes, and automated DHCP/DNS/ping/HTTPS test.
 

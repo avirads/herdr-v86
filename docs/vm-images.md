@@ -2,7 +2,8 @@
 
 VMVM ships cumulative Alpine i386 guest images. Select an image under
 **Settings → VMVM Image**; changing the selection restarts the VM. AI Tools is
-the default and preserves the capabilities of the former single image.
+available when its tools are needed and preserves the capabilities of the
+former single image.
 
 | Tier | Guest contents |
 |---|---|
@@ -11,7 +12,7 @@ the default and preserves the capabilities of the former single image.
 | AI Tools | Essentials plus `tmux`, Herdr, Git, ripgrep, shfmt, ctags, make, patch, Zerostack, Rig, the `vm*` browser commands, vmlang, and vmmastra |
 | Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, and the browsercode-style Dev IDE (Monaco editor, file tree, console, live preview) with 7 framework templates in `/opt/vmbro/templates` |
 | Performance testing | AI Tools plus Grafana k6 and `k6obs`, which streams k6 results to OpenObserve during and after a run |
-| VAPT — native scanner | Performance testing plus the self-contained Vaptr scanner |
+| VAPT — native scanner | AI Tools plus Grafana k6 and the self-contained Vaptr scanner; `k6obs` is not installed in this tier |
 | Star | Every guest feature: AI Tools, Dev IDE and templates, Performance testing, and VAPT |
 
 Each image is built from the same clean rootfs. Specialized Dev, Performance,
@@ -25,6 +26,9 @@ sudo bash network/guest/build-tier-images.sh all
 The image URLs, exact byte sizes, versions, and SHA-256 checksums live in
 `vm-images.json`. Update the version and checksum whenever an image changes.
 The browser keeps a separate cache-version marker for each tier.
+The installed-package inventory is derived directly from the built filesystems
+and recorded in [runtime-inventory.md](runtime-inventory.md). Run
+`network/guest/verify-runtime-inventory.sh` before every push or release.
 
 Guest filesystems are independent. Export a project before changing tiers and
 import it after restart when files must move between images.

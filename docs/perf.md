@@ -114,7 +114,8 @@ counter:
 
 - **Block writes are fast and not throttled.** 50 KB written to the terminal in
   reasonably-sized chunks: **0.33 s (~150 KB/s)**, guest at full tilt. This is
-  what real TUIs (herdr, tmux, zellij) do — one `write()` per screen refresh.
+  what the shipped full-screen tools (Herdr and tmux) do — one `write()` per
+  screen refresh.
 - **The slow case is pathological, and it's CPU-bound.** Plain `yes` emits
   2-byte lines, so `yes | head -c 100000` is **50 000 line-buffered `write()`
   syscalls**. That is what the old "5.6 s" measured — syscall/tty overhead, not

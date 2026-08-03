@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"hash/fnv"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"mime"
@@ -75,14 +75,14 @@ var frameworks = []Framework{
 	{
 		ID: "astro-hono", Label: "Astro + Hono", Blurb: "Static Astro output with a real Hono TypeScript API.",
 		DefaultFile: "src/server.ts",
-		Build: esbuildAstroBuild(WORKSPACE_TOKEN),
+		Build:       esbuildAstroBuild(WORKSPACE_TOKEN),
 		Serve: "vmbro-httpd -bind 0.0.0.0 -port $PORT -root " + WORKSPACE_TOKEN +
 			"/dist -handler " + WORKSPACE_TOKEN + "/server.js",
 	},
 	{
 		ID: "mastra-hono-astro", Label: "Mastra + Hono + Astro", Blurb: "Astro chat with browser-local WebGPU inference.",
 		DefaultFile: "src/pages/index.astro",
-		Build: esbuildAstroBuild(WORKSPACE_TOKEN),
+		Build:       esbuildAstroBuild(WORKSPACE_TOKEN),
 		Serve: "vmbro-httpd -bind 0.0.0.0 -port $PORT -root " + WORKSPACE_TOKEN +
 			"/dist -handler " + WORKSPACE_TOKEN + "/server.js",
 	},
@@ -276,6 +276,15 @@ func (s *supervisor) runCommand(name string, command string, timeout time.Durati
 	return nil
 }
 
+// expandCommand resolves supervisor placeholders before a command reaches the
+// shell. Build and serve commands must use the same expansion path: otherwise
+// /bin/sh expands an unresolved $WS to an empty string and turns project paths
+// such as $WS/src/main.ts into the invalid absolute path /src/main.ts.
+func (s *supervisor) expandCommand(command string) string {
+	command = strings.ReplaceAll(command, "$PORT", fmt.Sprint(s.appPort))
+	return strings.ReplaceAll(command, WORKSPACE_TOKEN, s.workspace)
+}
+
 // stopApp kills any running app server.
 func (s *supervisor) stopApp() {
 	if s.cmd == nil {
@@ -295,8 +304,7 @@ func (s *supervisor) startApp() error {
 		return fmt.Errorf("unknown framework: %s", s.framework)
 	}
 	s.stopApp()
-	command := strings.ReplaceAll(config.Serve, "$PORT", fmt.Sprint(s.appPort))
-	command = strings.ReplaceAll(command, WORKSPACE_TOKEN, s.workspace)
+	command := s.expandCommand(config.Serve)
 	s.addLog("starting app server on 0.0.0.0:" + fmt.Sprint(s.appPort))
 	cmd := exec.Command("/bin/sh", "-c", command)
 	cmd.Dir = s.workspace
@@ -321,7 +329,7 @@ func (s *supervisor) build() error {
 	if config.Build == "" {
 		return nil
 	}
-	if err := s.runCommand("build", config.Build, 120*time.Second); err != nil {
+	if err := s.runCommand("build", s.expandCommand(config.Build), 120*time.Second); err != nil {
 		return err
 	}
 	stamp := filepath.Join(s.workspace, ".vmbro", "build-stamp")

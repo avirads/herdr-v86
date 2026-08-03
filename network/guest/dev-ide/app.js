@@ -35,9 +35,16 @@ const el = {
 const embeddedTerm = new Terminal({
 	cursorBlink: true,
 	convertEol: true,
+	scrollOnUserInput: true,
 	fontSize: 13,
 	fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-	theme: { background: '#090c14', foreground: '#c9d1d9' },
+	theme: {
+		background: '#090c14',
+		foreground: '#c9d1d9',
+		cursor: '#fbbf24',
+		cursorAccent: '#090c14',
+		selectionBackground: '#8b5cf680',
+	},
 });
 embeddedTerm.open(el.embeddedTerminal);
 embeddedTerm.onData((data) => parent.postMessage({ type: 'vmvm-terminal-input', data }, location.origin));
@@ -70,9 +77,15 @@ el.terminalTab.addEventListener('click', () => selectOutputView('terminal'));
 new ResizeObserver(fitEmbeddedTerminal).observe(el.embeddedTerminal);
 addEventListener('message', (event) => {
 	if (event.origin !== location.origin || event.source !== parent) return;
-	if (event.data?.type === 'vmvm-terminal-output' && event.data.data) embeddedTerm.write(event.data.data);
+	if (event.data?.type === 'vmvm-terminal-output' && event.data.data) {
+		embeddedTerm.write(event.data.data, () => {
+			embeddedTerm.scrollToBottom();
+			if (!el.embeddedTerminal.hidden) embeddedTerm.focus();
+		});
+	}
 });
 parent.postMessage({ type: 'vmvm-terminal-ready' }, location.origin);
+requestAnimationFrame(() => selectOutputView('terminal'));
 
 let toastTimer = null;
 function toast(message, bad = false) {
