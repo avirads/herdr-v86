@@ -50,7 +50,8 @@ test('the interactive VM shell starts in the project directory', () => {
 
 test('the app shell revalidates without intercepting VM disk ranges', () => {
   assert.match(html, /serviceWorker\.register\("\.\/service-worker\.js", \{ updateViaCache: "none" \}\)/);
-  assert.match(serviceWorker, /event\.request\.mode !== "navigate"/);
+  assert.match(serviceWorker, /request\.mode !== "navigate"/);
+  assert.match(serviceWorker, /request\.headers\.has\("range"\)/);
   assert.match(serviceWorker, /fetch\(source, \{ cache: "no-cache" \}\)/);
   assert.doesNotMatch(serviceWorker, /vm-network-ext4/);
   assert.match(serviceWorker, /"guest-tools", "deep-agent"/);

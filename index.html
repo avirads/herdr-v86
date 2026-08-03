@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VMVM (v86)</title>
 <link rel="icon" type="image/png" href="assets/vmvm-logo.png">
+<link rel="manifest" href="app.webmanifest">
+<link rel="apple-touch-icon" href="assets/vmvm-apple-touch-icon.png">
+<meta name="theme-color" content="#161b22">
+<meta name="application-name" content="VMVM">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VMVM">
 <link rel="stylesheet" href="xterm.css">
 <script>
   document.documentElement.dataset.theme =
@@ -446,6 +453,13 @@
       <button id="copy-diagnostics" type="button">Copy diagnostics</button>
     </div>
   </details>
+  <details class="provider-section" aria-labelledby="pwa-settings-title">
+    <summary><h3 id="pwa-settings-title">App installation</h3></summary>
+    <small id="pwa-install-status" role="status" aria-live="polite">Install VMVM for a standalone window and launcher icon.</small>
+    <div class="provider-actions">
+      <button id="install-pwa" type="button" disabled>Install VMVM</button>
+    </div>
+  </details>
   <div class="settings-action">
     <div><strong>Help</strong><br><small>Open the VM command reference, including local and cloud LLM connections.</small></div>
     <button id="open-help" type="button">Open help</button>
@@ -508,6 +522,44 @@ if ("serviceWorker" in navigator) {
 }
 
 const status = (m) => document.getElementById("status").textContent = m;
+let deferredInstallPrompt = null;
+const installPwaButton = document.getElementById("install-pwa");
+const pwaInstallStatus = document.getElementById("pwa-install-status");
+const isStandalonePwa = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+function refreshPwaInstallUi() {
+  if (isStandalonePwa()) {
+    installPwaButton.disabled = true;
+    installPwaButton.textContent = "Installed";
+    pwaInstallStatus.textContent = "VMVM is running as an installed app.";
+  } else if (deferredInstallPrompt) {
+    installPwaButton.disabled = false;
+    installPwaButton.textContent = "Install VMVM";
+    pwaInstallStatus.textContent = "VMVM is ready to install on this device.";
+  } else {
+    installPwaButton.disabled = true;
+    pwaInstallStatus.textContent = /iphone|ipad|ipod/i.test(navigator.userAgent)
+      ? "In Safari, use Share → Add to Home Screen."
+      : "Use your browser menu's Install app or Add to Home Screen option when available.";
+  }
+}
+addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  refreshPwaInstallUi();
+});
+addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  refreshPwaInstallUi();
+});
+installPwaButton.onclick = async () => {
+  if (!deferredInstallPrompt) return refreshPwaInstallUi();
+  const prompt = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  await prompt.prompt();
+  const choice = await prompt.userChoice;
+  pwaInstallStatus.textContent = choice.outcome === "accepted" ? "VMVM installed." : "Installation was dismissed.";
+  refreshPwaInstallUi();
+};
 const networkStatus = message => {
   console.info("[vm-network]", message);
   if (/^(?:connected|error|disconnected)/.test(String(message))) status(`network: ${message}`);
@@ -1738,6 +1790,7 @@ for (const select of document.querySelectorAll(".agent-provider-default")) {
 }
 document.getElementById("open-settings").onclick = () => {
   settingsDialog.showModal();
+  refreshPwaInstallUi();
   refreshCloudProviderSettings(cloudProviderSelect.value);
   refreshCachedModelSelect().catch(error => llmStatus("could not list cached models — " + error.message));
 };
