@@ -124,6 +124,7 @@ const openTabs = new Map(); // path -> {path, content, saved, dirty}
 let activeTab = null;
 let editor = null; // Monaco editor
 let editorMode = 'monaco';
+let autoSaveTimer = null;
 
 // ── Preview URL ──────────────────────────────────────────────────────────────
 function previewUrl() {
@@ -372,6 +373,19 @@ async function initEditor() {
 		wordWrap: 'on',
 	});
 	editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveActive);
+	editor.onDidChangeModelContent(() => {
+		if (!activeTab) return;
+		const tab = openTabs.get(activeTab);
+		if (!tab) return;
+		tab.content = editor.getValue();
+		tab.dirty = tab.content !== tab.saved;
+		renderTabs();
+		clearTimeout(autoSaveTimer);
+		const path = activeTab;
+		autoSaveTimer = setTimeout(() => {
+			if (activeTab === path && openTabs.get(path)?.dirty) saveActive();
+		}, 700);
+	});
 }
 
 function renderTabs() {
@@ -476,6 +490,7 @@ function currentContent() {
 }
 
 async function saveActive() {
+	clearTimeout(autoSaveTimer);
 	if (!activeTab) return;
 	const tab = openTabs.get(activeTab);
 	if (!tab) return;

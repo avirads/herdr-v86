@@ -28,7 +28,7 @@ const title = 'Mastra Weather Agent';
 				</div>
 			</header>
 
-			<section class="connection" aria-label="Local model">
+			<section id="model-setup" class="connection" aria-label="Local model" hidden>
 				<div class="row">
 					<div class="model">
 						<strong>Gemma 4 E2B</strong>
@@ -45,7 +45,7 @@ const title = 'Mastra Weather Agent';
 			</section>
 
 			<ol id="messages" class="messages" aria-live="polite">
-				<li class="message assistant">Import the Gemma model, then ask about weather or trip planning.</li>
+				<li id="intro-message" class="message assistant">Connecting to the VMVM local model…</li>
 			</ol>
 
 			<form id="chat-form" class="composer">
@@ -63,6 +63,8 @@ const title = 'Mastra Weather Agent';
 			const prompt = document.querySelector('#prompt');
 			const send = document.querySelector('#send');
 			const modelFile = document.querySelector('#model-file');
+			const modelSetup = document.querySelector('#model-setup');
+			const introMessage = document.querySelector('#intro-message');
 			const theme = document.querySelector('#theme');
 			const refresh = document.querySelector('#refresh');
 			let client;
@@ -101,8 +103,17 @@ const title = 'Mastra Weather Agent';
 			const setReady = (modelName) => {
 				status.textContent = 'Ready · Mastra';
 				progress.textContent = `${modelName} is loaded locally. Prompts remain on this device.`;
+				modelSetup.hidden = true;
+				introMessage.textContent = `Using the already loaded VMVM model (${modelName}). Ask about weather or trip planning.`;
 				send.disabled = false;
 				prompt.focus();
+			};
+
+			const showModelSetup = () => {
+				status.textContent = 'Choose a model';
+				progress.textContent = 'No downloaded model was found. Download and import a .litertlm file once.';
+				introMessage.textContent = 'Download and import a model, then ask about weather or trip planning.';
+				modelSetup.hidden = false;
 			};
 
 			const createAgent = async () => {
@@ -124,6 +135,27 @@ const title = 'Mastra Weather Agent';
 
 			const boot = async () => {
 				if (!('gpu' in navigator)) throw new Error('WebGPU is unavailable. Use a current WebGPU-enabled browser.');
+				let sharedClient;
+				let sharedReady;
+				try {
+					sharedClient = top.vmvmLocalModelClient;
+					sharedReady = top.vmvmLocalModelReady;
+				} catch { /* Direct guest-port preview: use the origin-local cache below. */ }
+				if (sharedClient) {
+					client = sharedClient;
+					client.addEventListener('activity', () => {
+						queueMicrotask(() => {
+							if (client.modelName && send.disabled && !generating) setReady(client.modelName);
+						});
+					});
+					await sharedReady?.catch(() => {});
+					if (client.modelName) {
+						setReady(client.modelName);
+						return;
+					}
+					showModelSetup();
+					return;
+				}
 				const { LiteRtLmClient } = await import('/vmmastra/network/browser/litert-lm-client.js');
 				client = new LiteRtLmClient();
 				client.addEventListener('activity', (event) => {
@@ -137,10 +169,7 @@ const title = 'Mastra Weather Agent';
 					bundledModelUrl: bundledModel.ok ? bundledModelUrl : ''
 				});
 				if (result.modelName) setReady(result.modelName);
-				else {
-					status.textContent = 'Choose a model';
-					progress.textContent = 'Import the downloaded .litertlm file. It will be cached for later visits.';
-				}
+				else showModelSetup();
 			};
 
 			modelFile.addEventListener('change', async () => {

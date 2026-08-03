@@ -9,6 +9,7 @@ const devIndex = await readFile(new URL('network/guest/dev-template/dist/index.h
 const devIdeIndex = await readFile(new URL('network/guest/dev-ide/index.html', root), 'utf8');
 const devIdeApp = await readFile(new URL('network/guest/dev-ide/app.js', root), 'utf8');
 const devIdeStyles = await readFile(new URL('network/guest/dev-ide/styles.css', root), 'utf8');
+const mastraAstro = await readFile(new URL('network/guest/templates/mastra-hono-astro/src/pages/index.astro', root), 'utf8');
 const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 
@@ -122,6 +123,25 @@ test('Dev UI gives the output pane more space and focuses Terminal on load', () 
   assert.match(devIdeApp, /requestAnimationFrame\(\(\) => selectOutputView\('terminal'\)\)/);
   assert.match(devIdeApp, /embeddedTerm\.scrollToBottom\(\);/);
   assert.match(devIdeApp, /embeddedTerm\.focus\(\);/);
+});
+
+test('Dev IDE autosaves editor changes so Astro rebuild and preview reload can run', () => {
+  assert.match(devIdeApp, /editor\.onDidChangeModelContent\(\(\) =>/);
+  assert.match(devIdeApp, /autoSaveTimer = setTimeout\(\(\) => \{/);
+  assert.match(devIdeApp, /if \(activeTab === path && openTabs\.get\(path\)\?\.dirty\) saveActive\(\)/);
+  assert.match(devIdeApp, /eventsSource\.addEventListener\('reload'/);
+  assert.match(devIdeApp, /reloadPreview\(\)/);
+});
+
+test('Mastra Astro reuses the VMVM model and reveals setup only when none is loaded', () => {
+  assert.match(html, /globalThis\.vmvmLocalModelClient = client/);
+  assert.match(html, /globalThis\.vmvmLocalModelReady = initialization/);
+  assert.match(mastraAstro, /id="model-setup"[^>]*hidden/);
+  assert.match(mastraAstro, /sharedClient = top\.vmvmLocalModelClient/);
+  assert.match(mastraAstro, /sharedReady = top\.vmvmLocalModelReady/);
+  assert.match(mastraAstro, /if \(client\.modelName\) \{[\s\S]*setReady\(client\.modelName\);[\s\S]*return;/);
+  assert.match(mastraAstro, /else showModelSetup\(\)/);
+  assert.match(mastraAstro, /No downloaded model was found/);
 });
 
 test('Dev IDE inherits and persists the VMVM theme', () => {
