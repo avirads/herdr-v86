@@ -31,8 +31,8 @@
       "description": "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.",
       "url": "vm-dev-i386-ext4.img",
       "size": 99614720,
-      "version": "2026.08.03.8",
-      "sha256": "aa1cca281cb024668a92d5628a8becea2a6d49435748df99a981b3eb70731cad"
+      "version": "2026.08.03.9",
+      "sha256": "20dd2e814ed5ed5405eba3ad3530e0aa6a85b93b69d6c9d23820e929e0b5df70"
     },
     "performance": {
       "name": "Performance testing",
@@ -55,8 +55,8 @@
       "description": "All guest features in one image: AI Tools, Dev IDE and seven templates, Grafana k6 with k6obs, and the self-contained Vaptr scanner.",
       "url": "vm-star-i386-ext4.img",
       "size": 134217728,
-      "version": "2026.08.03.8",
-      "sha256": "aeda7eafdb6630135d04ed20b9508e2afbe049c953e7ca4571e80b8edbc8f70f"
+      "version": "2026.08.03.9",
+      "sha256": "d8a5f4f675c9fd2f800a40bde9bd3cac954bbd00512d0f406ff294a64e49e51e"
     }
   }
 }

@@ -115,7 +115,7 @@
 			const createAgent = async () => {
 				if (agent) return agent;
 				status.textContent = 'Loading Mastra…';
-				const { Agent, createLiteRt } = await import('/vmmastra/agent/mastra-agent.js');
+				const { Agent, createLiteRt } = await import('/agent/dist/mastra-agent.js?v=2026.08.03.1');
 				agent = new Agent({
 					id: 'weather-agent',
 					name: 'Weather Agent',

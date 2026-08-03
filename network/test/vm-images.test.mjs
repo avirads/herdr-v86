@@ -10,6 +10,7 @@ const devIdeIndex = await readFile(new URL('network/guest/dev-ide/index.html', r
 const devIdeApp = await readFile(new URL('network/guest/dev-ide/app.js', root), 'utf8');
 const devIdeStyles = await readFile(new URL('network/guest/dev-ide/styles.css', root), 'utf8');
 const mastraAstro = await readFile(new URL('network/guest/templates/mastra-hono-astro/src/pages/index.astro', root), 'utf8');
+const mastraBundle = await readFile(new URL('agent/dist/mastra-agent.js', root), 'utf8');
 const devSupervisor = await readFile(new URL('network/guest/vmbro-httpd/main.go', root), 'utf8');
 const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
@@ -155,6 +156,9 @@ test('Mastra Astro reuses the VMVM model and reveals setup only when none is loa
   assert.match(mastraAstro, /No downloaded model was found/);
   assert.match(mastraAstro, /import\('\/network\/browser\/litert-lm-client\.js'\)/);
   assert.doesNotMatch(mastraAstro, /\/vmmastra\/network\/browser\/litert-lm-client\.js/);
+	assert.match(mastraAstro, /import\('\/agent\/dist\/mastra-agent\.js\?v=2026\.08\.03\.1'\)/);
+  assert.doesNotMatch(mastraAstro, /\/vmmastra\/agent\/mastra-agent\.js/);
+	assert.match(mastraBundle, /export \{\s*Agent,[\s\S]*createLiteRt,[\s\S]*createMastraVMAgent/);
 });
 
 test('Dev IDE inherits and persists the VMVM theme', () => {

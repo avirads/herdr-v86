@@ -13,6 +13,11 @@ import { createLiteRt } from './litert-provider.js';
 import { V86Filesystem, V86Sandbox } from './v86-workspace.js';
 import { createVmTools, createGlobTool, createGrepTool } from './vm-tools.js';
 
+// The Dev IDE's Mastra + Hono + Astro starter builds a small custom agent on
+// top of the same browser-local LiteRT provider. Export these primitives from
+// the shared bundle so the template does not need a second Mastra build.
+export { Agent, createLiteRt };
+
 // V86GuestAgentClient defaults to a 30 s per-RPC timeout and serializes every
 // call through one queue. Time out just under that so a slow command surfaces
 // as a CommandResult with exitCode 124 rather than a transport-level throw.

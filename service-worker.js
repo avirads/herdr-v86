@@ -39,7 +39,7 @@ self.addEventListener("fetch", event => {
   // VM disks, model payloads, guest proxies, and live network transports have
   // their own lifecycle. Never let the app-shell worker cache or intercept them.
   if (/\.(?:img|litertlm|task|zip)(?:$|\?)/i.test(requestedUrl.pathname) ||
-      /^\/(?:models|downloads|ide|preview|v1|peerjs|plu)(?:\/|$)/.test(requestedUrl.pathname)) return;
+      /^\/(?:models|downloads|agent\/dist|ide|preview|v1|peerjs|plu)(?:\/|$)/.test(requestedUrl.pathname)) return;
 
   if (request.mode !== "navigate") {
     if (!["script", "style", "image", "font", "manifest"].includes(request.destination)) return;

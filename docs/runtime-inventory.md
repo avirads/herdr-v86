@@ -3,7 +3,7 @@
 This inventory is generated from the built ext4 images, not from build scripts,
 package wish lists, or older documentation. The authoritative inputs are
 `/etc/apk/world` and `/usr/local/bin` inside each image. It was last verified
-against the images prepared as Dev/Star `2026.08.03.8`.
+against the images prepared as Dev/Star `2026.08.03.9`.
 
 | Tier | APK world beyond the Alpine base | VMVM-managed executables in `/usr/local/bin` |
 |---|---|---|

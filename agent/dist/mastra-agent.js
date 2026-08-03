@@ -257398,8 +257398,10 @@ function stripFence(content3) {
 }
 var GUEST_RPC_TIMEOUT_MS_EXPORTED = GUEST_RPC_TIMEOUT_MS;
 export {
+  Agent,
   DEFAULT_INSTRUCTIONS,
   GUEST_RPC_TIMEOUT_MS_EXPORTED,
+  createLiteRt,
   createMastraVMAgent
 };
 /*! Bundled license information:
