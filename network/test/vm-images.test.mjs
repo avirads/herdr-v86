@@ -6,6 +6,9 @@ const root = new URL('../../', import.meta.url);
 const manifest = JSON.parse(await readFile(new URL('vm-images.json', root), 'utf8'));
 const html = await readFile(new URL('index.html', root), 'utf8');
 const devIndex = await readFile(new URL('network/guest/dev-template/dist/index.html', root), 'utf8');
+const devIdeIndex = await readFile(new URL('network/guest/dev-ide/index.html', root), 'utf8');
+const devIdeApp = await readFile(new URL('network/guest/dev-ide/app.js', root), 'utf8');
+const devIdeStyles = await readFile(new URL('network/guest/dev-ide/styles.css', root), 'utf8');
 const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 
@@ -76,11 +79,38 @@ test('Dev tier starts and opens its app automatically', () => {
   assert.match(html, /if \(hasDevEnvironment\) startDevAppPhase\(\)/);
   assert.match(html, /new URL\("\/ide\/", location\.origin\)\.href/);
   assert.match(html, /target\.searchParams\.set\("theme", document\.documentElement\.dataset\.theme \|\| "dark"\)/);
-  assert.match(html, /frame\.src = target\.href/);
-  assert.match(html, /frame\.hidden = false/);
+  assert.match(html, /devFrame\.src = target\.href/);
   assert.match(html, /finishBoot\(false\)/);
   assert.match(html, /finishDevApp\(true\)/);
   assert.doesNotMatch(html, /Open Dev App|id="open-dev-app"|devAppButton/);
+});
+
+test('Dev and Star can switch between IDE and terminal without restarting the VM', () => {
+  assert.match(html, /id="toggle-dev-view"[^>]*hidden/);
+  assert.match(html, /function setDevView\(view\)/);
+  assert.match(html, /devFrame\.hidden = showTerminal/);
+  assert.match(html, /termHost\.style\.display = showTerminal \? "" : "none"/);
+  assert.match(html, /termHost\.style\.visibility = showTerminal \? "visible" : "hidden"/);
+  assert.match(html, /scheduleTerminalFit\(\)/);
+  assert.match(html, /Terminal — same running VM/);
+  assert.match(html, /devViewButton\.onclick = \(\) => setDevView\(devFrame\.hidden \? "ide" : "terminal"\)/);
+  assert.doesNotMatch(html, /toggle-dev-view[\s\S]{0,1000}location\.reload/);
+});
+
+test('Dev UI exposes the live VM terminal beside its Console view', () => {
+  assert.match(devIdeIndex, /id="console-tab"[^>]*>Console</);
+  assert.match(devIdeIndex, /id="terminal-tab"[^>]*>Terminal</);
+  assert.match(devIdeIndex, /id="embedded-terminal"[^>]*role="tabpanel"/);
+  assert.match(devIdeIndex, /src="\/xterm\.js"/);
+  assert.match(devIdeApp, /new Terminal\(/);
+  assert.match(devIdeApp, /function selectOutputView\(view\)/);
+  assert.match(devIdeApp, /type: 'vmvm-terminal-input'/);
+  assert.match(devIdeApp, /type: 'vmvm-terminal-ready'/);
+  assert.match(html, /type === "vmvm-terminal-input"/);
+  assert.match(html, /handleTerminalData\(event\.data\.data\)/);
+  assert.match(html, /DEV_TERMINAL_HISTORY_LIMIT = 65536/);
+  assert.match(html, /type: "vmvm-terminal-output"/);
+  assert.match(devIdeStyles, /\.embedded-terminal \{/);
 });
 
 test('Dev IDE inherits and persists the VMVM theme', () => {

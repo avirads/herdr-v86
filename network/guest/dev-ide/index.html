@@ -6,6 +6,7 @@
 		<title>VMVM Dev IDE</title>
 		<link rel="icon" type="image/png" href="vmvm-logo.png" />
 		<link rel="stylesheet" href="styles.css" />
+		<link rel="stylesheet" href="/xterm.css" />
 		<script>
 			// Theme sync: honor the host page's ?theme=, then the vmvm-theme postMessage.
 			const requestedTheme = new URLSearchParams(location.search).get('theme');
@@ -62,9 +63,13 @@
 					<div id="editor-fallback" class="editor-fallback" hidden>
 						<textarea id="editor-textarea" spellcheck="false"></textarea>
 					</div>
-					<section class="log-pane">
-						<h2>Console</h2>
-						<pre id="log-output" class="log-output">Ready.</pre>
+					<section id="output-pane" class="log-pane">
+						<div class="output-tabs" role="tablist" aria-label="Output views">
+							<button id="console-tab" class="output-tab active" type="button" role="tab" aria-selected="true" aria-controls="log-output">Console</button>
+							<button id="terminal-tab" class="output-tab" type="button" role="tab" aria-selected="false" aria-controls="embedded-terminal">Terminal</button>
+						</div>
+						<pre id="log-output" class="log-output" role="tabpanel">Ready.</pre>
+						<div id="embedded-terminal" class="embedded-terminal" role="tabpanel" hidden></div>
 					</section>
 				</main>
 
@@ -80,6 +85,7 @@
 
 		<div id="toast" class="toast" hidden></div>
 
+		<script src="/xterm.js"></script>
 		<script src="app.js"></script>
 	</body>
 </html>

@@ -248,6 +248,13 @@
   <div id="browser-status">AutoBro: not connected</div>
   <div id="voice-status">Voice: ready to load</div>
   <div id="tools">
+    <button id="toggle-dev-view" type="button" title="Open terminal in this VM" aria-label="Open terminal in this VM" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="3" width="20" height="18" rx="2"/>
+        <path d="m7 8 3 3-3 3M13 15h4"/>
+      </svg>
+      <span class="tool-label">Terminal</span>
+    </button>
     <button id="copy-terminal" type="button" title="Copy terminal" aria-label="Copy terminal">
       <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="9" y="9" width="12" height="12" rx="2"/>
@@ -552,10 +559,10 @@ const VM_IMAGE_FALLBACK = {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "vm-barebones-i386-ext4.img", size: 67108864, version: "2026.07.29.1" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "vm-essentials-i386-ext4.img", size: 83886080, version: "2026.07.29.1" },
     "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.07.29.1" },
-    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.15" },
+    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.08.03.2" },
     "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.08.01.1" },
     "vapt": { name: "VAPT — native scanner", description: "Performance plus Vaptr, the self-contained native scanner (no external tools; runs in the v86 guest).", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.07.30.1" },
-    "star": { name: "Star", description: "All guest features: AI Tools, Dev IDE and templates, k6/k6obs performance testing, and Vaptr.", url: "vm-star-i386-ext4.img", size: 134217728, version: "2026.08.03.1" },
+    "star": { name: "Star", description: "All guest features: AI Tools, Dev IDE and templates, k6/k6obs performance testing, and Vaptr.", url: "vm-star-i386-ext4.img", size: 134217728, version: "2026.08.03.2" },
   },
 };
 let vmImageManifest = VM_IMAGE_FALLBACK;
@@ -631,14 +638,42 @@ const DEVAPP_READY_MARKER = "DEVAPP-READY-OK";
 let devAppPhase = false;
 let devAppTicker = null;
 let devAppTimeout = null;
+const devViewButton = document.getElementById("toggle-dev-view");
+const devFrame = document.getElementById("dev-ide");
+const termHost = document.getElementById("term");
+function setDevView(view) {
+  const showTerminal = view === "terminal";
+  devFrame.hidden = showTerminal;
+  termHost.style.display = showTerminal ? "" : "none";
+  termHost.style.visibility = showTerminal ? "visible" : "hidden";
+  devViewButton.title = showTerminal ? "Return to IDE" : "Open terminal in this VM";
+  devViewButton.setAttribute("aria-label", devViewButton.title);
+  devViewButton.querySelector(".tool-label").textContent = showTerminal ? "IDE" : "Terminal";
+  status(showTerminal ? "Terminal — same running VM" : "Dev IDE ready");
+  if (showTerminal) {
+    scheduleTerminalFit();
+    term.focus();
+  } else {
+    devFrame.contentWindow?.focus();
+  }
+}
+devViewButton.onclick = () => setDevView(devFrame.hidden ? "ide" : "terminal");
+addEventListener("message", event => {
+  if (event.origin !== location.origin || event.source !== devFrame.contentWindow) return;
+  if (event.data?.type === "vmvm-terminal-input" && typeof event.data.data === "string") {
+    handleTerminalData(event.data.data);
+  } else if (event.data?.type === "vmvm-terminal-ready") {
+    const history = Uint8Array.from(devTerminalHistory);
+    if (history.length) devFrame.contentWindow.postMessage({ type: "vmvm-terminal-output", data: history }, location.origin);
+  }
+});
 function enterDevIDE() {
   status("Dev app ready — entering IDE");
   const target = new URL(DEV_APP_URL);
   target.searchParams.set("theme", document.documentElement.dataset.theme || "dark");
-  const frame = document.getElementById("dev-ide");
-  frame.src = target.href;
-  frame.hidden = false;
-  document.getElementById("term").style.display = "none";
+  devFrame.src = target.href;
+  devViewButton.hidden = false;
+  setDevView("ide");
 }
 function startDevAppPhase() {
   devAppPhase = true;
@@ -989,12 +1024,20 @@ async function writeAgentTerminal(output) {
 // and flushed to xterm as a single write per microtask. flushSerialOutput()
 // keeps direct term.write() callers ordered with respect to queued bytes.
 const serialOutQueue = [];
+const devTerminalHistory = [];
+const DEV_TERMINAL_HISTORY_LIMIT = 65536;
 let serialFlushScheduled = false;
 function flushSerialOutput() {
   if (!serialOutQueue.length) return;
   const chunk = Uint8Array.from(serialOutQueue);
   serialOutQueue.length = 0;
   term.write(chunk);
+  if (hasDevEnvironment) {
+    devTerminalHistory.push(...chunk);
+    if (devTerminalHistory.length > DEV_TERMINAL_HISTORY_LIMIT)
+      devTerminalHistory.splice(0, devTerminalHistory.length - DEV_TERMINAL_HISTORY_LIMIT);
+    devFrame.contentWindow?.postMessage({ type: "vmvm-terminal-output", data: chunk }, location.origin);
+  }
 }
 function queueSerialOutput(data) {
   if (typeof data === "number") serialOutQueue.push(data);

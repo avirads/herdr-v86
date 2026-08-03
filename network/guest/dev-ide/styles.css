@@ -373,13 +373,33 @@ button.quiet.tiny {
 	border-top: 1px solid var(--border-soft);
 	background: var(--panel);
 }
-.log-pane h2 {
+.output-tabs {
+	display: flex;
+	align-items: center;
+	gap: 0.2rem;
+	padding: 0.25rem 0.45rem 0;
+	border-bottom: 1px solid var(--border-soft);
+}
+.output-tab {
+	min-height: 30px;
+	padding: 0.3rem 0.6rem;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	color: var(--faint);
+	background: transparent;
 	font-size: 0.62rem;
 	font-weight: 800;
 	letter-spacing: 0.14em;
 	text-transform: uppercase;
-	color: var(--faint);
-	padding: 0.4rem 0.6rem 0.2rem;
+	cursor: pointer;
+}
+.output-tab.active {
+	color: var(--text);
+	border-bottom-color: var(--accent);
+}
+.output-tab:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
 }
 .log-output {
 	margin: 0;
@@ -392,6 +412,20 @@ button.quiet.tiny {
 	color: var(--muted);
 	white-space: pre-wrap;
 	word-break: break-word;
+}
+.embedded-terminal {
+	height: 220px;
+	min-height: 140px;
+	padding: 4px 6px;
+	overflow: hidden;
+	background: #090c14;
+}
+.embedded-terminal[hidden],
+.log-output[hidden] {
+	display: none;
+}
+.embedded-terminal .xterm {
+	height: 100%;
 }
 .preview {
 	width: 42%;
@@ -440,6 +474,9 @@ button.quiet.tiny {
 	color: var(--bad);
 }
 @media (max-width: 900px) {
+	.embedded-terminal {
+		height: min(42vh, 280px);
+	}
 	.preview {
 		display: none;
 	}

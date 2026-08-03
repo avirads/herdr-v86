@@ -17,6 +17,10 @@ const el = {
 	editorFallback: $('editor-fallback'),
 	editorTextarea: $('editor-textarea'),
 	logOutput: $('log-output'),
+	outputPane: $('output-pane'),
+	consoleTab: $('console-tab'),
+	terminalTab: $('terminal-tab'),
+	embeddedTerminal: $('embedded-terminal'),
 	preview: $('preview'),
 	previewReload: $('preview-reload'),
 	sidebarToggle: $('sidebar-toggle'),
@@ -24,6 +28,51 @@ const el = {
 	sidebarBackdrop: $('sidebar-backdrop'),
 	toast: $('toast'),
 };
+
+// ── Live VM terminal ────────────────────────────────────────────────────────
+// The emulator remains owned by the parent page. This xterm is a second view
+// over that same serial session, so opening it never starts or changes a VM.
+const embeddedTerm = new Terminal({
+	cursorBlink: true,
+	convertEol: true,
+	fontSize: 13,
+	fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+	theme: { background: '#090c14', foreground: '#c9d1d9' },
+});
+embeddedTerm.open(el.embeddedTerminal);
+embeddedTerm.onData((data) => parent.postMessage({ type: 'vmvm-terminal-input', data }, location.origin));
+
+function fitEmbeddedTerminal() {
+	if (el.embeddedTerminal.hidden) return;
+	const cellWidth = Math.max(6, embeddedTerm._core?._renderService?.dimensions?.css?.cell?.width || 8);
+	const cellHeight = Math.max(12, embeddedTerm._core?._renderService?.dimensions?.css?.cell?.height || 17);
+	const cols = Math.max(20, Math.floor((el.embeddedTerminal.clientWidth - 12) / cellWidth));
+	const rows = Math.max(5, Math.floor((el.embeddedTerminal.clientHeight - 8) / cellHeight));
+	if (cols !== embeddedTerm.cols || rows !== embeddedTerm.rows) embeddedTerm.resize(cols, rows);
+}
+
+function selectOutputView(view) {
+	const terminal = view === 'terminal';
+	el.logOutput.hidden = terminal;
+	el.embeddedTerminal.hidden = !terminal;
+	el.consoleTab.classList.toggle('active', !terminal);
+	el.terminalTab.classList.toggle('active', terminal);
+	el.consoleTab.setAttribute('aria-selected', String(!terminal));
+	el.terminalTab.setAttribute('aria-selected', String(terminal));
+	if (terminal) {
+		fitEmbeddedTerminal();
+		embeddedTerm.focus();
+	}
+}
+
+el.consoleTab.addEventListener('click', () => selectOutputView('console'));
+el.terminalTab.addEventListener('click', () => selectOutputView('terminal'));
+new ResizeObserver(fitEmbeddedTerminal).observe(el.embeddedTerminal);
+addEventListener('message', (event) => {
+	if (event.origin !== location.origin || event.source !== parent) return;
+	if (event.data?.type === 'vmvm-terminal-output' && event.data.data) embeddedTerm.write(event.data.data);
+});
+parent.postMessage({ type: 'vmvm-terminal-ready' }, location.origin);
 
 let toastTimer = null;
 function toast(message, bad = false) {
