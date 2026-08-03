@@ -86,7 +86,8 @@ test('Dev tier starts and opens its app automatically', () => {
   assert.match(html, /finishDevApp\(true\)/);
 	assert.match(html, /await devNetworkReady/);
 	assert.match(html, /fetch\(DEV_APP_URL, \{ cache: "no-store" \}\)/);
-	assert.match(html, /the public IDE route did not become reachable/);
+  assert.match(html, /the public IDE route did not become reachable/);
+	assert.match(html, /v86-websocket-network\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}/);
   assert.doesNotMatch(html, /Open Dev App|id="open-dev-app"|devAppButton/);
 });
 

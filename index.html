@@ -782,7 +782,7 @@ async function finishDevApp(ready) {
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.07.29.1";
+const APP_VERSION = "2026.08.03.1";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -2111,7 +2111,8 @@ const networkConfig = new URLSearchParams(location.hash.slice(1));
 const gatewayURL = networkConfig.get("gateway");
 const sessionToken = networkConfig.get("token");
 async function connectWebSocketGateway(url, token) {
-  const { V86WebSocketNetwork } = await import("./network/browser/v86-websocket-network.js");
+  const moduleUrl = `./network/browser/v86-websocket-network.js?v=${encodeURIComponent(APP_VERSION)}`;
+  const { V86WebSocketNetwork } = await import(moduleUrl);
   window.v86Network = new V86WebSocketNetwork(emulator, {
     url,
     token,

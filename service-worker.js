@@ -1,5 +1,5 @@
-const APP_SHELL_CACHE = "vmvm-app-shell-v2";
-const STATIC_CACHE = "vmvm-static-v2";
+const APP_SHELL_CACHE = "vmvm-app-shell-v3";
+const STATIC_CACHE = "vmvm-static-v3";
 const APP_SHELL = [
   "./",
   "./offline.html",
@@ -45,7 +45,7 @@ self.addEventListener("fetch", event => {
     if (!["script", "style", "image", "font", "manifest"].includes(request.destination)) return;
     event.respondWith((async () => {
       const cached = await caches.match(request);
-      const update = fetch(request).then(async response => {
+      const update = fetch(request, { cache: "no-cache" }).then(async response => {
         if (response.ok) (await caches.open(STATIC_CACHE)).put(request, response.clone());
         return response;
       });

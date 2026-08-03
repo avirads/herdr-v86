@@ -31,4 +31,6 @@ test("service worker caches the shell but excludes VM and model payloads", () =>
   assert.match(worker, /\\\.\(\?:img\|litertlm\|task\|zip\)/);
   assert.match(worker, /\^\\\/\(\?:models\|downloads\|ide\|preview\|v1\|peerjs\|plu\)/);
   assert.match(worker, /offline\.html/);
+	assert.match(worker, /vmvm-app-shell-v3/);
+	assert.match(worker, /fetch\(request, \{ cache: "no-cache" \}\)/);
 });
