@@ -27,6 +27,7 @@ export class V86GuestReadonlyClient extends EventTarget {
     this.line = '';
     this.nextId = 0;
     this.pending = new Map();
+    this.inFlight = 0;
     this.queue = Promise.resolve();
     this.onByte = byte => this.consume(byte);
     emulator.add_listener(`serial${rpcSerial}-output-byte`, this.onByte);
@@ -41,15 +42,41 @@ export class V86GuestReadonlyClient extends EventTarget {
     if (marker < 0) return;
     const [id, status, payload] = line.slice(marker + RESPONSE_PREFIX.length).split('\t');
     const waiter = this.pending.get(id);
-    if (!waiter) return;
+    if (!waiter) {
+      // A response nobody is waiting for. The usual cause is a split line:
+      // anything else written to this tty while vmagent-rpc is running gets
+      // echoed by the getty and interleaves with its output, so the id no
+      // longer matches and the real reply is lost. Announce it — returning
+      // quietly turns that into an unexplained timeout 30 s later.
+      this.dispatchEvent(new CustomEvent('orphan-response', { detail: { line } }));
+      return;
+    }
     this.pending.delete(id);
     clearTimeout(waiter.timer);
-    const value = decode(payload || '');
-    if (status === 'OK') waiter.resolve(value);
-    else waiter.reject(new Error(value || 'guest RPC failed'));
+    try {
+      const value = decode(payload || '');
+      if (status === 'OK') waiter.resolve(value);
+      else waiter.reject(new Error(value || 'guest RPC failed'));
+    } catch (error) {
+      // The timer is already cleared, so without this the promise would never
+      // settle at all — a hang rather than a failure.
+      waiter.reject(new Error(`guest ${id} response was not decodable: ${error.message}`));
+    }
   }
 
+  /**
+   * True from the moment a call is queued until its reply lands.
+   *
+   * Callers that also write to this serial line — a poller, say — must hold off
+   * while it is set. The RPC's tty echoes everything typed at it, so a
+   * concurrent write interleaves with `vmagent-rpc`'s output and destroys the
+   * response line. Counted rather than derived from `pending`, which is only
+   * populated once the queue reaches the call.
+   */
+  get busy() { return this.inFlight > 0; }
+
   request(operation, ...args) {
+    this.inFlight += 1;
     const run = async () => {
       const id = `agent-${Date.now()}-${++this.nextId}`;
       const response = new Promise((resolve, reject) => {
@@ -69,7 +96,7 @@ export class V86GuestReadonlyClient extends EventTarget {
     };
     const result = this.queue.then(run, run);
     this.queue = result.catch(() => {});
-    return result;
+    return result.finally(() => { this.inFlight -= 1; });
   }
 
   list(path = '.') { return this.request('list', path); }

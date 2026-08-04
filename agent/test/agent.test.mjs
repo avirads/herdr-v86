@@ -252,3 +252,112 @@ test('autobro_automate derives an instruction when the model uses autobro_comman
   assert.match(result.output, /gotoUrl: \{"ok":true\}/);
   assert.deepEqual(browserCalls.map(call => call[0]), ['inventoryCurrentPage', 'relatedActions', 'skills', 'gotoUrl', 'pageInfo']);
 });
+
+// --- decision parsing ------------------------------------------------------
+//
+// The model answers in its own trained tool-call syntax no matter which of the
+// three protocols it was handed, so every tier has to read that syntax. These
+// pin the vmlang tier's half of it.
+
+const human = text => ({ _getType: () => 'human', content: text });
+
+/** Drive one _generate turn with a canned completion. */
+async function decide(completion) {
+  const model = new WebGpuToolChatModel({ chat: async () => completion });
+  const { generations } = await model._generate([human('build greet.js')]);
+  return generations[0].message;
+}
+
+const textCompletion = content => ({ choices: [{ message: { role: 'assistant', content } }] });
+
+test('the vmlang protocol shape still decides a tool call', async () => {
+  const message = await decide(textCompletion('{"tool":"write_file","args":{"path":"greet.js"}}'));
+  assert.equal(message.tool_calls?.[0]?.name, 'write_file');
+  assert.deepEqual(message.tool_calls[0].args, { path: 'greet.js' });
+});
+
+test('a client-recovered tool call is used, not stringified', async () => {
+  // LiteRtLmClient sets content:null once it recovers a call from the model's
+  // native syntax. Reading content and falling back to the completion object
+  // turned that into the literal text "[object Object]" and spent the turn.
+  const message = await decide({
+    choices: [{
+      message: {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ id: 'c1', type: 'function', function: { name: 'write_file', arguments: '{"path":"greet.js","content":"x"}' } }],
+      },
+    }],
+  });
+  assert.equal(message.tool_calls?.[0]?.name, 'write_file');
+  assert.deepEqual(message.tool_calls[0].args, { path: 'greet.js', content: 'x' });
+  assert.notEqual(String(message.content), '[object Object]');
+});
+
+test('gemma native call syntax decides a tool call on this tier too', async () => {
+  const message = await decide(textCompletion(
+    '<|tool_call>call:write_file{path: "/root/project/greet.js", content: "hello"}<tool_call|>',
+  ));
+  assert.equal(message.tool_calls?.[0]?.name, 'write_file');
+  assert.equal(message.tool_calls[0].args.path, '/root/project/greet.js');
+});
+
+test('the other tiers\' protocol shape is honoured rather than lost', async () => {
+  const message = await decide(textCompletion('{"tool_call":{"name":"read_file","arguments":{"path":"a.js"}}}'));
+  assert.equal(message.tool_calls?.[0]?.name, 'read_file');
+  assert.deepEqual(message.tool_calls[0].args, { path: 'a.js' });
+});
+
+test('a final answer and plain prose both stay text', async () => {
+  const final = await decide(textCompletion('{"final":"all done"}'));
+  assert.equal(final.tool_calls?.length ?? 0, 0);
+  assert.equal(String(final.content), 'all done');
+
+  const prose = await decide(textCompletion('I have finished the task.'));
+  assert.equal(prose.tool_calls?.length ?? 0, 0);
+  assert.equal(String(prose.content), 'I have finished the task.');
+});
+
+// --- Deep Agents path mapping ----------------------------------------------
+
+test('the virtual root and the real workspace name the same directory', async () => {
+  // The model writes /root/project/greet.js because that is the path every
+  // prompt quotes at it. Uncollapsed, that nested to
+  // /root/project/root/project/greet.js — the agent could not then see its own
+  // file, ran `mkdir -p /root/project`, wrote it again, and looped until
+  // LangGraph's recursion limit. Ten identical cycles, each step reasonable.
+  const writes = [];
+  const guest = {
+    workspace: '/root/project',
+    write: async path => { writes.push(path); return 'ok'; },
+    read: async () => 'x',
+    list: async () => '',
+  };
+  const { V86DeepAgentsBackend } = await import('../src/guest-backend.js');
+  const backend = new V86DeepAgentsBackend(guest, { approve: async () => true });
+
+  await backend.write('/root/project/greet.js', 'x');
+  await backend.write('/greet.js', 'x');
+  await backend.write('/root/project/context_handoff/envelope.json', 'x');
+  assert.deepEqual(writes, ['greet.js', 'greet.js', 'context_handoff/envelope.json']);
+});
+
+test('collapsing the workspace prefix does not weaken the path guards', async () => {
+  const guest = { workspace: '/root/project', write: async () => 'ok', read: async () => 'x' };
+  const { V86DeepAgentsBackend } = await import('../src/guest-backend.js');
+  const backend = new V86DeepAgentsBackend(guest, { approve: async () => true });
+
+  assert.match((await backend.write('/root/project/../escape.js', 'x')).error, /cannot contain \.\./);
+  assert.match((await backend.write('relative.js', 'x')).error, /must be absolute/);
+});
+
+test('a sibling sharing the workspace name as a prefix is not collapsed', async () => {
+  const writes = [];
+  const guest = { workspace: '/root/project', write: async path => { writes.push(path); return 'ok'; } };
+  const { V86DeepAgentsBackend } = await import('../src/guest-backend.js');
+  const backend = new V86DeepAgentsBackend(guest, { approve: async () => true });
+
+  // /root/projectile is a different directory, so the prefix must not match.
+  await backend.write('/root/projectile/x.js', 'x');
+  assert.deepEqual(writes, ['root/projectile/x.js']);
+});

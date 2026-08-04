@@ -1,5 +1,7 @@
 // First-party LiteRT-LM WebGPU provider. Models are stored in this page's OPFS;
 // no extension, native process, API key, or guest network is involved.
+import { parseNamedCall, relaxedJsonParse, stripToolDelimiters } from '../../agent/src/tool-call-syntax.js';
+
 const LAST_MODEL_KEY = 'vm.litert.lastModel';
 const MAX_CONTEXT_TOKENS = 16384;
 const STREAM_END_TOKENS = ['<eos>', '<end_of_turn>', '<|end_of_text|>', '<|eot_id|>'];
@@ -87,19 +89,30 @@ function messageToText(message) {
   return contentToText(message?.content);
 }
 
-export function completionWithToolCall(completion) {
-  const choice = completion?.choices?.[0];
-  const content = choice?.message?.content?.trim?.() || '';
-  if (!content) return completion;
-  let value;
-  try {
-    const fenced = content.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] || content;
-    value = JSON.parse(fenced);
-  } catch {
-    return completion;
-  }
-  const call = value?.tool_call || value?.toolCall;
-  if (!call?.name) return completion;
+/**
+ * Recover a tool call from whatever the model actually emitted.
+ *
+ * The grammar this accepts, and why, lives in tool-call-syntax.js — shared with
+ * the vmlang tier so the two cannot drift on what counts as a tool call.
+ */
+export function parseToolCall(content) {
+  const raw = String(content ?? '').trim();
+  if (!raw) return undefined;
+  const unfenced = raw.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] || raw;
+  const { text: stripped, delimited } = stripToolDelimiters(unfenced);
+  if (!stripped) return undefined;
+
+  const named = parseNamedCall(stripped);
+  if (named) return named;
+
+  const value = relaxedJsonParse(stripped);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  // Unwrapped `{"name":…,"arguments":…}` counts only when the model framed it
+  // as a tool call. Without that signal it is indistinguishable from a JSON
+  // answer that happens to carry a `name` field.
+  const call = value.tool_call || value.toolCall || (delimited ? value : undefined);
+  if (!call?.name) return undefined;
+
   // Real gemma-4-E2B output sometimes omits the arguments wrapper and puts the
   // parameters straight on the call: {"tool_call":{"name":"x","path":"/a.md"}}.
   // Bailing out here turned that into plain assistant text and the tool never
@@ -109,16 +122,23 @@ export function completionWithToolCall(completion) {
     const leftover = Object.fromEntries(
       Object.entries(call).filter(([key]) => key !== 'name' && key !== 'arguments'),
     );
-    if (!Object.keys(leftover).length) return completion;
+    if (!Object.keys(leftover).length) return undefined;
     callArguments = leftover;
   }
+  return { name: call.name, arguments: callArguments };
+}
+
+export function completionWithToolCall(completion) {
+  const choice = completion?.choices?.[0];
+  const call = parseToolCall(choice?.message?.content);
+  if (!call) return completion;
   choice.message = {
     role: 'assistant',
     content: null,
     tool_calls: [{
       id: `call_${Date.now().toString(36)}`,
       type: 'function',
-      function: { name: call.name, arguments: JSON.stringify(callArguments) },
+      function: { name: call.name, arguments: JSON.stringify(call.arguments) },
     }],
   };
   choice.finish_reason = 'tool_calls';

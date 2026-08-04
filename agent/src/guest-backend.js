@@ -1,7 +1,26 @@
-function relativePath(path) {
+/**
+ * Map a Deep Agents path onto a workspace-relative guest path.
+ *
+ * `workspace` is the real guest directory the virtual root stands for. Those
+ * two name the same directory, so an agent that says `/root/project/greet.js`
+ * and one that says `/greet.js` mean the same file — and the model says the
+ * former, because that is the path every prompt in the system quotes at it.
+ *
+ * Without collapsing it, `/root/project/greet.js` became `root/project/greet.js`
+ * and the write landed at `/root/project/root/project/greet.js`. The agent then
+ * could not see the file it had just written, concluded the directory was
+ * missing, ran `mkdir -p /root/project`, and wrote it again — a two-step loop
+ * that ran until LangGraph's 60-step recursion limit cut it off. Ten identical
+ * cycles, and every individual step was the right thing to do.
+ */
+function relativePath(path, workspace = '') {
   const value = String(path || '/').replace(/\\/g, '/');
   if (!value.startsWith('/')) throw new Error(`Deep Agents path must be absolute: ${value}`);
-  const relative = value.replace(/^\/+/, '') || '.';
+  const root = String(workspace || '').replace(/\/+$/, '');
+  const collapsed = root && (value === root || value.startsWith(`${root}/`))
+    ? value.slice(root.length) || '/'
+    : value;
+  const relative = collapsed.replace(/^\/+/, '') || '.';
   if (relative.split('/').includes('..')) throw new Error('path cannot contain ..');
   return relative;
 }
@@ -42,14 +61,22 @@ export class V86DeepAgentsBackend {
     return await this.approve(operation, detail);
   }
 
+  /**
+   * Path mapping, aware of which real directory the virtual root stands for.
+   *
+   * The workspace is read from the guest client rather than fixed here, so
+   * `setWorkspace()` keeps working and the two stay in step by construction.
+   */
+  rel(path) { return relativePath(path, this.guest?.workspace); }
+
   async ls(path = '/') {
-    try { return { files: parseFileInfos(await this.guest.list(relativePath(path))) }; }
+    try { return { files: parseFileInfos(await this.guest.list(this.rel(path))) }; }
     catch (error) { return { error: error.message }; }
   }
 
   async read(path, offset = 0, limit = 500) {
     try {
-      const content = await this.guest.read(relativePath(path));
+      const content = await this.guest.read(this.rel(path));
       return { content: content.split('\n').slice(offset, offset + limit).join('\n'), mimeType: mimeType(path) };
     } catch (error) { return { error: error.message }; }
   }
@@ -63,7 +90,7 @@ export class V86DeepAgentsBackend {
 
   async grep(pattern, path = '/', glob = null) {
     try {
-      const output = await this.guest.grep(pattern, relativePath(path || '/'));
+      const output = await this.guest.grep(pattern, this.rel(path || '/'));
       let matches = output.split('\n').filter(Boolean).map(line => {
         const match = line.match(/^(.+?):(\d+):(.*)$/);
         return match ? { path: absolutePath(match[1]), line: Number(match[2]), text: match[3] } : null;
@@ -77,32 +104,32 @@ export class V86DeepAgentsBackend {
   }
 
   async glob(pattern, path = '/') {
-    try { return { files: parseFileInfos(await this.guest.glob(pattern, relativePath(path))) }; }
+    try { return { files: parseFileInfos(await this.guest.glob(pattern, this.rel(path))) }; }
     catch (error) { return { error: error.message }; }
   }
 
   async write(path, content) {
     if (!await this.permitted('write_file', { path, bytes: new TextEncoder().encode(content).byteLength })) return { error: 'Operation rejected by user.' };
-    try { await this.guest.write(relativePath(path), content); return { path, filesUpdate: null }; }
+    try { await this.guest.write(this.rel(path), content); return { path, filesUpdate: null }; }
     catch (error) { return { error: error.message }; }
   }
 
   async edit(path, oldString, newString, replaceAll = false) {
     if (!await this.permitted('edit_file', { path, replaceAll, oldPreview: oldString.slice(0, 160), newPreview: newString.slice(0, 160) })) return { error: 'Operation rejected by user.' };
     try {
-      const current = await this.guest.read(relativePath(path));
+      const current = await this.guest.read(this.rel(path));
       const occurrences = current.split(oldString).length - 1;
       if (!occurrences) return { error: `String not found in ${path}` };
       if (!replaceAll && occurrences > 1) return { error: `String occurs ${occurrences} times; set replace_all or provide more context.` };
       const updated = replaceAll ? current.split(oldString).join(newString) : current.replace(oldString, newString);
-      await this.guest.write(relativePath(path), updated);
+      await this.guest.write(this.rel(path), updated);
       return { path, occurrences: replaceAll ? occurrences : 1, filesUpdate: null };
     } catch (error) { return { error: error.message }; }
   }
 
   async delete(path) {
     if (!await this.permitted('delete_file', { path })) return { error: 'Operation rejected by user.' };
-    try { await this.guest.delete(relativePath(path)); return { path }; }
+    try { await this.guest.delete(this.rel(path)); return { path }; }
     catch (error) { return { error: error.message }; }
   }
 

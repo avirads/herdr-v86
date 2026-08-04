@@ -4,10 +4,17 @@ set -eu
 MAX_BYTES=65536
 WORKSPACE=${VMAGENT_WORKSPACE:-/root/project}
 
+# Reported on stderr, not stdout.
+#
+# Every caller of resolve_existing/resolve_new invokes it inside a command
+# substitution, which owns stdout — so a failure printed there was captured
+# into the caller's variable instead of reaching the tty, and `set -e` then
+# killed the script without a word. The browser saw no response line at all
+# and blamed the guest 30 s later. stderr reaches the tty in both contexts.
 fail() {
   message=$1
   encoded=$(printf %s "$message" | base64 | tr -d '\n')
-  printf '__V86AGENT_RESPONSE__\t%s\tERROR\t%s\n' "$request_id" "$encoded"
+  printf '__V86AGENT_RESPONSE__\t%s\tERROR\t%s\n' "$request_id" "$encoded" >&2
   exit 1
 }
 
@@ -29,16 +36,31 @@ case "$request_id" in *[!A-Za-z0-9_-]*|'') exit 2;; esac
 
 mkdir -p "$WORKSPACE"
 workspace_real=$(readlink -f "$WORKSPACE") || fail 'workspace unavailable'
+
+# Agents are told they are working in $WORKSPACE, so they name files the way
+# that instruction reads: /root/project/greet.js, not greet.js. Rewrite such a
+# path relative to the workspace instead of rejecting it. Anything outside the
+# workspace is left alone and still fails the containment check below, which is
+# unchanged and remains the actual guard.
+relativize() {
+  case "$1" in
+    "$workspace_real"|"$WORKSPACE") printf '.' ;;
+    "$workspace_real"/*) printf %s "${1#"$workspace_real"/}" ;;
+    "$WORKSPACE"/*) printf %s "${1#"$WORKSPACE"/}" ;;
+    *) printf %s "$1" ;;
+  esac
+}
+
 resolve_existing() {
-  relative=$(decode "${1:-}") || fail 'invalid base64 path'
-  case "$relative" in /*|*'..'*) fail 'path must be relative and cannot contain ..';; esac
+  relative=$(relativize "$(decode "${1:-}")") || fail 'invalid base64 path'
+  case "$relative" in /*|*'..'*) fail 'path must be inside the workspace and cannot contain ..';; esac
   target=$(readlink -f "$workspace_real/$relative") || fail "path not found: $relative"
   case "$target" in "$workspace_real"|"$workspace_real"/*) printf %s "$target";; *) fail 'path escapes workspace';; esac
 }
 
 resolve_new() {
-  relative=$(decode "${1:-}") || fail 'invalid base64 path'
-  case "$relative" in /*|*'..'*|'') fail 'path must be relative and cannot contain ..';; esac
+  relative=$(relativize "$(decode "${1:-}")") || fail 'invalid base64 path'
+  case "$relative" in /*|*'..'*|''|.) fail 'path must be inside the workspace and cannot contain ..';; esac
   parent=$(dirname "$relative")
   parent_real=$(readlink -f "$workspace_real/$parent") || fail "parent directory not found: $parent"
   case "$parent_real" in "$workspace_real"|"$workspace_real"/*) printf '%s/%s' "$parent_real" "$(basename "$relative")";; *) fail 'path escapes workspace';; esac

@@ -255960,6 +255960,69 @@ init_chunk_33NALIO3();
 
 // src/litert-provider.js
 init_globals();
+
+// src/tool-call-syntax.js
+init_globals();
+var TOOL_DELIMITER = /<\|?tool_call\|?>/gi;
+function stripToolDelimiters(text10) {
+  const raw = String(text10 ?? "");
+  const delimited = new RegExp(TOOL_DELIMITER.source, "i").test(raw);
+  return { text: raw.replace(TOOL_DELIMITER, " ").trim(), delimited };
+}
+function normalizeJsonish(text10) {
+  let out = "";
+  for (let index2 = 0; index2 < text10.length; index2 += 1) {
+    const char = text10[index2];
+    if (char === '"' || char === "'") {
+      const quote = char;
+      let body = "";
+      index2 += 1;
+      for (; index2 < text10.length; index2 += 1) {
+        const inner = text10[index2];
+        if (inner === "\\") {
+          body += inner + (text10[index2 + 1] ?? "");
+          index2 += 1;
+          continue;
+        }
+        if (inner === quote) break;
+        body += inner === '"' ? '\\"' : inner;
+      }
+      out += `"${body}"`;
+      continue;
+    }
+    const word = /^[A-Za-z_$][\w$]*/.exec(text10.slice(index2))?.[0];
+    if (word) {
+      out += /^\s*:/.test(text10.slice(index2 + word.length)) ? `"${word}"` : word;
+      index2 += word.length - 1;
+      continue;
+    }
+    out += char;
+  }
+  return out.replace(/,(\s*[}\]])/g, "$1");
+}
+function relaxedJsonParse(text10) {
+  for (const candidate of [text10, normalizeJsonish(text10)]) {
+    for (const suffix of ["", "}", "}}"]) {
+      try {
+        return JSON.parse(candidate + suffix);
+      } catch {
+      }
+    }
+  }
+  return void 0;
+}
+function parseNamedCall(text10) {
+  const match = /^call\s*:\s*([A-Za-z_][\w.-]*)\s*([\s\S]*)$/.exec(text10);
+  if (!match) return void 0;
+  const [, name30, rest] = match;
+  const body = rest.trim();
+  if (!body) return { name: name30, arguments: {} };
+  const parsed = relaxedJsonParse(body);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return void 0;
+  return { name: name30, arguments: parsed };
+}
+
+// src/litert-provider.js
 var DEFAULT_MODEL_ID = "litert-lm";
 function partsToText(content3) {
   if (typeof content3 === "string") return content3;
@@ -256054,11 +256117,14 @@ function parseLooseJson(text10) {
   const trimmed = String(text10 ?? "").trim();
   if (!trimmed) return void 0;
   const unfenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] ?? trimmed;
-  const stripped = unfenced.replace(/<tool_call\|>|<tool_result\|>|<\|[a-z_]+\|>$/g, "");
+  const { text: delimiterFree } = stripToolDelimiters(unfenced);
+  const stripped = delimiterFree.replace(/<tool_result\|>|<\|[a-z_]+\|>$/g, "").trim();
   try {
     return JSON.parse(stripped);
   } catch {
   }
+  const named = parseNamedCall(stripped);
+  if (named) return { tool_call: named };
   const decoded = tryDecodeBase64(stripped);
   if (decoded) {
     const inner = parseLooseJson(decoded);
@@ -256081,7 +256147,7 @@ function parseLooseJson(text10) {
       }
     }
   }
-  return void 0;
+  return relaxedJsonParse(stripped);
 }
 function normalizeArguments(value) {
   if (value == null) return {};
