@@ -32,7 +32,39 @@ const TOOL_DELIMITER = /<\|?tool_call\|?>/gi;
 export function stripToolDelimiters(text) {
   const raw = String(text ?? '');
   const delimited = new RegExp(TOOL_DELIMITER.source, 'i').test(raw);
-  return { text: raw.replace(TOOL_DELIMITER, ' ').trim(), delimited };
+  return { text: normalizeQuoteTokens(raw.replace(TOOL_DELIMITER, ' ').trim()), delimited };
+}
+
+// Gemma's own quote token. Observed in place of a plain `"` around both keys
+// and values:
+//
+//   call:write_file{path:<|"|>greet.js<|"|>,content:<|"|>export function …<|"|>}
+//
+// The text between a pair is raw — real newlines and unescaped quotes, not the
+// `\n` and `\"` that JSON needs — so this cannot be a character substitution.
+const QUOTE_TOKEN = '<|"|>';
+
+/**
+ * Turn each `<|"|>`-delimited region into a valid JSON string.
+ *
+ * `JSON.stringify` does the escaping, which is the point: the delimiters make
+ * the region's extent unambiguous, so its contents can be taken literally
+ * however many newlines or quotes they contain. An unpaired token is left
+ * alone rather than guessed at.
+ */
+export function normalizeQuoteTokens(text) {
+  if (!text.includes(QUOTE_TOKEN)) return text;
+  let out = '';
+  let rest = text;
+  for (;;) {
+    const open = rest.indexOf(QUOTE_TOKEN);
+    if (open < 0) return out + rest;
+    const close = rest.indexOf(QUOTE_TOKEN, open + QUOTE_TOKEN.length);
+    if (close < 0) return out + rest;
+    out += rest.slice(0, open);
+    out += JSON.stringify(rest.slice(open + QUOTE_TOKEN.length, close));
+    rest = rest.slice(close + QUOTE_TOKEN.length);
+  }
 }
 
 /**

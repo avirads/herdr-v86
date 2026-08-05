@@ -78,3 +78,25 @@ test('a JSON answer is not mistaken for a tool call', () => {
   assert.equal(parseToolCall('{"final":"done"}'), undefined);
   assert.equal(parseToolCall('{"name":"greet.js","size":42}'), undefined);
 });
+
+// Verbatim gemma-4-E2B-it-web reply using its own quote token in place of `"`.
+// The text between a pair is raw: real newlines, unescaped quotes, backticks.
+const E2B_QUOTE_TOKENS =
+  '<|tool_call>call:write_file{path:<|"|>greet.js<|"|>,content:<|"|>export function greet(name) {\n' +
+  '  return `hello, ${name}`;\n}\n\ngreet("i386");<|"|>}<tool_call|>';
+
+test('gemma\'s <|"|> quote token is understood', () => {
+  const call = parseToolCall(E2B_QUOTE_TOKENS);
+  assert.equal(call.name, 'write_file');
+  assert.equal(call.arguments.path, 'greet.js');
+  // The payload is a file body: newlines, quotes and backticks must all survive
+  // exactly, which is why the region is re-encoded rather than character-swapped.
+  assert.equal(
+    call.arguments.content,
+    'export function greet(name) {\n  return `hello, ${name}`;\n}\n\ngreet("i386");',
+  );
+});
+
+test('an unpaired quote token is left alone rather than guessed at', () => {
+  assert.equal(parseToolCall('<|tool_call>call:shell{command:<|"|>ls -la}<tool_call|>'), undefined);
+});
