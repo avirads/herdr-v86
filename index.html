@@ -680,6 +680,12 @@ function failBoot(message) {
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
+function finishDevInTerminal(message) {
+  devViewButton.hidden = true;
+  setDevView("terminal");
+  finishBoot(true);
+  setTimeout(() => status(message), 350);
+}
 // --- Dev tier: fold the app compile/serve into the boot progress, then open it ---
 // The guest autostarts `vmbro-dev` (esbuild bundle + Chi server on :3000), which
 // takes noticeably longer than the shell prompt. Rather than report "Ready" at
@@ -756,7 +762,7 @@ async function finishDevApp(ready) {
   clearInterval(devAppTicker);
   clearTimeout(devAppTimeout);
   if (!ready) {
-    failBoot("Dev IDE did not start within five minutes. Reload to retry.");
+    finishDevInTerminal("Shell ready — Dev IDE did not start");
     return;
   }
   setBootProgress(99, "Dev app ready — connecting its public route…");
@@ -775,14 +781,15 @@ async function finishDevApp(ready) {
     }
     if (!routeReady) throw new Error("the public IDE route did not become reachable");
   } catch (error) {
-    failBoot(`Dev IDE network unavailable: ${error.message}. Reload to retry.`);
+    console.warn("Dev IDE public route unavailable; continuing in terminal:", error);
+    finishDevInTerminal(`Shell ready — Dev IDE network unavailable: ${error.message}`);
     return;
   }
   setBootProgress(100, "Dev app ready");
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.08.03.1";
+const APP_VERSION = "2026.08.09.1";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -2134,6 +2141,7 @@ if (gatewayURL && sessionToken) {
     .then(async response => {
       if (!response.ok) throw new Error(`session request failed (${response.status})`);
       const session = await response.json();
+	  if (session.active) throw new Error("public IDE is already in use by another VM tab");
       await connectWebSocketGateway(`wss://${location.host}/v1/ethernet`, session.token);
     })
     .catch(error => {

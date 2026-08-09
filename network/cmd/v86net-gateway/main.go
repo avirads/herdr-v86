@@ -237,6 +237,7 @@ func (g *gateway) handleSessions(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"id": created.ID, "token": created.Token, "protocol": tokenProtocolPrefix + created.Token,
 		"origin": created.Origin, "createdAt": created.CreatedAt, "expiresAt": created.ExpiresAt,
+		"active": g.active.Load(),
 	})
 }
 

@@ -88,7 +88,11 @@ test('Dev tier starts and opens its app automatically', () => {
 	assert.match(html, /await devNetworkReady/);
 	assert.match(html, /fetch\(DEV_APP_URL, \{ cache: "no-store" \}\)/);
   assert.match(html, /the public IDE route did not become reachable/);
-	assert.match(html, /v86-websocket-network\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}/);
+  assert.match(html, /v86-websocket-network\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}/);
+	assert.match(html, /function finishDevInTerminal\(message\)/);
+	assert.match(html, /Shell ready — Dev IDE network unavailable/);
+	assert.match(html, /continuing in terminal/);
+	assert.match(html, /session\.active[\s\S]*public IDE is already in use by another VM tab/);
   assert.doesNotMatch(html, /Open Dev App|id="open-dev-app"|devAppButton/);
 });
 
