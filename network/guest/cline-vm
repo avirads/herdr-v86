@@ -53,5 +53,5 @@ encode() { printf %s "$1" | base64 | tr -d '\n'; }
 request_id="cline-$(date +%s)-$$"
 printf '__V86RPC__\tAGENT_%s\t%s\t%s\t%s\t%s\n' \
   "$(printf %s "$command" | tr '[:lower:]' '[:upper:]')" "$request_id" \
-  "$(encode "$value")" "$(encode "$cwd")" "$(encode "$route")" > /dev/ttyS0
+  "$(encode "$value")" "$(encode "$cwd")" "$(encode "$route")"
 echo '[cline] submitted to the ready browser agent.'

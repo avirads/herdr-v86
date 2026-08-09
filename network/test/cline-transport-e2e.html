@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cline guest transport test</title>
+<pre id="status">booting</pre>
+<div id="screen_container" hidden><div></div><canvas></canvas></div>
+<script src="../../libv86-network.js"></script>
+<script type="module">
+import { V86HostBridge } from "../browser/v86-host-bridge.js";
+
+const status = document.getElementById("status");
+let serial = "";
+let submitted = false;
+let received = null;
+const emulator = new V86({
+  wasm_path: "../../v86-network.wasm",
+  memory_size: 256 * 1024 * 1024,
+  bios: { url: "../../seabios.bin" },
+  vga_bios: { url: "../../vgabios.bin" },
+  bzimage: { url: "../../bzImage-network" },
+  cmdline: "root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet",
+  hda: { url: "../../vm-ai-tools-i386-ext4.img", async: true, size: 92274688 },
+  net_device: { type: "virtio" },
+  uart1: true,
+  screen_container: document.getElementById("screen_container"),
+  autostart: true,
+});
+const bridge = new V86HostBridge(emulator);
+bridge.setAgentHandler((command, value, cwd) => { received = { command, value, cwd }; });
+
+async function submit(ok, reason = "") {
+  if (submitted) return;
+  submitted = true;
+  status.textContent = ok ? "PASS" : "FAIL";
+  await fetch("/__result", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ok, reason, received, serial }),
+  });
+}
+
+emulator.add_listener("serial0-output-byte", byte => {
+  serial += String.fromCharCode(byte);
+  if (serial.length > 50000) serial = serial.slice(-50000);
+  if (!serial.includes("CLINE_E2E_BEGIN") && /vm:.*#\s*$/.test(serial)) {
+    emulator.serial0_send("echo CLINE_E2E_BEGIN; cd /root/project; cline 'hi'\n");
+  }
+  if (serial.includes("[cline] submitted to the ready browser agent.") && received) {
+    submit(received.command === "cline" && received.value === "hi" && received.cwd === "/root/project",
+      `unexpected request ${JSON.stringify(received)}`);
+  }
+});
+setTimeout(() => submit(false, "Cline command or host request timed out"), 90000);
+</script>
