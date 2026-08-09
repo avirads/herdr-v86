@@ -790,7 +790,7 @@ async function finishDevApp(ready) {
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.08.10.5";
+const APP_VERSION = "2026.08.10.6";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -1155,7 +1155,7 @@ import("./network/browser/v86-host-bridge.js").then(async module => {
   import("./network/browser/v86-guest-readonly.js").then(({ V86GuestReadonlyClient }) => {
     guestReadonlyClient = new V86GuestReadonlyClient(emulator, hostBridge, { rpcSerial: 1 });
     window.v86GuestReadonly = guestReadonlyClient;
-    import("./network/browser/vmagent-controller.js").then(async ({ VmAgentController }) => {
+    import(`./network/browser/vmagent-controller.js?v=${encodeURIComponent(APP_VERSION)}`).then(async ({ VmAgentController }) => {
       vmAgentController = new VmAgentController({
         createAgent: async options => {
           const { createVMAgent } = await import("./agent/dist/agent.js");
@@ -1951,7 +1951,7 @@ document.getElementById("reset-voice").onclick = async () => {
 if (localStorage.getItem("vm.autobroExtensionId") && localStorage.getItem("vm.autobroPairingToken")) connectAutoBro();
 const llmFileInput = document.getElementById("llm-file-input");
 try {
-  const { LiteRtLmClient } = await import("./network/browser/litert-lm-client.js");
+  const { LiteRtLmClient } = await import(`./network/browser/litert-lm-client.js?v=${encodeURIComponent(APP_VERSION)}`);
   const client = new LiteRtLmClient();
   webGpuLlmClient = client;
   globalThis.vmvmLocalModelClient = client;
