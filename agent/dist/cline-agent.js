@@ -7844,7 +7844,12 @@ var DEFAULT_PROMPT = [
   "For JavaScript, test with both time qjs FILE and time vmjs < FILE and report both elapsed times.",
   "Report success only after verification. When the task is complete, call finish_task with a concise verified summary."
 ].join("\n");
-var jsonSchema = (properties) => ({ type: "object", properties, additionalProperties: false });
+var jsonSchema = (properties, required = Object.keys(properties)) => ({
+  type: "object",
+  properties,
+  required,
+  additionalProperties: false
+});
 var textOf = (content) => (Array.isArray(content) ? content : []).filter((part) => part?.type === "text" || part?.type === "reasoning").map((part) => part.text).join("\n");
 function toOpenAiMessages(messages) {
   const output = [];
@@ -7932,7 +7937,7 @@ function createTools({ guest, onActivity }) {
     fv({
       name: "list_files",
       description: "List files in a project directory.",
-      inputSchema: jsonSchema({ path: { type: "string", description: "Directory path; use . for the project root" } }),
+      inputSchema: jsonSchema({ path: { type: "string", description: "Directory path; use . for the project root" } }, []),
       async execute({ path = "." }) {
         activity("list_files", { path });
         return await guest.list(path);
@@ -7941,7 +7946,7 @@ function createTools({ guest, onActivity }) {
     fv({
       name: "search_files",
       description: "Search project text using the guest ripgrep implementation.",
-      inputSchema: jsonSchema({ pattern: { type: "string" }, path: { type: "string" } }),
+      inputSchema: jsonSchema({ pattern: { type: "string" }, path: { type: "string" } }, ["pattern"]),
       async execute({ pattern, path = "." }) {
         activity("search_files", { pattern, path });
         return await guest.grep(pattern, path);
@@ -8001,6 +8006,10 @@ function createClineVMAgent({
     tools: createTools({ guest, onActivity }),
     initialMessages,
     maxIterations: 12,
+    // A small local model may echo the task or answer in prose instead of
+    // invoking a tool. Do not treat that as success: Cline must explicitly
+    // call finish_task after performing and verifying the requested work.
+    completionPolicy: { requireCompletionTool: true },
     toolPolicies: {
       read_file: { autoApprove: true },
       list_files: { autoApprove: true },

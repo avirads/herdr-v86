@@ -36,7 +36,12 @@ test('official Cline runtime runs in the browser harness without Node tools', as
     },
     llmClient: {
       modelName: 'test-model',
-      async chat() { return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'verified' } }] }; },
+      async chat({ messages }) {
+        const reminded = messages.some(message => /finish_task/.test(String(message.content || '')));
+        return reminded
+          ? { choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'finish-1', type: 'function', function: { name: 'finish_task', arguments: '{"summary":"verified"}' } }] } }] }
+          : { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'inspect' } }] };
+      },
     },
   });
   const result = await harness.run('inspect');
@@ -45,3 +50,27 @@ test('official Cline runtime runs in the browser harness without Node tools', as
   assert.equal(result.status, 'completed');
 });
 
+test('Cline does not report an echoed task as completion and executes the requested write', async () => {
+  const writes = [];
+  let turn = 0;
+  const harness = createClineVMAgent({
+    guest: {
+      setWorkspace() {}, async read() { return ''; }, async list() { return ''; }, async grep() { return ''; },
+      async write(path, content) { writes.push({ path, content }); },
+      async execute() { return '__V86AGENT_EXIT__0\n'; },
+    },
+    llmClient: {
+      modelName: 'test-model',
+      async chat() {
+        turn++;
+        if (turn === 1) return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'write a file named test.txt and write text hello' } }] };
+        if (turn === 2) return { choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'write-1', type: 'function', function: { name: 'write_file', arguments: '{"path":"test.txt","content":"hello"}' } }] } }] };
+        return { choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'finish-1', type: 'function', function: { name: 'finish_task', arguments: '{"summary":"Created test.txt"}' } }] } }] };
+      },
+    },
+  });
+  const result = await harness.run('write a file named test.txt and write text hello');
+  assert.deepEqual(writes, [{ path: 'test.txt', content: 'hello' }]);
+  assert.equal(result.outputText, 'Created test.txt');
+  assert.equal(result.iterations, 3);
+});

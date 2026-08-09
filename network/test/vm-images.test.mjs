@@ -66,7 +66,7 @@ test('tier builder applies each preceding installer and validates boundaries', (
 
 test('Cline is a lazy browser bundle with only its launcher installed in AI Tools images', () => {
   assert.match(html, /createClineVMAgent/);
-  assert.match(html, /import\("\.\/agent\/dist\/cline-agent\.js"\)/);
+  assert.match(html, /import\(`\.\/agent\/dist\/cline-agent\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\)/);
   assert.match(clineBundle, /vmvm-cline/);
   assert.match(builder, /cline-vm.*\/usr\/local\/bin\/cline/);
 });

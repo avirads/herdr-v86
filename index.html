@@ -790,7 +790,7 @@ async function finishDevApp(ready) {
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.08.10.3";
+const APP_VERSION = "2026.08.10.4";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -1195,7 +1195,7 @@ import("./network/browser/v86-host-bridge.js").then(async module => {
         // Cline's official browser-safe AgentRuntime. Like Mastra, this is
         // lazy so users who choose another tier never download its bundle.
         createClineAgent: async options => {
-          const { createClineVMAgent } = await import("./agent/dist/cline-agent.js");
+          const { createClineVMAgent } = await import(`./agent/dist/cline-agent.js?v=${encodeURIComponent(APP_VERSION)}`);
           return createClineVMAgent(options);
         },
         getLlmClient: (agent, route) => llmProviderRouter.resolve(agent, route),

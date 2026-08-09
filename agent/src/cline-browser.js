@@ -15,7 +15,9 @@ const DEFAULT_PROMPT = [
   'Report success only after verification. When the task is complete, call finish_task with a concise verified summary.',
 ].join('\n');
 
-const jsonSchema = properties => ({ type: 'object', properties, additionalProperties: false });
+const jsonSchema = (properties, required = Object.keys(properties)) => ({
+  type: 'object', properties, required, additionalProperties: false,
+});
 const textOf = content => (Array.isArray(content) ? content : [])
   .filter(part => part?.type === 'text' || part?.type === 'reasoning')
   .map(part => part.text).join('\n');
@@ -104,12 +106,12 @@ function createTools({ guest, onActivity }) {
     }),
     createTool({
       name: 'list_files', description: 'List files in a project directory.',
-      inputSchema: jsonSchema({ path: { type: 'string', description: 'Directory path; use . for the project root' } }),
+      inputSchema: jsonSchema({ path: { type: 'string', description: 'Directory path; use . for the project root' } }, []),
       async execute({ path = '.' }) { activity('list_files', { path }); return await guest.list(path); },
     }),
     createTool({
       name: 'search_files', description: 'Search project text using the guest ripgrep implementation.',
-      inputSchema: jsonSchema({ pattern: { type: 'string' }, path: { type: 'string' } }),
+      inputSchema: jsonSchema({ pattern: { type: 'string' }, path: { type: 'string' } }, ['pattern']),
       async execute({ pattern, path = '.' }) { activity('search_files', { pattern, path }); return await guest.grep(pattern, path); },
     }),
     createTool({
@@ -156,6 +158,10 @@ export function createClineVMAgent({
     tools: createTools({ guest, onActivity }),
     initialMessages,
     maxIterations: 12,
+    // A small local model may echo the task or answer in prose instead of
+    // invoking a tool. Do not treat that as success: Cline must explicitly
+    // call finish_task after performing and verifying the requested work.
+    completionPolicy: { requireCompletionTool: true },
     toolPolicies: {
       read_file: { autoApprove: true }, list_files: { autoApprove: true }, search_files: { autoApprove: true },
       write_file: { autoApprove: false }, execute_command: { autoApprove: false }, finish_task: { autoApprove: true },
@@ -176,4 +182,3 @@ export function createClineVMAgent({
     async continue(task) { return await runtime.continue(String(task)); },
   };
 }
-
