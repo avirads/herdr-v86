@@ -11,7 +11,7 @@ test('Settings Help advertises local and cloud LLM connection guidance', () => {
 });
 
 test('Help documents supported cloud paths and local-agent defaults', () => {
-  assert.match(help, /Rig, Zerostack, vmlang, and vmmastra use the model loaded/);
+  assert.match(help, /Rig, Zerostack, vmlang, vmmastra, and Cline use the model loaded/);
   assert.match(help, /OpenAI Responses API/);
   assert.match(help, /OpenAI-compatible cloud gateway/);
   assert.match(help, /Anthropic Claude native API/);

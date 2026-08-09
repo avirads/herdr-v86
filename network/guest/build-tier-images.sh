@@ -119,6 +119,7 @@ install_ai_tools() {
   install -D -m 0755 "$PROJECT_DIR/network/guest/rig-vm" "$MOUNT_DIR/usr/local/bin/rig"
   install -D -m 0755 "$PROJECT_DIR/network/guest/zerostack-vm" "$MOUNT_DIR/usr/local/bin/zerostack"
   install -D -m 0755 "$PROJECT_DIR/network/guest/mastra-vm" "$MOUNT_DIR/usr/local/bin/vmmastra"
+  install -D -m 0755 "$PROJECT_DIR/network/guest/cline-vm" "$MOUNT_DIR/usr/local/bin/cline"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmjs" "$MOUNT_DIR/usr/local/bin/vmjs"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bin/vmbench"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-proxy" "$MOUNT_DIR/usr/local/libexec/vm-openai-proxy"
@@ -212,7 +213,7 @@ verify_tier() {
     chroot "$MOUNT_DIR" /bin/sh -ec '
       command -v tmux herdr git rg shfmt ctags make patch
       command -v zerostack rig vmfetch vmclip vmexport vmproject vmgithub
-      command -v vmai vmllm vmlang vmmastra vmjs vmbench
+      command -v vmai vmllm vmlang vmmastra cline vmjs vmbench
       test -x /usr/local/libexec/rig-agent
       test -f /usr/local/share/vm-skills/guidewire-policycenter-1.0.0.zip
     '

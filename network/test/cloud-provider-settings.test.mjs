@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const index = await readFile(new URL("../../index.html", import.meta.url), "utf8");
-const scripts = await Promise.all(["rig-vm", "vmlang", "mastra-vm", "zerostack-vm"].map(async name => [
+const scripts = await Promise.all(["rig-vm", "vmlang", "mastra-vm", "zerostack-vm", "cline-vm"].map(async name => [
   name, await readFile(new URL(`../guest/${name}`, import.meta.url), "utf8"),
 ]));
 const capabilities = await readFile(new URL("../guest/agent-capabilities.md", import.meta.url), "utf8");
@@ -14,7 +14,7 @@ test("Settings exposes cloud provider configuration and per-agent defaults", () 
   assert.match(index, /value="anthropic">Anthropic/);
   assert.match(index, /value="gemini">Gemini/);
   assert.match(index, /value="compatible">OpenAI-compatible/);
-  for (const agent of ["rig", "zerostack", "vmlang", "vmmastra"]) {
+  for (const agent of ["rig", "zerostack", "vmlang", "vmmastra", "cline"]) {
     assert.match(index, new RegExp(`data-agent="${agent}"`));
   }
   assert.match(index, /Keys stay in this tab|session-only|current (?:browser )?tab/i);

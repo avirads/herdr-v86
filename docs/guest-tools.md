@@ -289,7 +289,7 @@ a key remains in the environment or shell history.
 
 ## Cloud LLMs: OpenAI, Claude, Gemini, and gateways
 
-Rig, Zerostack, vmlang, and vmmastra use the model loaded under
+Rig, Zerostack, vmlang, vmmastra, and Cline use the model loaded under
 **Settings → AI Model** by default. This Local WebGPU path remains direct and
 does not pass through the cloud router. Add OpenAI, Anthropic, Gemini, or an
 OpenAI-compatible endpoint under **Settings → Cloud AI providers**, then either
@@ -299,6 +299,7 @@ choose a per-agent default there or override one invocation:
 rig --provider work-openai --model gpt-4.1-mini 'Review this project'
 vmlang --provider claude --session review-a run 'Review this project'
 vmmastra --provider gemini --session build-a 'Implement and test the change'
+cline --provider work-openai --session review-a 'Review and repair the project'
 zerostack --provider local-gateway --model provider/model-id
 ```
 
@@ -495,6 +496,7 @@ read the canonical capability reference at
 | `vmlang` | [DeepAgentsJS](https://github.com/langchain-ai/deepagentsjs) | Planning, filesystem work, persistent conversations, optional browser automation, and multi-step coding |
 | `vmmastra` | [Mastra](https://github.com/mastra-ai/mastra) | Mastra workspace tools, selectable lean/full profiles, and fast batch execution |
 | `vmmastra code` | Mastra-backed persistent coding thread | Interactive code/chat/batch modes with saved browser-side threads |
+| `cline` | [Cline](https://github.com/cline/cline) browser-compatible SDK runtime | Persistent Cline conversation, Plan/Act-style tasks, project tools and shared approvals without Node in the guest |
 | `zerostack` | [Zerostack](https://github.com/gi-dellav/zerostack) | Native i686 coding-agent operation through the browser LLM adapter |
 
 The VM adapters integrate these upstream projects with the browser-hosted model;
@@ -514,7 +516,34 @@ Shared facilities available to the agents include:
 - Approval controls for mutations and shell execution; YOLO mode bypasses those
   prompts for the current agent session.
 - Persistent browser-side sessions for `vmlang`, `vmmastra`, and
-  `vmmastra code`, with reset/stop commands for recovery.
+  `vmmastra code`, plus a persistent Cline conversation, with reset/stop commands for recovery.
+
+## `cline` — browser-hosted Cline SDK agent
+
+`cline` runs the official Apache-2.0
+[Cline](https://github.com/cline/cline) browser-compatible agent runtime. The
+32-bit guest contains only the launcher: the agent, model and credentials stay
+in the browser, while approved file and shell tools cross the existing VM
+bridge. This avoids adding Node.js or an unsupported x64/ARM64 Cline binary to
+the image.
+
+```sh
+cline 'Inspect this project, repair failures, and run its tests'
+cline --provider work-openai --model gpt-5 'Review the current changes'
+cline --session feature-a 'Implement the feature'
+cline continue --session feature-a 'Now add regression tests'
+cline status
+cline yolo off
+cline stop
+cline reset
+```
+
+The working directory is the directory from which `cline` is invoked. A
+conversation is reused when its workspace and provider route remain the same;
+`cline reset` discards it. Read, list and search operations are automatic.
+Writes and shell commands follow the shared agent YOLO setting and require a
+browser confirmation when YOLO is off. Cline is installed in AI Tools, Dev,
+Performance, VAPT and Star images.
 
 Agents must verify executable code before reporting success. JavaScript is
 tested with both `qjs` and `vmjs`, including elapsed time. POSIX shell scripts

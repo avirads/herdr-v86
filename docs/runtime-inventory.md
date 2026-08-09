@@ -9,7 +9,7 @@ against the images prepared as Dev/Star `2026.08.03.9`.
 |---|---|---|
 | Barebones | — | — |
 | Essentials | `ca-certificates`, `curl`, `jq`, `quickjs` | `vmagent-poll`, `vmagent-rpc` |
-| AI Tools | Essentials plus `ctags`, `git`, `libgcc`, `make`, `patch`, `ripgrep`, `shfmt`, `tmux` | Essentials plus `herdr`, `rig`, `zerostack`, `vmbench`, `vmclip`, `vmexport`, `vmfetch`, `vmgithub`, `vmai`, `vmjs`, `vmlang`, `vmllm`, `vmmastra`, `vmproject` |
+| AI Tools | Essentials plus `ctags`, `git`, `libgcc`, `make`, `patch`, `ripgrep`, `shfmt`, `tmux` | Essentials plus `cline`, `herdr`, `rig`, `zerostack`, `vmbench`, `vmclip`, `vmexport`, `vmfetch`, `vmgithub`, `vmai`, `vmjs`, `vmlang`, `vmllm`, `vmmastra`, `vmproject` |
 | Dev | AI Tools | AI Tools plus `esbuild`, `vmbro-dev`, `vmbro-httpd` |
 | Performance testing | AI Tools | AI Tools plus `k6`, `k6obs` |
 | VAPT | AI Tools | AI Tools plus `k6`, `vaptr` |

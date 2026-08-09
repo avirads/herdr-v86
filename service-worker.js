@@ -1,5 +1,5 @@
-const APP_SHELL_CACHE = "vmvm-app-shell-v4";
-const STATIC_CACHE = "vmvm-static-v4";
+const APP_SHELL_CACHE = "vmvm-app-shell-v5";
+const STATIC_CACHE = "vmvm-static-v5";
 const APP_SHELL = [
   "./",
   "./offline.html",

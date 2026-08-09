@@ -301,6 +301,48 @@ test('vmmastra status and reset work before any model is loaded', async () => {
   assert.match(outputs.at(-1), /no model loaded/i);
 });
 
+test('Cline uses its official browser runtime lazily, persists conversation and follows shared YOLO', async () => {
+  const outputs = [];
+  const calls = [];
+  let created = 0;
+  let stopped = 0;
+  let yolo = null;
+  const guest = { setWorkspace(path) { calls.push(['workspace', path]); } };
+  const controller = new VmAgentController({
+    createAgent: async () => ({ run: async () => ({ output: 'deepagents' }) }),
+    createClineAgent: async options => {
+      created += 1;
+      calls.push(['create', options.workspace]);
+      return {
+        setYolo(value) { yolo = value; },
+        stop() { stopped += 1; },
+        async run(task) { calls.push(['run', task]); return { outputText: `cline: ${task}` }; },
+        async continue(task) { calls.push(['continue', task]); return { outputText: `continued: ${task}` }; },
+      };
+    },
+    getLlmClient: agent => ({ status: async () => ({ modelName: `${agent}-model` }) }),
+    getGuest: () => guest,
+    approveAction: async () => true,
+    onOutput: output => outputs.push(output),
+  });
+
+  await controller.handle('cline', 'inspect', '/root/project', '{"sessionId":"a"}');
+  assert.equal(created, 1);
+  assert.equal(outputs.at(-1), 'cline: inspect');
+  await controller.handle('cline_continue', 'now fix it', '/root/project', '{"sessionId":"a"}');
+  assert.equal(created, 1, 'same workspace and route reuse the conversation');
+  assert.equal(outputs.at(-1), 'continued: now fix it');
+
+  await controller.handle('cline_yolo', 'off');
+  assert.equal(yolo, false);
+  await controller.handle('cline_status', '', '/root/project', '{"sessionId":"a"}');
+  assert.match(outputs.at(-1), /cline-model/);
+  assert.match(outputs.at(-1), /session: active/);
+  await controller.handle('cline_reset');
+  assert.equal(controller.clineHarness, null);
+  assert.equal(stopped, 1);
+});
+
 test('vmmastra code uses the directory where the guest command was invoked', async () => {
   const outputs = [];
   const workspaces = [];

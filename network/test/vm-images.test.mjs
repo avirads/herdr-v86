@@ -11,6 +11,7 @@ const devIdeApp = await readFile(new URL('network/guest/dev-ide/app.js', root), 
 const devIdeStyles = await readFile(new URL('network/guest/dev-ide/styles.css', root), 'utf8');
 const mastraAstro = await readFile(new URL('network/guest/templates/mastra-hono-astro/src/pages/index.astro', root), 'utf8');
 const mastraBundle = await readFile(new URL('agent/dist/mastra-agent.js', root), 'utf8');
+const clineBundle = await readFile(new URL('agent/dist/cline-agent.js', root), 'utf8');
 const devSupervisor = await readFile(new URL('network/guest/vmbro-httpd/main.go', root), 'utf8');
 const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
@@ -57,9 +58,17 @@ test('tier builder applies each preceding installer and validates boundaries', (
   assert.match(builder, /! command -v nuclei/);
   assert.match(builder, /command -v vaptr/);
   assert.match(builder, /command -v esbuild vmbro-httpd vmbro-dev/);
+  assert.match(builder, /command -v vmai vmllm vmlang vmmastra cline vmjs vmbench/);
   assert.match(builder, /test -f \/root\/project\/src\/pages\/index\.astro/);
   assert.match(builder, /for tool in httpx katana urlfinder ffuf interactsh-client hakrawler gospider nuclei/);
   assert.match(builder, /test -f \/opt\/vaptr\/configs\/native\.json/);
+});
+
+test('Cline is a lazy browser bundle with only its launcher installed in AI Tools images', () => {
+  assert.match(html, /createClineVMAgent/);
+  assert.match(html, /import\("\.\/agent\/dist\/cline-agent\.js"\)/);
+  assert.match(clineBundle, /vmvm-cline/);
+  assert.match(builder, /cline-vm.*\/usr\/local\/bin\/cline/);
 });
 
 test('Settings selects a manifest image and warns before restart', () => {
