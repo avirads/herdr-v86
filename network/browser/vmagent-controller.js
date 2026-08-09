@@ -74,15 +74,15 @@ export class VmAgentController {
     }
     this.clineRouteKey = key;
     this.clineWorkspace = workspace;
-    this.clineHarness ||= await this.createClineAgent({
-      guest, llmClient, workspace, yolo: this.yolo,
-      approveAction: (operation, detail) => this.approveAction(operation, detail),
-      onActivity: event => this.onActivity(event),
-    });
-    this.clineHarness.setYolo(this.yolo);
     this.abortController = new AbortController();
     await this.onBusy(true);
     try {
+      this.clineHarness ||= await this.createClineAgent({
+        guest, llmClient, workspace, yolo: this.yolo,
+        approveAction: (operation, detail) => this.approveAction(operation, detail),
+        onActivity: event => this.onActivity(event),
+      });
+      this.clineHarness.setYolo(this.yolo);
       const result = command === 'cline_continue'
         ? await this.clineHarness.continue(value)
         : await this.clineHarness.run(value);

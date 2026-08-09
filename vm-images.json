@@ -23,40 +23,40 @@
       "description": "Essentials plus terminal tools, coding agents including browser-hosted Cline, browser tools and AI frameworks.",
       "url": "vm-ai-tools-i386-ext4.img",
       "size": 92274688,
-      "version": "2026.08.10.1",
-      "sha256": "d9354f50373a0ff30829b82ce26567cca648cf9b2c90d92f525d4600535146f9"
+      "version": "2026.08.10.2",
+      "sha256": "ef788b54cccb98e32d2c884711f00f62e730c7ff757c41c5b61230bc8d03e8f3"
     },
     "dev": {
       "name": "Dev",
       "description": "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.",
       "url": "vm-dev-i386-ext4.img",
       "size": 99614720,
-      "version": "2026.08.10.1",
-      "sha256": "c0955e94644230fda2e4901b6629e8f86136cab263420777a86f45654617246b"
+      "version": "2026.08.10.2",
+      "sha256": "13863124ac54c0150c48c60836bde46de64317f3a5d2058fdd986728675883a7"
     },
     "performance": {
       "name": "Performance testing",
       "description": "AI Tools plus Grafana k6 and k6obs OpenObserve streaming.",
       "url": "vm-performance-i386-ext4.img",
       "size": 96468992,
-      "version": "2026.08.10.1",
-      "sha256": "7e471cfe1da772618cae08b745f83224591f0d532e042efbe6e761de942c5d21"
+      "version": "2026.08.10.2",
+      "sha256": "d670f2b33b6edba1917330bcba55a203f268fb7c610debbb823ab4e137c67b17"
     },
     "vapt": {
       "name": "VAPT — native scanner",
       "description": "AI Tools plus Grafana k6 and Vaptr, the self-contained native scanner. k6obs and external tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.",
       "url": "vm-vapt-i386-ext4.img",
       "size": 103809024,
-      "version": "2026.08.10.1",
-      "sha256": "9c19647c307ab22be97dbf4faf28fe461d1a13496adbed8d7cb99a905201aa93"
+      "version": "2026.08.10.2",
+      "sha256": "036d6eb29ccaa9f18317d41ea16af91a375bf710b0c5a61eb69072c0b50a0d16"
     },
     "star": {
       "name": "Star",
       "description": "All guest features in one image: AI Tools, Dev IDE and seven templates, Grafana k6 with k6obs, and the self-contained Vaptr scanner.",
       "url": "vm-star-i386-ext4.img",
       "size": 134217728,
-      "version": "2026.08.10.1",
-      "sha256": "ce6290c26a2e953818a4f43b2751fe833774e9ca8fe9d6a2a9acaee0acbcabe5"
+      "version": "2026.08.10.2",
+      "sha256": "50ad1fdcb7a8d36f958425795e224aead7d68192febd49bab736c77a8bf6bd36"
     }
   }
 }

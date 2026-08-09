@@ -343,6 +343,21 @@ test('Cline uses its official browser runtime lazily, persists conversation and 
   assert.equal(stopped, 1);
 });
 
+test('Cline reports a lazy bundle initialization failure in the terminal', async () => {
+  const outputs = [];
+  const controller = new VmAgentController({
+    createAgent: async () => ({ run: async () => ({ output: 'unused' }) }),
+    createClineAgent: async () => { throw new Error('bundle failed to initialize'); },
+    getLlmClient: () => ({ status: async () => ({ modelName: 'test-model' }) }),
+    getGuest: () => ({}),
+    approveAction: async () => true,
+    onOutput: output => outputs.push(output),
+  });
+  await controller.handle('cline', 'inspect');
+  assert.match(outputs.at(-1), /bundle failed to initialize/);
+  assert.equal(controller.abortController, null);
+});
+
 test('vmmastra code uses the directory where the guest command was invoked', async () => {
   const outputs = [];
   const workspaces = [];

@@ -29,6 +29,13 @@ test("all coding agent launchers accept provider, model, and session overrides",
   }
 });
 
+test("Cline submits through the visible agent serial transport", () => {
+  const cline = scripts.find(([name]) => name === "cline-vm")[1];
+  assert.match(cline, /> \/dev\/ttyS0/);
+  assert.doesNotMatch(cline, /> \/dev\/ttyS1/);
+  assert.match(cline, /submitted to the ready browser agent/);
+});
+
 test("the host keeps Local WebGPU direct and resolves only routed requests", () => {
   assert.match(index, /getLocalClient: \(\) => webGpuLlmClient/);
   assert.match(index, /llmProviderRouter\.resolve\(agent, route\)/);
