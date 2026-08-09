@@ -80,12 +80,19 @@ export class VmAgentController {
       this.clineHarness ||= await this.createClineAgent({
         guest, llmClient, workspace, yolo: this.yolo,
         approveAction: (operation, detail) => this.approveAction(operation, detail),
-        onActivity: event => this.onActivity(event),
+        onActivity: event => {
+          this.onActivity(event);
+          if (event?.type === 'run-started') this.onOutput('[cline] working…');
+          else if (event?.type === 'retry') this.onOutput(`[cline] model returned no tool call; retrying (${event.iteration}/12)…`);
+          else if (event?.tool) this.onOutput(`[cline] tool: ${event.tool}`);
+        },
       });
       this.clineHarness.setYolo(this.yolo);
       const result = command === 'cline_continue'
         ? await this.clineHarness.continue(value)
         : await this.clineHarness.run(value);
+      if (result?.status === 'failed') throw result.error || new Error('Cline could not complete the task with a valid tool call.');
+      if (result?.status === 'aborted') throw new Error('Cline task was aborted.');
       const summary = result?.outputText || result?.messages?.at(-1)?.content?.find(part => part.type === 'text')?.text;
       await this.onOutput(String(summary || '[cline] task completed without a text summary.'));
     } catch (error) {

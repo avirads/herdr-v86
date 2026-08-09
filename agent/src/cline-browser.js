@@ -9,6 +9,7 @@ import { Agent, createTool } from '@cline/agents';
 const DEFAULT_PROMPT = [
   'You are Cline, a coding agent working in /root/project on a 32-bit Alpine Linux VM.',
   'Inspect before editing. Make focused changes and use the available tools rather than guessing.',
+  'Every response during a task MUST call exactly one available tool. Never echo or paraphrase the user request and never answer with plain prose.',
   'Installed commands and environment limits are documented in /usr/local/share/vm-agent-capabilities.md.',
   'After creating or editing executable code, run it or an appropriate syntax checker, inspect the exit code and output, and repair failures.',
   'For JavaScript, test with both time qjs FILE and time vmjs < FILE and report both elapsed times.',
@@ -67,7 +68,7 @@ export function createClineModel(llmClient) {
         max_tokens: 1400,
         chat_template_kwargs: { enable_thinking: false },
         messages,
-        ...(tools.length ? { tools } : {}),
+        ...(tools.length ? { tools, tool_choice: 'required' } : {}),
       });
       const choice = completion?.choices?.[0] || {};
       const message = choice.message || {};
@@ -171,7 +172,10 @@ export function createClineVMAgent({
     }),
   });
   runtime.subscribe(event => {
-    if (event.type === 'tool-started') onActivity({ tool: event.toolCall.toolName, input: event.toolCall.input });
+    if (event.type === 'run-started') onActivity({ type: 'run-started' });
+    if (event.type === 'turn-finished' && event.toolCallCount === 0) {
+      onActivity({ type: 'retry', iteration: event.iteration });
+    }
   });
   return {
     runtime,

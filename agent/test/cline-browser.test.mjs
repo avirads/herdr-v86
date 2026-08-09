@@ -21,6 +21,7 @@ test('Cline AgentModel adapts VMVM chat responses and usage', async () => {
     tools: [],
   })) events.push(event);
   assert.equal(requests[0].messages[0].content, 'system');
+  assert.equal(requests[0].tool_choice, undefined);
   assert.deepEqual(events.map(event => event.type), ['text-delta', 'usage', 'finish']);
   assert.equal(events[0].text, 'ready');
   assert.equal(events[1].usage.outputTokens, 2);
@@ -73,4 +74,16 @@ test('Cline does not report an echoed task as completion and executes the reques
   assert.deepEqual(writes, [{ path: 'test.txt', content: 'hello' }]);
   assert.equal(result.outputText, 'Created test.txt');
   assert.equal(result.iterations, 3);
+});
+
+test('Cline requires a tool call whenever tools are available', async () => {
+  let request;
+  const model = createClineModel({
+    async chat(value) {
+      request = value;
+      return { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ id: 'x', function: { name: 'finish_task', arguments: '{"summary":"ok"}' } }] } }] };
+    },
+  });
+  for await (const _ of model.stream({ messages: [], tools: [{ name: 'finish_task', description: 'finish', inputSchema: { type: 'object' } }] })) {}
+  assert.equal(request.tool_choice, 'required');
 });

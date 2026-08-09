@@ -341,9 +341,10 @@ export class LiteRtLmClient extends EventTarget {
     if (!messages.length) throw new Error('messages required');
     if (body?.tools?.length) {
       const tools = body.tools.map(tool => tool?.function || tool).filter(Boolean);
+      const required = body.tool_choice === 'required' || body.toolChoice === 'required';
       messages.unshift({
         role: 'system',
-        content: `You can call tools. When a tool is needed, output only one JSON object with this exact shape: {"tool_call":{"name":"tool_name","arguments":{}}}. Never wrap it in prose. Available tools: ${JSON.stringify(tools)}`,
+        content: `${required ? 'You MUST call exactly one tool in this response. Do not answer with text.' : 'You can call tools. When a tool is needed,'} output only one JSON object with this exact shape: {"tool_call":{"name":"tool_name","arguments":{}}}. Never wrap it in prose. Available tools: ${JSON.stringify(tools)}`,
       });
     }
     return messages.map(message => {

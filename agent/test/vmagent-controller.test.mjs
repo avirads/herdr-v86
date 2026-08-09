@@ -358,6 +358,44 @@ test('Cline reports a lazy bundle initialization failure in the terminal', async
   assert.equal(controller.abortController, null);
 });
 
+test('Cline exposes progress and tool activity instead of appearing silent', async () => {
+  const output = [];
+  const controller = new VmAgentController({
+    createAgent: async () => null,
+    createClineAgent: async options => ({
+      setYolo() {}, stop() {},
+      async run() {
+        options.onActivity({ type: 'run-started' });
+        options.onActivity({ type: 'retry', iteration: 1 });
+        options.onActivity({ tool: 'write_file', input: { path: 'test.txt' } });
+        return { outputText: 'done' };
+      },
+    }),
+    getLlmClient: () => ({ async chat() {}, async status() { return { modelName: 'test' }; } }),
+    getGuest: () => ({}), approveAction: async () => true,
+    onOutput: value => output.push(value),
+  });
+  await controller.handle('cline', 'write test.txt', '/root/project', '{}');
+  assert.deepEqual(output, [
+    '[cline] working…',
+    '[cline] model returned no tool call; retrying (1/12)…',
+    '[cline] tool: write_file',
+    'done',
+  ]);
+});
+
+test('Cline reports a failed runtime result rather than its echoed reminder', async () => {
+  const output = [];
+  const controller = new VmAgentController({
+    createAgent: async () => null,
+    createClineAgent: async () => ({ setYolo() {}, stop() {}, async run() { return { status: 'failed', outputText: '[SYSTEM] reminder', error: new Error('max iterations') }; } }),
+    getLlmClient: () => ({ async chat() {}, async status() { return { modelName: 'test' }; } }),
+    getGuest: () => ({}), approveAction: async () => true, onOutput: value => output.push(value),
+  });
+  await controller.handle('cline', 'hi', '/root/project', '{}');
+  assert.deepEqual(output, ['[cline] error: max iterations']);
+});
+
 test('vmmastra code uses the directory where the guest command was invoked', async () => {
   const outputs = [];
   const workspaces = [];
