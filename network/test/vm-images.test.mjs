@@ -192,7 +192,9 @@ test('Dev tier boot progress reflects the app compile/serve phase', () => {
 });
 
 test('Dev tier allows the larger image enough time to produce VM output', () => {
-  assert.match(html, /hasDevEnvironment \? 300000 : 120000/);
+  assert.match(html, /compatibilityBoot \? 300000 : \(hasDevEnvironment \? 300000 : 120000\)/);
+  assert.match(html, /emulator-ready", \(\) => \{\s*armNoOutputWatchdog\(\)/);
+  assert.match(html, /after compatibility-mode emulator startup/);
   assert.match(html, /first boot may take several minutes/);
 });
 

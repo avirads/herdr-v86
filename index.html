@@ -792,7 +792,7 @@ async function finishDevApp(ready) {
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.08.10.11";
+const APP_VERSION = "2026.08.10.12";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -2160,6 +2160,7 @@ if (gatewayURL && sessionToken) {
 }
 
 emulator.add_listener("emulator-ready", () => {
+  armNoOutputWatchdog();
   setBootProgress(28, compatibilityBoot
     ? `Starting VMVM [${vmImageDisplaySource}] in compatibility mode…`
     : `Starting VMVM [${vmImageDisplaySource}]…`);
@@ -2202,15 +2203,23 @@ window.onerror = (msg, source) => {
   failBoot("Startup error: " + msg);
 };
 let gotSerial = false;
-const noOutputTimeoutMs = hasDevEnvironment ? 300000 : 120000;
-setTimeout(() => {
-  if (!gotSerial) {
-    const seconds = noOutputTimeoutMs / 1000;
-    const message = `No VM output after ${seconds} seconds. Reload to retry automatic compatibility boot.`;
-    status(message);
-    failBoot(message);
-  }
-}, noOutputTimeoutMs);
+let noOutputTimer = 0;
+function armNoOutputWatchdog() {
+  if (noOutputTimer) return;
+  // Asset downloads happen before emulator-ready. Starting this timer at page
+  // load made slow compatibility-image downloads fail before the CPU started.
+  const noOutputTimeoutMs = compatibilityBoot ? 300000 : (hasDevEnvironment ? 300000 : 120000);
+  noOutputTimer = setTimeout(() => {
+    if (!gotSerial) {
+      const seconds = noOutputTimeoutMs / 1000;
+      const message = compatibilityBoot
+        ? `No VM output ${seconds} seconds after compatibility-mode emulator startup. Reload to retry the full-image PIO boot.`
+        : `No VM output ${seconds} seconds after emulator startup. Reload to retry automatic compatibility boot.`;
+      status(message);
+      failBoot(message);
+    }
+  }, noOutputTimeoutMs);
+}
 // The kernel serial console has no window size (TIOCGWINSZ reports 0x0).
 // Set it once at the first shell prompt, matching the xterm.js geometry above.
 let recentOutput = "";
