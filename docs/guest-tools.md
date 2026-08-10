@@ -496,7 +496,7 @@ read the canonical capability reference at
 | `vmlang` | [DeepAgentsJS](https://github.com/langchain-ai/deepagentsjs) | Planning, filesystem work, persistent conversations, optional browser automation, and multi-step coding |
 | `vmmastra` | [Mastra](https://github.com/mastra-ai/mastra) | Mastra workspace tools, selectable lean/full profiles, and fast batch execution |
 | `vmmastra code` | Mastra-backed persistent coding thread | Interactive code/chat/batch modes with saved browser-side threads |
-| `cline` | [Cline](https://github.com/cline/cline) browser-compatible SDK runtime | Persistent Cline conversation, Plan/Act-style tasks, project tools and shared approvals without Node in the guest |
+| `cline` | [Cline](https://github.com/cline/cline) browser-compatible SDK runtime | Fresh task runs with explicit `continue`, project tools and shared approvals without Node in the guest |
 | `zerostack` | [Zerostack](https://github.com/gi-dellav/zerostack) | Native i686 coding-agent operation through the browser LLM adapter |
 
 The VM adapters integrate these upstream projects with the browser-hosted model;
@@ -516,7 +516,8 @@ Shared facilities available to the agents include:
 - Approval controls for mutations and shell execution; YOLO mode bypasses those
   prompts for the current agent session.
 - Persistent browser-side sessions for `vmlang`, `vmmastra`, and
-  `vmmastra code`, plus a persistent Cline conversation, with reset/stop commands for recovery.
+  `vmmastra code`; Cline starts plain tasks fresh and preserves context only
+  for explicit `cline continue`, with reset/stop commands for recovery.
 
 ## `cline` — browser-hosted Cline SDK agent
 
@@ -538,9 +539,11 @@ cline stop
 cline reset
 ```
 
-The working directory is the directory from which `cline` is invoked. A
-conversation is reused when its workspace and provider route remain the same;
-`cline reset` discards it. Read, list and search operations are automatic.
+The working directory is the directory from which `cline` is invoked. Each
+plain `cline 'TASK'` starts with a fresh conversation so local models do not
+accumulate stale tool history. Use `cline continue 'TASK'` immediately after a
+run when the follow-up needs its context; `cline reset` discards it. Read, list
+and search operations are automatic.
 Writes and shell commands follow the shared agent YOLO setting and require a
 browser confirmation when YOLO is off. Cline is installed in AI Tools, Dev,
 Performance, VAPT and Star images.

@@ -68,7 +68,11 @@ export class VmAgentController {
     if (this.abortController) return await this.onOutput('[cline] another agent task is running.');
     const key = this.routeKey('cline', route);
     const workspace = String(cwd || '/root/project');
-    if (this.clineRouteKey !== key || this.clineWorkspace !== workspace) {
+    // A plain `cline TASK` is an independent task. Retaining the completed
+    // tool transcript makes the small local model progressively less likely
+    // to emit a valid next tool call. Conversation reuse is explicit through
+    // `cline continue TASK`.
+    if (command === 'cline' || this.clineRouteKey !== key || this.clineWorkspace !== workspace) {
       this.clineHarness?.stop();
       this.clineHarness = null;
     }

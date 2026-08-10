@@ -301,7 +301,7 @@ test('vmmastra status and reset work before any model is loaded', async () => {
   assert.match(outputs.at(-1), /no model loaded/i);
 });
 
-test('Cline uses its official browser runtime lazily, persists conversation and follows shared YOLO', async () => {
+test('Cline starts plain tasks fresh, continues explicitly, and follows shared YOLO', async () => {
   const outputs = [];
   const calls = [];
   let created = 0;
@@ -333,6 +333,11 @@ test('Cline uses its official browser runtime lazily, persists conversation and 
   assert.equal(created, 1, 'same workspace and route reuse the conversation');
   assert.equal(outputs.at(-1), 'continued: now fix it');
 
+  await controller.handle('cline', 'separate task', '/root/project', '{"sessionId":"a"}');
+  assert.equal(created, 2, 'a new plain task gets a clean local-model conversation');
+  assert.equal(stopped, 1);
+  assert.equal(outputs.at(-1), 'cline: separate task');
+
   await controller.handle('cline_yolo', 'off');
   assert.equal(yolo, false);
   await controller.handle('cline_status', '', '/root/project', '{"sessionId":"a"}');
@@ -340,7 +345,7 @@ test('Cline uses its official browser runtime lazily, persists conversation and 
   assert.match(outputs.at(-1), /session: active/);
   await controller.handle('cline_reset');
   assert.equal(controller.clineHarness, null);
-  assert.equal(stopped, 1);
+  assert.equal(stopped, 2);
 });
 
 test('Cline reports a lazy bundle initialization failure in the terminal', async () => {

@@ -552,7 +552,7 @@ read the canonical capability reference at
 <tr>
 <td><code>cline</code></td>
 <td><a href="https://github.com/cline/cline">Cline</a> browser-compatible SDK runtime</td>
-<td>Persistent Cline conversation, Plan/Act-style tasks, project tools and shared approvals without Node in the guest</td>
+<td>Fresh task runs with explicit <code>continue</code>, project tools and shared approvals without Node in the guest</td>
 </tr>
 <tr>
 <td><code>zerostack</code></td>
@@ -577,7 +577,8 @@ tools and the extension is connected.</li>
 <li>Approval controls for mutations and shell execution; YOLO mode bypasses those
 prompts for the current agent session.</li>
 <li>Persistent browser-side sessions for <code>vmlang</code>, <code>vmmastra</code>, and
-<code>vmmastra code</code>, plus a persistent Cline conversation, with reset/stop commands for recovery.</li>
+<code>vmmastra code</code>; Cline starts plain tasks fresh and preserves context only
+for explicit <code>cline continue</code>, with reset/stop commands for recovery.</li>
 </ul>
 <h2 id="cline-browser-hosted-cline-sdk-agent"><code>cline</code> — browser-hosted Cline SDK agent</h2>
 <p><code>cline</code> runs the official Apache-2.0
@@ -595,9 +596,11 @@ cline yolo off
 cline stop
 cline reset
 </code></pre>
-<p>The working directory is the directory from which <code>cline</code> is invoked. A
-conversation is reused when its workspace and provider route remain the same;
-<code>cline reset</code> discards it. Read, list and search operations are automatic.
+<p>The working directory is the directory from which <code>cline</code> is invoked. Each
+plain <code>cline 'TASK'</code> starts with a fresh conversation so local models do not
+accumulate stale tool history. Use <code>cline continue 'TASK'</code> immediately after a
+run when the follow-up needs its context; <code>cline reset</code> discards it. Read, list
+and search operations are automatic.
 Writes and shell commands follow the shared agent YOLO setting and require a
 browser confirmation when YOLO is off. Cline is installed in AI Tools, Dev,
 Performance, VAPT and Star images.</p>
