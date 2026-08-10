@@ -117,6 +117,7 @@ function createTools({ guest, onActivity, evidence, workspace }) {
         const expected = evidence.writes.get(key);
         if (expected !== undefined && String(content).trimEnd() === String(expected).trimEnd()) {
           evidence.verifiedWrites.add(key);
+          evidence.readBacks.set(key, String(content));
         }
         return content;
       },
@@ -174,14 +175,17 @@ export function createClineVMAgent({
   if (!guest) throw new Error('Cline requires the guest bridge');
   guest.setWorkspace?.(workspace);
   let autoApprove = Boolean(yolo);
-  const evidence = { toolCalls: 0, writes: new Map(), verifiedWrites: new Set() };
+  const evidence = { toolCalls: 0, writes: new Map(), verifiedWrites: new Set(), readBacks: new Map() };
   const evidenceComplete = () => evidence.verifiedWrites.size > 0 || (evidence.toolCalls > 0 && evidence.writes.size === 0);
-  const verifiedResult = result => evidence.verifiedWrites.size ? {
-    ...result,
-    status: 'completed',
-    error: undefined,
-    outputText: `Verified ${[...evidence.verifiedWrites].join(', ')} by reading back the written content.`,
-  } : result;
+  const verifiedResult = result => {
+    if (!evidence.verifiedWrites.size) return result;
+    const outputText = [...evidence.verifiedWrites].map(path => {
+      const content = evidence.readBacks.get(path) || '';
+      const preview = content.length > 2000 ? `${content.slice(0, 2000)}\n…[truncated]` : content;
+      return `Verified ${path} by reading it back:\n${preview}`;
+    }).join('\n\n');
+    return { ...result, status: 'completed', error: undefined, outputText };
+  };
   const runtime = new Agent({
     agentId: 'vmvm-cline',
     conversationId: `vmvm-cline-${Date.now()}`,

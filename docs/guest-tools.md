@@ -549,9 +549,10 @@ browser confirmation when YOLO is off. Cline is installed in AI Tools, Dev,
 Performance, VAPT and Star images.
 
 Cline treats a matching `write_file` followed by `read_file` as verified
-completion even if a small local model fails to emit its final `finish_task`
-handshake. Agent tasks run asynchronously in the terminal; wait for the final
-summary or `[cline] error:` before submitting another agent task.
+completion and prints a bounded preview of the read-back content, even if a
+small local model fails to emit its final `finish_task` handshake. Agent tasks
+run asynchronously in the terminal; wait for the final summary or
+`[cline] error:` before submitting another agent task.
 
 Agents must verify executable code before reporting success. JavaScript is
 tested with both `qjs` and `vmjs`, including elapsed time. POSIX shell scripts

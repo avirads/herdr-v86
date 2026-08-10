@@ -7943,6 +7943,7 @@ function createTools({ guest, onActivity, evidence, workspace }) {
         const expected = evidence.writes.get(key);
         if (expected !== void 0 && String(content).trimEnd() === String(expected).trimEnd()) {
           evidence.verifiedWrites.add(key);
+          evidence.readBacks.set(key, String(content));
         }
         return content;
       }
@@ -8016,14 +8017,19 @@ function createClineVMAgent({
   if (!guest) throw new Error("Cline requires the guest bridge");
   guest.setWorkspace?.(workspace);
   let autoApprove = Boolean(yolo);
-  const evidence = { toolCalls: 0, writes: /* @__PURE__ */ new Map(), verifiedWrites: /* @__PURE__ */ new Set() };
+  const evidence = { toolCalls: 0, writes: /* @__PURE__ */ new Map(), verifiedWrites: /* @__PURE__ */ new Set(), readBacks: /* @__PURE__ */ new Map() };
   const evidenceComplete = () => evidence.verifiedWrites.size > 0 || evidence.toolCalls > 0 && evidence.writes.size === 0;
-  const verifiedResult = (result) => evidence.verifiedWrites.size ? {
-    ...result,
-    status: "completed",
-    error: void 0,
-    outputText: `Verified ${[...evidence.verifiedWrites].join(", ")} by reading back the written content.`
-  } : result;
+  const verifiedResult = (result) => {
+    if (!evidence.verifiedWrites.size) return result;
+    const outputText = [...evidence.verifiedWrites].map((path) => {
+      const content = evidence.readBacks.get(path) || "";
+      const preview = content.length > 2e3 ? `${content.slice(0, 2e3)}
+\u2026[truncated]` : content;
+      return `Verified ${path} by reading it back:
+${preview}`;
+    }).join("\n\n");
+    return { ...result, status: "completed", error: void 0, outputText };
+  };
   const runtime = new Dv({
     agentId: "vmvm-cline",
     conversationId: `vmvm-cline-${Date.now()}`,

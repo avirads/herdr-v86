@@ -110,5 +110,5 @@ test('matching write and read-back evidence completes without a finish_task hand
   const result = await harness.run('create test2.txt containing hello2, then read it back');
   assert.equal(turn, 3, 'verified evidence stops the retry loop immediately');
   assert.equal(result.status, 'completed');
-  assert.equal(result.outputText, 'Verified test2.txt by reading back the written content.');
+  assert.equal(result.outputText, 'Verified test2.txt by reading it back:\nhello2');
 });
