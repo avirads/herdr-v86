@@ -87,3 +87,28 @@ test('Cline requires a tool call whenever tools are available', async () => {
   for await (const _ of model.stream({ messages: [], tools: [{ name: 'finish_task', description: 'finish', inputSchema: { type: 'object' } }] })) {}
   assert.equal(request.tool_choice, 'required');
 });
+
+test('matching write and read-back evidence completes without a finish_task handshake', async () => {
+  const files = new Map();
+  let turn = 0;
+  const harness = createClineVMAgent({
+    guest: {
+      setWorkspace() {}, async list() { return ''; }, async grep() { return ''; },
+      async write(path, content) { files.set(path, content); },
+      async read(path) { return files.get(path) || ''; },
+      async execute() { return '__V86AGENT_EXIT__0\n'; },
+    },
+    llmClient: {
+      async chat() {
+        turn++;
+        if (turn === 1) return { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ id: 'w', function: { name: 'write_file', arguments: '{"path":"test2.txt","content":"hello2"}' } }] } }] };
+        if (turn === 2) return { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ id: 'r', function: { name: 'read_file', arguments: '{"path":"test2.txt"}' } }] } }] };
+        return { choices: [{ finish_reason: 'stop', message: { content: '[SYSTEM] completion reminder' } }] };
+      },
+    },
+  });
+  const result = await harness.run('create test2.txt containing hello2, then read it back');
+  assert.equal(turn, 3, 'verified evidence stops the retry loop immediately');
+  assert.equal(result.status, 'completed');
+  assert.equal(result.outputText, 'Verified test2.txt by reading back the written content.');
+});

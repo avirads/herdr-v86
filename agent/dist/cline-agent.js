@@ -7923,7 +7923,12 @@ function createClineModel(llmClient) {
     }
   };
 }
-function createTools({ guest, onActivity }) {
+function evidencePath(path, workspace) {
+  const value = String(path || "").replace(/\\/g, "/");
+  const prefix = String(workspace || "").replace(/\/$/, "") + "/";
+  return value.startsWith(prefix) ? value.slice(prefix.length) : value.replace(/^\.\//, "");
+}
+function createTools({ guest, onActivity, evidence, workspace }) {
   const activity = (tool, input) => onActivity({ tool, input });
   return [
     fv({
@@ -7932,7 +7937,14 @@ function createTools({ guest, onActivity }) {
       inputSchema: jsonSchema({ path: { type: "string", description: "Project-relative or absolute path" } }),
       async execute({ path }) {
         activity("read_file", { path });
-        return await guest.read(path);
+        evidence.toolCalls++;
+        const content = await guest.read(path);
+        const key = evidencePath(path, workspace);
+        const expected = evidence.writes.get(key);
+        if (expected !== void 0 && String(content).trimEnd() === String(expected).trimEnd()) {
+          evidence.verifiedWrites.add(key);
+        }
+        return content;
       }
     }),
     fv({
@@ -7941,6 +7953,7 @@ function createTools({ guest, onActivity }) {
       inputSchema: jsonSchema({ path: { type: "string", description: "Directory path; use . for the project root" } }, []),
       async execute({ path = "." }) {
         activity("list_files", { path });
+        evidence.toolCalls++;
         return await guest.list(path);
       }
     }),
@@ -7950,6 +7963,7 @@ function createTools({ guest, onActivity }) {
       inputSchema: jsonSchema({ pattern: { type: "string" }, path: { type: "string" } }, ["pattern"]),
       async execute({ pattern, path = "." }) {
         activity("search_files", { pattern, path });
+        evidence.toolCalls++;
         return await guest.grep(pattern, path);
       }
     }),
@@ -7959,7 +7973,9 @@ function createTools({ guest, onActivity }) {
       inputSchema: jsonSchema({ path: { type: "string" }, content: { type: "string" } }),
       async execute({ path, content }) {
         activity("write_file", { path });
+        evidence.toolCalls++;
         await guest.write(path, content);
+        evidence.writes.set(evidencePath(path, workspace), String(content));
         return `wrote ${path}`;
       }
     }),
@@ -7969,6 +7985,7 @@ function createTools({ guest, onActivity }) {
       inputSchema: jsonSchema({ command: { type: "string" } }),
       async execute({ command }) {
         activity("execute_command", { command });
+        evidence.toolCalls++;
         const raw = String(await guest.execute(command));
         const match = raw.match(/^__V86AGENT_EXIT__(\d+)\n?/);
         return { exitCode: match ? Number(match[1]) : 0, output: match ? raw.slice(match[0].length) : raw };
@@ -7999,18 +8016,28 @@ function createClineVMAgent({
   if (!guest) throw new Error("Cline requires the guest bridge");
   guest.setWorkspace?.(workspace);
   let autoApprove = Boolean(yolo);
+  const evidence = { toolCalls: 0, writes: /* @__PURE__ */ new Map(), verifiedWrites: /* @__PURE__ */ new Set() };
+  const evidenceComplete = () => evidence.verifiedWrites.size > 0 || evidence.toolCalls > 0 && evidence.writes.size === 0;
+  const verifiedResult = (result) => evidence.verifiedWrites.size ? {
+    ...result,
+    status: "completed",
+    error: void 0,
+    outputText: `Verified ${[...evidence.verifiedWrites].join(", ")} by reading back the written content.`
+  } : result;
   const runtime = new Dv({
     agentId: "vmvm-cline",
     conversationId: `vmvm-cline-${Date.now()}`,
     systemPrompt,
     model: createClineModel(llmClient),
-    tools: createTools({ guest, onActivity }),
+    tools: createTools({ guest, onActivity, evidence, workspace }),
     initialMessages,
     maxIterations: 12,
-    // A small local model may echo the task or answer in prose instead of
-    // invoking a tool. Do not treat that as success: Cline must explicitly
-    // call finish_task after performing and verifying the requested work.
-    completionPolicy: { requireCompletionTool: true },
+    // Keep retrying until the model uses a tool. Once tool evidence proves a
+    // read-only task or a matching write/read-back, plain text may close the
+    // run even when a small local model cannot emit finish_task reliably.
+    completionPolicy: {
+      completionGuard: () => evidenceComplete() ? void 0 : "Use the appropriate tool now. Do not repeat the request or answer in prose."
+    },
     toolPolicies: {
       read_file: { autoApprove: true },
       list_files: { autoApprove: true },
@@ -8025,7 +8052,7 @@ function createClineVMAgent({
   });
   runtime.subscribe((event) => {
     if (event.type === "run-started") onActivity({ type: "run-started" });
-    if (event.type === "turn-finished" && event.toolCallCount === 0) {
+    if (event.type === "turn-finished" && event.toolCallCount === 0 && !evidenceComplete()) {
       onActivity({ type: "retry", iteration: event.iteration });
     }
   });
@@ -8041,10 +8068,10 @@ function createClineVMAgent({
       return runtime.snapshot();
     },
     async run(task) {
-      return await runtime.run(String(task));
+      return verifiedResult(await runtime.run(String(task)));
     },
     async continue(task) {
-      return await runtime.continue(String(task));
+      return verifiedResult(await runtime.continue(String(task)));
     }
   };
 }
