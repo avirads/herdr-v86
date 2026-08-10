@@ -609,7 +609,8 @@ using the configured page-local WebGPU model through the browser bridge.
 
 ```sh
 cd /root/project
-zerostack -p 'Summarize this project'
+zerostack 'Summarize this project'       # VMVM shorthand
+zerostack -p 'Summarize this project'    # native Zerostack form
 zerostack --version
 ```
 

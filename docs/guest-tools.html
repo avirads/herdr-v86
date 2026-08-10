@@ -653,7 +653,8 @@ started.</p>
 <p><code>zerostack</code> runs the native Zerostack 1.5.0 agent inside the 32-bit guest while
 using the configured page-local WebGPU model through the browser bridge.</p>
 <pre><code class="language-sh">cd /root/project
-zerostack -p 'Summarize this project'
+zerostack 'Summarize this project'       # VMVM shorthand
+zerostack -p 'Summarize this project'    # native Zerostack form
 zerostack --version
 </code></pre>
 <p>While it runs, the launcher temporarily reserves the private RPC serial port

@@ -52,7 +52,7 @@ emulator.add_listener("serial0-output-byte", byte => {
       `test "$(cat /etc/vmvm/tier)" = "${tier}"`,
       `test "$(cat /etc/vmvm/tier-level)" = "${level}"`,
       level >= 2 ? "command -v curl jq qjs vmagent-rpc >/dev/null" : "! command -v curl >/dev/null",
-      level >= 3 ? "command -v tmux herdr git rg zerostack rig vmfetch vmllm vmlang vmmastra >/dev/null" : "! command -v rig >/dev/null",
+      level >= 3 ? "command -v tmux herdr git rg zerostack rig vmfetch vmllm vmlang vmmastra >/dev/null && grep -q 'set -- -p' /usr/local/bin/zerostack" : "! command -v rig >/dev/null",
       tier === "dev" || tier === "star"
         ? "command -v esbuild vmbro-httpd vmbro-dev >/dev/null && test -f /root/project/src/pages/index.astro && for i in $(seq 1 30); do grep -q 'listening on' /var/log/vmbro-dev.log 2>/dev/null && break; sleep 1; done && grep -q 'listening on' /var/log/vmbro-dev.log"
         : "! command -v vmbro-dev >/dev/null",

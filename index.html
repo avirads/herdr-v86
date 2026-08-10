@@ -611,11 +611,11 @@ const VM_IMAGE_FALLBACK = {
   tiers: {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "vm-barebones-i386-ext4.img", size: 67108864, version: "2026.07.29.1" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "vm-essentials-i386-ext4.img", size: 83886080, version: "2026.07.29.1" },
-    "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, browser-hosted Cline and other coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.08.10.3" },
-    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.08.10.3" },
-    "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.08.10.3" },
-    "vapt": { name: "VAPT — native scanner", description: "AI Tools plus Grafana k6 and Vaptr; k6obs and external tools are not bundled in this tier.", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.08.10.3" },
-    "star": { name: "Star", description: "All guest features: AI Tools, Dev IDE and templates, k6/k6obs performance testing, and Vaptr.", url: "vm-star-i386-ext4.img", size: 134217728, version: "2026.08.10.3" },
+    "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, browser-hosted Cline and other coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.08.10.9" },
+    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.08.10.9" },
+    "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.08.10.9" },
+    "vapt": { name: "VAPT — native scanner", description: "AI Tools plus Grafana k6 and Vaptr; k6obs and external tools are not bundled in this tier.", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.08.10.9" },
+    "star": { name: "Star", description: "All guest features: AI Tools, Dev IDE and templates, k6/k6obs performance testing, and Vaptr.", url: "vm-star-i386-ext4.img", size: 134217728, version: "2026.08.10.9" },
   },
 };
 let vmImageManifest = VM_IMAGE_FALLBACK;
@@ -790,7 +790,7 @@ async function finishDevApp(ready) {
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.08.10.8";
+const APP_VERSION = "2026.08.10.9";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";

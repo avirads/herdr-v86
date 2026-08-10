@@ -29,6 +29,11 @@ test("all coding agent launchers accept provider, model, and session overrides",
   }
 });
 
+test("Zerostack translates one quoted positional task to its non-interactive prompt flag", () => {
+  const zerostack = scripts.find(([name]) => name === "zerostack-vm")[1];
+  assert.match(zerostack, /if \[ "\$#" -eq 1 \].*\n\s*set -- -p "\$1"/);
+});
+
 test("Cline submits through the visible agent serial transport", () => {
   const cline = scripts.find(([name]) => name === "cline-vm")[1];
   // Use the shell's already-open console stream. Reopening an emulated UART
