@@ -54,6 +54,12 @@ test('the interactive VM shell starts in the project directory', () => {
   );
 });
 
+test('the local AI model waits until VMVM reaches its shell', () => {
+  assert.match(html, /shellReady = true;\s*window\.dispatchEvent\(new Event\("vmvm-shell-ready"\)\)/);
+  assert.match(html, /new Promise\(resolve => window\.addEventListener\("vmvm-shell-ready", resolve, \{ once: true \}\)\)/);
+  assert.match(html, /vmBootReady\.then\(\(\) => \{\s*llmStatus\("loading LiteRT-LM runtime"\)/);
+});
+
 test('the app shell revalidates without intercepting VM disk ranges', () => {
   assert.match(html, /serviceWorker\.register\("\.\/service-worker\.js", \{ updateViaCache: "none" \}\)/);
   assert.match(serviceWorker, /request\.mode !== "navigate"/);

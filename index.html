@@ -664,6 +664,7 @@ function finishBoot(showTerminal = true) {
   setTimeout(() => {
     bootReady = true;
     shellReady = true;
+    window.dispatchEvent(new Event("vmvm-shell-ready"));
     bootOverlay.classList.add("done");
     if (showTerminal) {
       term.clear();
@@ -792,7 +793,7 @@ async function finishDevApp(ready) {
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.08.10.13";
+const APP_VERSION = "2026.08.10.14";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -1970,7 +1971,17 @@ try {
   });
   hostBridge?.setLlmClient(client);
   const portableMode = new URLSearchParams(location.search).get("portable") === "1";
-  const initialization = client.initialize({ bundledModelUrl: portableMode ? "./models/gemma-4-E2B-it-web.litertlm" : "" });
+  // Let v86 reach its shell before compiling/loading a cached WebGPU model.
+  // Starting both heavyweight WASM runtimes together can starve compatibility
+  // boot for minutes even though the guest is making progress.
+  llmStatus("waiting for VMVM boot");
+  const vmBootReady = shellReady
+    ? Promise.resolve()
+    : new Promise(resolve => window.addEventListener("vmvm-shell-ready", resolve, { once: true }));
+  const initialization = vmBootReady.then(() => {
+    llmStatus("loading LiteRT-LM runtime");
+    return client.initialize({ bundledModelUrl: portableMode ? "./models/gemma-4-E2B-it-web.litertlm" : "" });
+  });
   globalThis.vmvmLocalModelReady = initialization;
   globalThis.dispatchEvent(new CustomEvent("vmvm-local-model-client", {
     detail: { client, ready: initialization }
