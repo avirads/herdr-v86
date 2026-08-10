@@ -34,6 +34,11 @@ test('v86 disk progress describes the selected source rather than the event name
   assert.doesNotMatch(html, /Downloading \$\{e\.file_name\}/);
 });
 
+test('a failed download cannot be disguised by a late progress event', () => {
+  assert.match(html, /function failBoot\(message\) \{[\s\S]*?bootFailed = true;[\s\S]*?classList\.add\("error"\)/);
+  assert.match(html, /add_listener\("download-progress", \(e\) => \{\s*if \(bootFailed\) return;/);
+});
+
 test('the selected cumulative image comes from the manifest and has its own cache key', () => {
   assert.match(html, /fetch\("\.\/vm-images\.json", \{ cache: "no-cache" \}\)/);
   assert.match(html, /localStorage\.getItem\("vm\.imageTier"\)/);

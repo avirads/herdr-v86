@@ -642,6 +642,7 @@ let llmReady = false;
 let autobroReady = false;
 let shellReady = false;
 let bootProgress = 1;
+let bootFailed = false;
 function setBootProgress(value, message) {
   bootProgress = Math.max(bootProgress, Math.min(100, Math.round(value)));
   bootRing.style.setProperty("--progress", `${bootProgress}%`);
@@ -678,6 +679,7 @@ function finishBoot(showTerminal = true) {
 }
 function failBoot(message) {
   clearInterval(bootTicker);
+  bootFailed = true;
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
 }
@@ -790,7 +792,7 @@ async function finishDevApp(ready) {
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.08.10.10";
+const APP_VERSION = "2026.08.10.11";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -2171,6 +2173,7 @@ function isVmDiskDownload(fileName) {
   }
 }
 emulator.add_listener("download-progress", (e) => {
+  if (bootFailed) return;
   if (e.file_name && e.loaded != null && e.total) {
     const fraction = Math.max(0, Math.min(1, e.loaded / e.total));
     const percent = Math.round(100 * fraction);
