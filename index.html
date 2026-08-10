@@ -792,7 +792,7 @@ async function finishDevApp(ready) {
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.08.10.12";
+const APP_VERSION = "2026.08.10.13";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -1042,7 +1042,7 @@ window.addEventListener("resize", scheduleTerminalFit, { passive: true });
 requestAnimationFrame(() => requestAnimationFrame(fitTerminal));
 
 if (compatibilityBoot) {
-  status(`compatibility boot [${vmImageDisplaySource}] — loading full ${Math.round(DISK_SIZE / 1048576)} MiB disk…`);
+  status(`compatibility boot [${vmImageDisplaySource}] — range-backed disk with ATA PIO…`);
 }
 const emulator = new V86({
   wasm_path: "v86-network.wasm",
@@ -1062,7 +1062,10 @@ const emulator = new V86({
   // rootflags=noatime here: noatime is a VFS flag, not an ext4 option, and
   // the root mount rejects it (VFS panic). rc.startup remounts / noatime.
   cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic mitigations=off nopti nospectre_v1 nospectre_v2 nokaslr norandmaps quiet loglevel=4${compatibilityBoot ? " libata.force=pio4" : ""}`,
-  hda: { url: diskURL, async: !compatibilityBoot, size: DISK_SIZE },
+  // Compatibility mode changes ATA I/O to PIO in the guest kernel; it must
+  // not disable v86's range-backed disk. Preloading the whole image caused
+  // browsers to abort large requests and remain at the boot progress cap.
+  hda: { url: diskURL, async: true, size: DISK_SIZE },
   net_device: { type: "virtio" },
   uart1: true,
   screen_container: document.getElementById("screen_container"),
@@ -2182,9 +2185,6 @@ emulator.add_listener("download-progress", (e) => {
       const action = vmImageSource === "local cache" ? "Loading cached VMVM" : "Downloading VMVM";
       setBootProgress(10 + fraction * 55, `${action} [${vmImageDisplaySource}]…`);
       status(`${action.toLowerCase()} [${vmImageDisplaySource}] ${percent}%`);
-    } else {
-      setBootProgress(10 + fraction * 55, `Downloading VMVM [${vmImageDisplaySource}]…`);
-      status(`downloading VMVM [${vmImageDisplaySource}] ${percent}%`);
     }
   }
 });
@@ -2213,7 +2213,7 @@ function armNoOutputWatchdog() {
     if (!gotSerial) {
       const seconds = noOutputTimeoutMs / 1000;
       const message = compatibilityBoot
-        ? `No VM output ${seconds} seconds after compatibility-mode emulator startup. Reload to retry the full-image PIO boot.`
+        ? `No VM output ${seconds} seconds after compatibility-mode emulator startup. Reload to retry the range-backed PIO boot.`
         : `No VM output ${seconds} seconds after emulator startup. Reload to retry automatic compatibility boot.`;
       status(message);
       failBoot(message);

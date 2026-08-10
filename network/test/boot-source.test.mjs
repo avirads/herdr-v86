@@ -30,7 +30,7 @@ test('v86 disk progress describes the selected source rather than the event name
     /vmImageSource === "local cache" \? "Loading cached VMVM" : "Downloading VMVM"/,
   );
   assert.match(html, /`\$\{action\} \[\$\{vmImageDisplaySource\}\]…`/);
-  assert.match(html, /Downloading VMVM \[\$\{vmImageDisplaySource\}\]…/);
+  assert.doesNotMatch(html, /else \{\s*setBootProgress\([^\n]+Downloading VMVM/);
   assert.doesNotMatch(html, /Downloading \$\{e\.file_name\}/);
 });
 
@@ -43,7 +43,8 @@ test('the selected cumulative image comes from the manifest and has its own cach
   assert.match(html, /fetch\("\.\/vm-images\.json", \{ cache: "no-cache" \}\)/);
   assert.match(html, /localStorage\.getItem\("vm\.imageTier"\)/);
   assert.match(html, /const diskCacheKey = `vm\.diskVersion\.\$\{vmImageTier\}`/);
-  assert.match(html, /hda: \{ url: diskURL, async: !compatibilityBoot, size: DISK_SIZE \}/);
+  assert.match(html, /hda: \{ url: diskURL, async: true, size: DISK_SIZE \}/);
+  assert.match(html, /compatibility boot \[\$\{vmImageDisplaySource\}\] — range-backed disk with ATA PIO/);
 });
 
 test('the interactive VM shell starts in the project directory', () => {

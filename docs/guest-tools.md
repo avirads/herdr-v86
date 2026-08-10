@@ -18,6 +18,9 @@ partial responses through `only-if-cached`.
 The v86 `download-progress` event is emitted for cached XHR reads too, so disk
 progress is labeled from the selected VM source rather than from that event's
 name.
+Compatibility mode keeps the same range-backed disk and changes only guest ATA
+access to PIO. It does not preload the complete image, because browsers may
+abort that large request and leave startup waiting without VM output.
 
 The production portal is `https://fapstaff.com/`. Its navigation-only
 `service-worker.js` revalidates the small app shell on refresh while deliberately
