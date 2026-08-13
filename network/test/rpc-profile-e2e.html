@@ -16,7 +16,7 @@ const emulator = new V86({
   wasm_path: '../../v86-network.wasm', memory_size: 256 << 20, vga_memory_size: 2 << 20,
   bios: { url: '../../seabios.bin' }, vga_bios: { url: '../../vgabios.bin' }, bzimage: { url: '../../bzImage-network' },
   cmdline: 'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
-  hda: { url: '../../vm-network-ext4.img', async: true, size: 100663296 }, uart1: true,
+  hda: { url: '../../images/v86/vm-network-ext4.img', async: true, size: 100663296 }, uart1: true,
   screen_container: document.querySelector('#screen_container'), autostart: true,
 });
 const { V86HostBridge } = await import('../../providers/v86/host-bridge.js');

@@ -24,7 +24,7 @@ export const PROVIDERS = {
       shell: 'BusyBox sh',
       workspace: '/root/project',
     },
-    imageManifest: './vm-images.json',
+    imageManifest: './images/v86/vm-images.json',
     // v86 runs without COOP/COEP, which is why the PeerJS remote chat,
     // Moonshine voice, and the AutoBro extension bridge all work on this page.
     requiresCrossOriginIsolation: false,

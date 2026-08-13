@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import test from 'node:test';
 
 const root = new URL('../../', import.meta.url);
-const manifest = JSON.parse(await readFile(new URL('vm-images.json', root), 'utf8'));
+const manifest = JSON.parse(await readFile(new URL('images/v86/vm-images.json', root), 'utf8'));
 const html = await readFile(new URL('index.html', root), 'utf8');
 const devIndex = await readFile(new URL('network/guest/dev-template/dist/index.html', root), 'utf8');
 const devIdeIndex = await readFile(new URL('network/guest/dev-ide/index.html', root), 'utf8');
@@ -36,7 +36,7 @@ test('VM image manifest defines seven ordered tiers with an all-features Star im
   for (const [tier, size] of expected) {
     const image = manifest.tiers[tier];
     assert.equal(image.size, size);
-    assert.match(image.url, new RegExp(`^vm-${tier}-i386-ext4\\.img$`));
+    assert.match(image.url, new RegExp(`^images/v86/vm-${tier}-i386-ext4\\.img$`));
     assert.match(image.version, /^\d{4}\.\d{2}\.\d{2}\.\d+$/);
     assert.match(image.sha256, /^[a-f0-9]{64}$/);
   }

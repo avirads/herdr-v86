@@ -40,7 +40,7 @@ test('a failed download cannot be disguised by a late progress event', () => {
 });
 
 test('the selected cumulative image comes from the manifest and has its own cache key', () => {
-  assert.match(html, /fetch\("\.\/vm-images\.json", \{ cache: "no-cache" \}\)/);
+  assert.match(html, /fetch\("\.\/images\/v86\/vm-images\.json", \{ cache: "no-cache" \}\)/);
   assert.match(html, /localStorage\.getItem\("vm\.imageTier"\)/);
   assert.match(html, /const diskCacheKey = `vm\.diskVersion\.\$\{vmImageTier\}`/);
   assert.match(html, /hda: \{ url: diskURL, async: true, size: DISK_SIZE \}/);
