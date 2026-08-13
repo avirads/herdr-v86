@@ -1,0 +1,218 @@
+#!/bin/sh
+# Shelley against the page-local WebGPU model.
+#
+# Shelley is boldsoftware's coding agent: a Go server with an embedded Vue UI,
+# SQLite state, and SSE to the browser. Unlike zot it is not a TUI -- there is
+# nothing to look at in the guest terminal. You open it in the parent browser.
+#
+# Two things had to line up for it to run here at all, and both did:
+#
+#   1. It cross-compiles to linux/386 with CGO_ENABLED=0. sqlite comes from
+#      modernc.org/sqlite (pure Go), not a cgo driver, and nothing else in
+#      cmd/shelley's graph needs cgo. See build-shelley-x86.sh.
+#   2. It speaks OpenAI chat-completions to an arbitrary endpoint via a custom
+#      model, which is exactly what vm-openai-proxy serves on 11435 -- the same
+#      serial bridge to the browser tab that vmzot and vmlang use. So nothing
+#      here reaches the internet.
+#
+# The binary carries chromedp and tailscale because upstream links them. They
+# are inert in this guest (no Chrome, no tailscaled) and cost only size.
+set -eu
+
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH
+
+PORT="${VM_OPENAI_PORT:-11435}"
+# 3000 because that is the address the host's /ide/ route already proxies to
+# (10.77.0.15:3000, hardcoded there). In the ai-tools tier nothing else listens
+# on it, so Shelley is reachable through the existing path with no new plumbing.
+# The dev tier runs vmbro-dev there -- set SHELLEY_PORT to move Shelley off it.
+SHELLEY_PORT="${SHELLEY_PORT:-3000}"
+# The database lives in /tmp, which rc.startup mounts as tmpfs -- RAM, not the
+# emulated ATA disk.
+#
+# This is the whole reason the first release took over ten minutes to start and
+# never answered. Creating and migrating the database costs 9 ms of CPU when
+# measured natively (88 ms cold start against 79 ms warm), so CPU emulation
+# cannot explain a 600-second startup. What does is where the writes land:
+# SQLite fsyncs each migration, and on this guest every one of those goes
+# through v86's emulated disk and the browser's storage layer beneath it. In
+# RAM they cost nothing.
+#
+# The trade is that conversations do not survive a reboot. Set SHELLEY_DB to a
+# path under /root to keep them, and expect the slow start back.
+SHELLEY_DB="${SHELLEY_DB:-/tmp/shelley/shelley.db}"
+SHELLEY_LOG="${SHELLEY_LOG:-/tmp/shelley.log}"
+SHELLEY_SEED="${SHELLEY_SEED:-/usr/local/share/shelley/shelley.db}"
+
+mkdir -p "$(dirname "$SHELLEY_DB")"
+
+# Start from the database built with the image: already migrated, already
+# carrying the local model. Copying 180 KB beats running 37 migrations.
+#
+# Say which database is in use. Skipping the seed silently is how the first
+# release of this fix failed in the guest: an earlier interrupted run had left a
+# half-migrated /tmp/shelley/shelley.db behind, the copy was skipped because the
+# path existed, and every run after that reopened the broken file and ground
+# through the migrations the seed exists to avoid -- looking exactly like the
+# bug that had just been fixed.
+if [ "${SHELLEY_FRESH:-0}" = 1 ]; then
+  rm -f "$SHELLEY_DB" "$SHELLEY_DB-wal" "$SHELLEY_DB-shm"
+fi
+if [ ! -f "$SHELLEY_DB" ]; then
+  if [ -f "$SHELLEY_SEED" ]; then
+    cp "$SHELLEY_SEED" "$SHELLEY_DB"
+    echo "vmshelley: using the prebuilt database (migrated, local model registered)."
+  else
+    echo "vmshelley: no prebuilt database found; Shelley will create one. This is slow in the guest." >&2
+  fi
+else
+  echo "vmshelley: reusing $SHELLEY_DB. If it was left by an interrupted run it may be"
+  echo "           half-migrated and slow -- 'SHELLEY_FRESH=1 vmshelley' replaces it."
+fi
+
+# Shelley is a server with a web UI; it takes no prompt. Saying so beats
+# silently ignoring the argument, which reads as the command doing nothing.
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    -h|--help|help)
+      echo "Usage: vmshelley            # start the server, then open /ide/ in the parent browser"
+      echo "Env:   SHELLEY_PORT (default 3000), SHELLEY_DB, SHELLEY_LOG, VM_OPENAI_PORT"
+      exit 0
+      ;;
+    *)
+      echo "vmshelley: takes no arguments -- it starts a server, it is not a prompt." >&2
+      echo "           Run 'vmshelley', then open /ide/ in the parent browser." >&2
+      echo "           For a prompt in the terminal, use: vmai \"$*\"" >&2
+      exit 2
+      ;;
+  esac
+fi
+
+# No TCP stack means no bridge, no listener, and nothing to open. CheerpX
+# reports this from bind() as "address already in use", which sends you looking
+# for a port conflict that does not exist, so name it here instead.
+if [ ! -e /proc/net/tcp ]; then
+  cat >&2 <<'EOF'
+vmshelley: this guest has no TCP stack, so Shelley cannot listen.
+
+That is the CheerpX provider: it has no sockets at all, not even loopback.
+Shelley is a web server -- there is no degraded mode for it to fall back to.
+The v86 provider does support this.
+
+On CheerpX use the browser-side agents instead:
+
+  vmai "..."      one-shot completion
+  vmlang          agent tier
+EOF
+  exit 1
+fi
+
+# Same probe as vmzot, and for the same reason: /dev/tcp is bash and this is
+# BusyBox ash, where the redirect silently fails and reports "nothing
+# listening" whatever the truth.
+bridge_up() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -sf -o /dev/null --max-time 3 "http://127.0.0.1:${PORT}/v1/models"
+  else
+    grep -qi ":$(printf '%04X' "$PORT") " /proc/net/tcp 2>/dev/null
+  fi
+}
+
+if ! bridge_up; then
+  echo "vmshelley: starting the local model bridge on port ${PORT}..."
+  VM_OPENAI_TTY="${VM_OPENAI_TTY:-/dev/ttyS1}" \
+    /usr/local/libexec/vm-openai-proxy >/tmp/shelley-openai-proxy.log 2>&1 &
+  waited=0
+  while [ "$waited" -lt 50 ]; do
+    bridge_up && break
+    [ $((waited % 15)) -eq 0 ] && [ "$waited" -gt 0 ] && echo "vmshelley: waiting for the bridge (${waited}s)..."
+    waited=$((waited + 1))
+    sleep 1
+  done
+  if [ "$waited" -ge 50 ]; then
+    echo "vmshelley: the local model bridge did not start on port $PORT." >&2
+    echo "           Check /tmp/shelley-openai-proxy.log, and that a model is" >&2
+    echo "           loaded in the browser tab." >&2
+    exit 1
+  fi
+fi
+
+# Shelley with no configured provider still starts -- it always offers the
+# built-in "predictable" test model -- so an unregistered local model is not an
+# error, just an agent that cannot think. Register it once, into the DB, and
+# let Shelley own it from then on.
+echo "vmshelley: starting the server (log: $SHELLEY_LOG)"
+/usr/local/libexec/shelley --db "$SHELLEY_DB" serve --port "$SHELLEY_PORT" >"$SHELLEY_LOG" 2>&1 &
+shelley_pid=$!
+trap 'kill "$shelley_pid" 2>/dev/null || true' INT TERM
+
+# Wait ten minutes, not one, and say so while waiting.
+#
+# The first version waited 60 iterations in silence, which is how this first
+# failed in the guest: Shelley starts in about a second on real hardware and
+# far slower on an emulated 486-class CPU -- a 30 MB Go binary doing runtime
+# init, embedded-FS setup and SQLite migrations. The timeout expired, but the
+# real defect was that nothing was printed for three minutes, so a slow start
+# and a hang looked identical and the only reasonable move was Ctrl-C.
+api="http://127.0.0.1:${SHELLEY_PORT}"
+waited=0
+while [ "$waited" -lt 600 ]; do
+  curl -sf -o /dev/null --max-time 3 "$api/api/custom-models" && break
+  if ! kill -0 "$shelley_pid" 2>/dev/null; then
+    echo "vmshelley: the server exited during startup. Last lines:" >&2
+    tail -20 "$SHELLEY_LOG" >&2
+    exit 1
+  fi
+  # Emulated boots are slow, not stuck. Say which.
+  if [ $((waited % 15)) -eq 0 ] && [ "$waited" -gt 0 ]; then
+    echo "vmshelley: still starting (${waited}s). First run is the slow one -- it creates the database."
+  fi
+  waited=$((waited + 1))
+  sleep 1
+done
+
+if [ "$waited" -ge 600 ]; then
+  echo "vmshelley: the server did not answer within 10 minutes." >&2
+  echo "           It is still running as pid $shelley_pid; check $SHELLEY_LOG." >&2
+  exit 1
+fi
+echo "vmshelley: server answering after ${waited}s."
+
+# Idempotent: the DB persists across boots, so only register when absent.
+# provider_type "openai" is the chat-completions wire protocol -- NOT
+# "openai-responses", which posts to /v1/responses, a path vm-openai-proxy does
+# not serve. api_key is required to be non-empty and is then ignored: the model
+# is a browser tab away, not behind an account.
+if ! curl -sf --max-time 5 "$api/api/custom-models" | grep -q '"VMVM local WebGPU"'; then
+  curl -sf -X POST --max-time 10 "$api/api/custom-models" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "display_name": "VMVM local WebGPU",
+      "provider_type": "openai",
+      "endpoint": "http://127.0.0.1:'"${PORT}"'/v1",
+      "api_key": "local",
+      "model_name": "webgpu",
+      "max_tokens": 4096,
+      "image_support": "no",
+      "reasoning_support": "no"
+    }' >/dev/null || echo "vmshelley: could not register the local model; add it from Add Model in the UI." >&2
+fi
+
+cat <<EOF
+Shelley is serving on port ${SHELLEY_PORT} inside the guest.
+
+Open it from the parent browser at /ide/ -- that route proxies to this guest on
+port 3000. Pick "VMVM local WebGPU" in the Model: menu; every other entry needs
+credentials this guest does not have.
+
+Two things worth knowing before you judge the results:
+  - The model is whatever is loaded in the tab (Gemma E2B/E4B class). Shelley is
+    built around frontier models with strong tool calling, and a small local one
+    will drive its agent loop poorly.
+  - /ide/ needs this tab to stay open; it is the tab that owns the emulator.
+
+Ctrl-C stops the server.
+EOF
+
+wait "$shelley_pid"
