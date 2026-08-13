@@ -1,12 +1,43 @@
+# Normalise every text file to LF in the repository, and check it out as LF on
+# every platform including Windows.
+#
+# Without this a Windows checkout rewrites files to CRLF, and any tool that
+# touches one -- sed, an editor, a script -- commits the whole file back as
+# changed. Comparing this tree against its sibling showed 82 files "differing"
+# that were byte-identical apart from line endings, which buries the handful
+# that genuinely differ.
+* text=auto eol=lf
+
+# cmd.exe mis-parses LF-only multi-line constructs, so batch files keep CRLF.
+# PowerShell handles LF and is left alone.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Guest scripts run inside the Alpine VM via #!/bin/sh; a CRLF-converted
+# checkout turns the shebang into "#!/bin/sh\r", which the kernel resolves to a
+# nonexistent interpreter path and getty/exec fails silently ("can't execute").
+# This previously broke the ttyS1 RPC shell (autologin-rpc) baked into a
+# released image, which then silently dropped every AGENT_*/FETCH/CLIPBOARD/
+# LLM_* request. Kept explicit even though the rule above covers it.
+network/guest/* text eol=lf
+
+# Binary: never converted, never diffed as text. text=auto detects most of
+# these from content, but naming them removes the guesswork -- particularly the
+# extensionless Go binaries under network/guest/bin/, which are what a wrong
+# guess would corrupt.
 *.onnx binary
 *.wasm binary
 *.img binary
-# Guest scripts run inside the Alpine VM via #!/bin/sh; a CRLF-converted
-# checkout (core.autocrlf=true on Windows) turns the shebang into
-# "#!/bin/sh\r", which the kernel resolves to a nonexistent interpreter path
-# and getty/exec fails silently ("can't execute"). This previously broke the
-# ttyS1 RPC shell (autologin-rpc) baked into a released image, which in turn
-# silently dropped every AGENT_*/FETCH/CLIPBOARD/LLM_* request. Force LF
-# regardless of the checking-out machine's core.autocrlf.
-network/guest/* text eol=lf
-network/guest/*.tar.gz binary
+*.ext2 binary
+*.zip binary
+*.gz binary
+*.png binary
+*.jpg binary
+*.ttf binary
+*.exe binary
+*.litertlm binary
+herdr-i686 binary
+bzImage-network binary
+seabios.bin binary
+vgabios.bin binary
+network/guest/bin/* binary
