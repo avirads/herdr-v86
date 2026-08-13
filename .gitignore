@@ -31,7 +31,7 @@ build-dev.log
 # images that no longer matched production.
 #
 # A fresh clone therefore has vm-images.json but no images. Build or fetch them.
-vm-*.img
+images/v86/*.img
 *.ext2
 
 # CheerpX build artifacts and optional payloads, matching the other tree.

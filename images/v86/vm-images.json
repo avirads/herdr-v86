@@ -5,7 +5,7 @@
     "barebones": {
       "name": "Barebones",
       "description": "Minimal Alpine i386 and BusyBox shell.",
-      "url": "vm-barebones-i386-ext4.img",
+      "url": "images/v86/vm-barebones-i386-ext4.img",
       "size": 134217728,
       "version": "2026.08.11.4",
       "sha256": "833187ce972af9395c46cc6deceafeb6cd544b511dddb307eb74edad6581a71b"
@@ -13,7 +13,7 @@
     "essentials": {
       "name": "Essentials",
       "description": "Barebones plus networking, browser transport, curl, jq and QuickJS.",
-      "url": "vm-essentials-i386-ext4.img",
+      "url": "images/v86/vm-essentials-i386-ext4.img",
       "size": 150994944,
       "version": "2026.08.11.6",
       "sha256": "a07bffffbcb33dc6f637e0ff153ddc11af806928bcd66a32c8b79649c8464447"
@@ -21,7 +21,7 @@
     "ai-tools": {
       "name": "AI Tools",
       "description": "Essentials plus terminal tools, coding agents including browser-hosted Cline, browser tools and AI frameworks.",
-      "url": "vm-ai-tools-i386-ext4.img",
+      "url": "images/v86/vm-ai-tools-i386-ext4.img",
       "size": 159383552,
       "version": "2026.08.13.3",
       "sha256": "5240bf05a6425445d1dd1bf6daba02c529a88e488b2c4211554e9149e12c3803"
@@ -29,7 +29,7 @@
     "dev": {
       "name": "Dev",
       "description": "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.",
-      "url": "vm-dev-i386-ext4.img",
+      "url": "images/v86/vm-dev-i386-ext4.img",
       "size": 218103808,
       "version": "2026.08.11.6",
       "sha256": "df7554cbe6cd8c9548c292fcedef582143e949ec45296c0baa5ee6595a3fc6b7"
@@ -37,7 +37,7 @@
     "performance": {
       "name": "Performance testing",
       "description": "AI Tools plus Grafana k6 and k6obs OpenObserve streaming.",
-      "url": "vm-performance-i386-ext4.img",
+      "url": "images/v86/vm-performance-i386-ext4.img",
       "size": 163577856,
       "version": "2026.08.11.6",
       "sha256": "045797922ac8900aa846061999eaa5f2aaf130514e28ecd6dbf16788d8238673"
@@ -45,7 +45,7 @@
     "vapt": {
       "name": "VAPT — native scanner",
       "description": "AI Tools plus Grafana k6 and Vaptr, the self-contained native scanner. k6obs and external tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.",
-      "url": "vm-vapt-i386-ext4.img",
+      "url": "images/v86/vm-vapt-i386-ext4.img",
       "size": 170917888,
       "version": "2026.08.11.6",
       "sha256": "878a92c51829ec2b1f4870935068f6931587a572f4aeb9d1a84ad050ae126e01"
@@ -53,7 +53,7 @@
     "star": {
       "name": "Star",
       "description": "All guest features in one image: AI Tools, Dev IDE and seven templates, Grafana k6 with k6obs, and the self-contained Vaptr scanner.",
-      "url": "vm-star-i386-ext4.img",
+      "url": "images/v86/vm-star-i386-ext4.img",
       "size": 134217728,
       "version": "2026.08.10.9",
       "sha256": "6f376bbf0aba6477011981343e102f4c3ef1a0de8ad30ed32f3631580d16a6d7"

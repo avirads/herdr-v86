@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 ROOTFS_ARCHIVE="${ROOTFS_ARCHIVE:-$PROJECT_DIR/herdr-alpine-x86-rootfs.tar.gz}"
-OUTPUT_DIR="${OUTPUT_DIR:-$PROJECT_DIR}"
+OUTPUT_DIR="${OUTPUT_DIR:-$PROJECT_DIR/images/v86}"
 MOUNT_DIR="${MOUNT_DIR:-/mnt/herdr-v86-tier}"
 RIG_PACKAGE="${RIG_PACKAGE:-$PROJECT_DIR/network/guest/rig-agent-0.1.0-x86.tar.gz}"
 ZEROSTACK_PACKAGE="${ZEROSTACK_PACKAGE:-$PROJECT_DIR/network/guest/zerostack-1.5.0-x86.tar.gz}"

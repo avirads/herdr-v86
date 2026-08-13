@@ -18,7 +18,7 @@ const emulator = new V86({
   vga_bios: { url: "../../vgabios.bin" },
   bzimage: { url: "../../bzImage-network" },
   cmdline: "root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic quiet",
-  hda: { url: "../../vm-ai-tools-i386-ext4.img", async: true, size: 92274688 },
+  hda: { url: "../../images/v86/vm-ai-tools-i386-ext4.img", async: true, size: 92274688 },
   net_device: { type: "virtio" },
   uart1: true,
   screen_container: document.getElementById("screen_container"),

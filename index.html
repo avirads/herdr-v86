@@ -620,7 +620,7 @@ const VM_IMAGE_FALLBACK = {
 };
 let vmImageManifest = VM_IMAGE_FALLBACK;
 try {
-  const response = await fetch("./vm-images.json", { cache: "no-cache" });
+  const response = await fetch("./images/v86/vm-images.json", { cache: "no-cache" });
   if (response.ok) vmImageManifest = await response.json();
 } catch {}
 const bootOptions = new URLSearchParams(location.search);
