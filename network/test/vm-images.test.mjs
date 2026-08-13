@@ -16,13 +16,16 @@ const devSupervisor = await readFile(new URL('network/guest/vmbro-httpd/main.go'
 const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 
+// Sizes carry 64 MiB of headroom above contents, so adding a tool no longer
+// forces a size bump and a full re-download. star is smaller than its
+// neighbours because it is the one tier still built from this repository.
 const expected = [
-  ['barebones', 67108864],
-  ['essentials', 83886080],
-  ['ai-tools', 92274688],
-  ['dev', 99614720],
-  ['performance', 96468992],
-  ['vapt', 103809024],
+  ['barebones', 134217728],
+  ['essentials', 150994944],
+  ['ai-tools', 159383552],
+  ['dev', 218103808],
+  ['performance', 163577856],
+  ['vapt', 170917888],
   ['star', 134217728],
 ];
 
@@ -36,6 +39,19 @@ test('VM image manifest defines seven ordered tiers with an all-features Star im
     assert.match(image.url, new RegExp(`^vm-${tier}-i386-ext4\\.img$`));
     assert.match(image.version, /^\d{4}\.\d{2}\.\d{2}\.\d+$/);
     assert.match(image.sha256, /^[a-f0-9]{64}$/);
+  }
+});
+
+test('tier builder allocates exactly the sizes the manifest advertises', () => {
+  // The size of every tier is stated three times: here, in vm-images.json, and
+  // in tier_bytes(). Nothing compared the last two, so they drifted -- the
+  // builder produced 92 MB ai-tools images for months while the manifest and
+  // the live site said 152 MB. This is the check that would have caught it.
+  const block = builder.slice(builder.indexOf('tier_bytes()'));
+  for (const [tier, size] of expected) {
+    const match = block.match(new RegExp(`${tier}\\)\\s*echo\\s+(\\d+)`));
+    assert.ok(match, `tier_bytes() has no entry for ${tier}`);
+    assert.equal(Number(match[1]), size, `${tier}: builder disagrees with the manifest`);
   }
 });
 

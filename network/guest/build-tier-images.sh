@@ -33,14 +33,26 @@ tier_number() {
   esac
 }
 
+# Every tier carries 64 MiB of headroom on top of what its contents need.
+#
+# Images were previously sized just above their contents, which meant each new
+# tool required a size bump, a rebuild and a full re-download for every user --
+# and one tier shipped with under a megabyte free, caught only because df
+# reports the ext4 root reservation that a raw block count hides.
+#
+# These are not new numbers. They are what the live site has been serving since
+# 2026-08-11, while this script still produced the old sizes -- so building from
+# this repository yielded images that did not match production for six of the
+# seven tiers. star is unchanged because it was already correct: it is the one
+# tier built from here rather than from the other tree.
 tier_bytes() {
   case "$1" in
-    barebones) echo 67108864 ;;
-    essentials) echo 83886080 ;;
-    ai-tools) echo 92274688 ;;
-    dev) echo 99614720 ;;
-    performance) echo 96468992 ;;
-    vapt) echo 103809024 ;;
+    barebones) echo 134217728 ;;
+    essentials) echo 150994944 ;;
+    ai-tools) echo 159383552 ;;
+    dev) echo 218103808 ;;
+    performance) echo 163577856 ;;
+    vapt) echo 170917888 ;;
     star) echo 134217728 ;;
   esac
 }
