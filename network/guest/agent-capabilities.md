@@ -36,7 +36,7 @@ startup and again before choosing tools for a task.
 - AutoBro browser tools are exposed only when they appear in the active agent's
   tool list. Do not claim AutoBro access when those tools are absent.
 - Local WebGPU is the direct default LLM for `rig`, `zerostack`, `vmlang`,
-  `vmmastra`, and `cline`; it does not pass through the cloud router. The browser's
+  `vmmastra`; it does not pass through the cloud router. The browser's
   **Settings → Cloud AI providers** section can configure OpenAI, Anthropic,
   Gemini, and OpenAI-compatible endpoints and a separate default for each
   agent.
@@ -48,7 +48,6 @@ startup and again before choosing tools for a task.
   rig --provider work-openai --model gpt-4.1-mini 'Review this project'
   vmlang --provider claude --session review-a run 'Review this project'
   vmmastra --provider gemini --session build-a 'Implement and test the change'
-  cline --provider work-openai --session review-a 'Review and repair the project'
   zerostack --provider local-gateway --model provider/model-id
   ```
 

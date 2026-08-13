@@ -1,10 +1,9 @@
 export class VmAgentController {
-  constructor({ createAgent, createMastraAgent = null, createCodeAgent = null, createClineAgent = null, getLlmClient, getGuest, getBrowserClient = () => null, approveAction, onOutput = () => {}, onActivity = () => {}, onBusy = () => {} }) {
-    Object.assign(this, { createAgent, createMastraAgent, createCodeAgent, createClineAgent, getLlmClient, getGuest, getBrowserClient, approveAction, onOutput, onActivity, onBusy });
+  constructor({ createAgent, createMastraAgent = null, createCodeAgent = null, getLlmClient, getGuest, getBrowserClient = () => null, approveAction, onOutput = () => {}, onActivity = () => {}, onBusy = () => {} }) {
+    Object.assign(this, { createAgent, createMastraAgent, createCodeAgent, getLlmClient, getGuest, getBrowserClient, approveAction, onOutput, onActivity, onBusy });
     this.harness = null;
     this.mastraHarness = null;
     this.codeHarness = null;
-    this.clineHarness = null;
     // Matches what index.html asks for, and switchable at runtime with
     // `vmmastra tools lean|full`.
     this.mastraFullTools = true;
@@ -29,83 +28,7 @@ export class VmAgentController {
     return `${agent}:${value.sessionId || value.session || ''}:${value.provider || ''}:${value.model || ''}`;
   }
 
-  resetHarness() { this.harness = null; this.mastraHarness = null; this.codeHarness = null; this.clineHarness = null; this.completedRuns.clear(); }
-
-  async handleCline(command, value, cwd = '', route = '') {
-    if (command === 'cline_stop') {
-      if (!this.clineHarness || !this.abortController) return await this.onOutput('[cline] no task is running.');
-      this.clineHarness.stop();
-      this.abortController.abort();
-      return await this.onOutput('[cline] stop requested.');
-    }
-    if (command === 'cline_reset') {
-      this.clineHarness?.stop();
-      this.clineHarness = null;
-      this.clineRouteKey = null;
-      return await this.onOutput('[cline] conversation reset.');
-    }
-    if (command === 'cline_yolo') {
-      if (value === 'on' && !this.yolo) this.yolo = await this.approveAction('enable_yolo', {
-        scope: 'current browser page session',
-        warning: 'Cline may overwrite guest files and run arbitrary shell commands without further approval.',
-      });
-      if (value === 'off') this.yolo = false;
-      this.clineHarness?.setYolo(this.yolo);
-      return await this.onOutput(`[cline] YOLO ${this.yolo ? 'on' : 'off'} (shared with other agents).`);
-    }
-    const guest = this.getGuest();
-    if (!guest) return await this.onOutput('[cline] guest bridge is still initializing.');
-    const llmClient = this.llm('cline', route);
-    const model = llmClient?.status ? await llmClient.status().catch(() => null) : null;
-    if (command === 'cline_status') return await this.onOutput([
-      `[cline] ${this.abortController ? 'running' : 'idle'}`,
-      `  model: ${model?.modelName || 'not configured'}`,
-      `  YOLO:  ${this.yolo ? 'on' : 'off'}`,
-      `  session: ${this.clineHarness ? 'active' : 'not started'}`,
-    ].join('\n'));
-    if (!this.createClineAgent) return await this.onOutput('[cline] tier is not available in this build.');
-    if (!llmClient) return await this.onOutput('[cline] no model is configured; load a local model or select a cloud provider in Settings.');
-    if (this.abortController) return await this.onOutput('[cline] another agent task is running.');
-    const key = this.routeKey('cline', route);
-    const workspace = String(cwd || '/root/project');
-    // A plain `cline TASK` is an independent task. Retaining the completed
-    // tool transcript makes the small local model progressively less likely
-    // to emit a valid next tool call. Conversation reuse is explicit through
-    // `cline continue TASK`.
-    if (command === 'cline' || this.clineRouteKey !== key || this.clineWorkspace !== workspace) {
-      this.clineHarness?.stop();
-      this.clineHarness = null;
-    }
-    this.clineRouteKey = key;
-    this.clineWorkspace = workspace;
-    this.abortController = new AbortController();
-    await this.onBusy(true);
-    try {
-      this.clineHarness ||= await this.createClineAgent({
-        guest, llmClient, workspace, yolo: this.yolo,
-        approveAction: (operation, detail) => this.approveAction(operation, detail),
-        onActivity: event => {
-          this.onActivity(event);
-          if (event?.type === 'run-started') this.onOutput('[cline] working…');
-          else if (event?.type === 'retry') this.onOutput(`[cline] model returned no tool call; retrying (${event.iteration}/12)…`);
-          else if (event?.tool) this.onOutput(`[cline] tool: ${event.tool}`);
-        },
-      });
-      this.clineHarness.setYolo(this.yolo);
-      const result = command === 'cline_continue'
-        ? await this.clineHarness.continue(value)
-        : await this.clineHarness.run(value);
-      if (result?.status === 'failed') throw result.error || new Error('Cline could not complete the task with a valid tool call.');
-      if (result?.status === 'aborted') throw new Error('Cline task was aborted.');
-      const summary = result?.outputText || result?.messages?.at(-1)?.content?.find(part => part.type === 'text')?.text;
-      await this.onOutput(String(summary || '[cline] task completed without a text summary.'));
-    } catch (error) {
-      await this.onOutput(`[cline] error: ${error.message}`);
-    } finally {
-      this.abortController = null;
-      await this.onBusy(false);
-    }
-  }
+  resetHarness() { this.harness = null; this.mastraHarness = null; this.codeHarness = null; this.completedRuns.clear(); }
 
   // Everything the Mastra harness can do, reachable from `vmmastra` in the guest
   // shell. Subcommands arrive as separate AGENT_MASTRA_* operations, matching
@@ -375,7 +298,6 @@ export class VmAgentController {
   }
 
   async handle(command, value = '', cwd = '', route = '') {
-    if (command.startsWith('cline')) return await this.handleCline(command, value, cwd, route);
     if (command === 'status') {
       const llm = this.llm('vmlang', route);
       const model = llm ? await llm.status().catch(() => null) : null;
@@ -393,8 +315,6 @@ export class VmAgentController {
       this.mastraHarness = null;
       this.codeHarness?.reset();
       this.codeHarness = null;
-      this.clineHarness?.stop();
-      this.clineHarness = null;
       this.completedRuns.clear();
       this.yolo = true;
       this.conversationActive = false;

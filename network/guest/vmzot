@@ -8,9 +8,9 @@
 # nothing here reaches the internet: the prompt goes guest -> serial -> tab, and
 # the tokens come back the same way.
 #
-# This is why zot fits where the Cline CLI does not. zot is pure Go and
-# cross-compiles to linux/386, which is all either VM provider can execute;
-# Cline ships native binaries for x64 and arm64 only.
+# zot is pure Go and cross-compiles to linux/386, which is all either VM
+# provider can execute. That is the constraint every guest agent has to meet:
+# tools shipping only x64 and arm64 binaries cannot run here at all.
 #
 # Both providers ship this, but only v86 can run it today: the CheerpX guest has
 # no TCP stack at all, not even loopback, so `nc -lk` cannot listen and zot has
