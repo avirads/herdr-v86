@@ -1,0 +1,20 @@
+#!/bin/sh
+# CheerpX port of network/guest/vmclip. Ported changes are marked "CheerpX:".
+set -eu
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+case "${1:-read}" in
+  -h|--help|help) echo 'usage: vmclip [read|write]'; echo 'Read the browser clipboard, or write stdin to it.' ;;
+  read)
+    # CheerpX: no stty juggling — the reply arrives through vmbro-rpc rather
+    # than on this process's stdin, so terminal echo was never involved.
+    vmbro-rpc CLIPBOARD_READ | while IFS="$(printf '\t')" read -r prefix response_id kind value; do
+      [ "$prefix" = '__V86RPC_RESPONSE__' ] || continue
+      [ "$kind" = DATA ] && printf %s "$value" | base64 -d
+      [ "$kind" = END ] && break
+      if [ "$kind" = ERROR ]; then printf %s "$value" | base64 -d >&2; exit 1; fi
+    done ;;
+  write)
+    value=$(cat)
+    vmbro-rpc CLIPBOARD_WRITE "$(b64 "$value")" > /dev/null ;;
+  *) echo 'usage: vmclip [read|write]' >&2; exit 2 ;;
+esac

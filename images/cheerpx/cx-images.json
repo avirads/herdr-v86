@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "defaultTier": "debian-dev",
+  "note": "CheerpX images are build artifacts, not committed sources. Build one with: sh images/cheerpx/build-ext2.sh. Sizes are the apparent ext2 size; the file is sparse. sha256 is not reproducible across builds because mke2fs embeds a random filesystem UUID, so it identifies one published artifact rather than a function of the inputs.",
+  "tiers": {
+    "debian-dev": {
+      "name": "Debian dev",
+      "description": "Debian bookworm (i386) with bash, GNU coreutils, git, jq, make, python3, plus the v86 dev stack (qjs, esbuild, vmbro-httpd), the vmbro guest bridge, and vmzot (zot coding agent; needs a TCP stack, so it reports why it cannot run here).",
+      "url": "images/cheerpx/vmbro-debian-i386.ext2",
+      "size": 469762048,
+      "version": "2026.08.11.5",
+      "sha256": "acd145692518066d5ca932e36a809cdb14efd7346520f5149079ff1ae9861a20",
+      "build": {
+        "image": "i386/debian:bookworm-slim",
+        "arch": "386",
+        "sizeMb": 448,
+        "blockSize": 4096,
+        "packages": "git jq make patch less nano procps xz-utils ca-certificates file diffutils python3 netcat-openbsd",
+        "note": "Packages are unpacked from .deb archives without apt, so maintainer scripts never run. Smoke-test every addition on a FRESH boot with stdin closed: one hung process poisons everything queued behind it. Known bad: ripgrep hangs. Verified working: python3, qjs, esbuild, vmbro-httpd, git, jq, make.",
+        "inodeSize": 128,
+        "devStack": "qjs (extracted from the v86 dev image, musl-linked), esbuild, vmbro-httpd, dev-template project"
+      }
+    }
+  }
+}

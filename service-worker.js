@@ -38,8 +38,11 @@ self.addEventListener("fetch", event => {
 
   // VM disks, model payloads, guest proxies, and live network transports have
   // their own lifecycle. Never let the app-shell worker cache or intercept them.
-  if (/\.(?:img|litertlm|task|zip)(?:$|\?)/i.test(requestedUrl.pathname) ||
-      /^\/(?:models|downloads|agent\/dist|shared|providers|ide|preview|v1|peerjs|plu)(?:\/|$)/.test(requestedUrl.pathname)) return;
+  // .ext2 is the CheerpX disk, the counterpart to v86's .img. cx/ runs its own
+  // service worker for the live preview and must not be intercepted by this
+  // one; vendor/ holds the 3.2 MB CheerpX runtime, which is versioned by path.
+  if (/\.(?:img|ext2|litertlm|task|zip)(?:$|\?)/i.test(requestedUrl.pathname) ||
+      /^\/(?:models|downloads|agent\/dist|shared|providers|cx|vendor|ide|preview|v1|peerjs|plu)(?:\/|$)/.test(requestedUrl.pathname)) return;
 
   if (request.mode !== "navigate") {
     if (!["script", "style", "image", "font", "manifest"].includes(request.destination)) return;

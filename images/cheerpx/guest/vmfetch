@@ -1,0 +1,71 @@
+#!/bin/sh
+# CheerpX port of network/guest/vmfetch. Ported changes are marked "CheerpX:".
+# Option parsing, defaults, limits, output handling and exit codes are identical
+# to the v86 tool, so docs/guest-tools.md stays true for both providers.
+set -eu
+
+usage() {
+  echo "usage: vmfetch [-o FILE] [-X METHOD] [-H 'NAME: VALUE'] [-d DATA] URL" >&2
+  echo "Browser-backed HTTP client; HTTPS/localhost only, CORS applies, 16 MiB response limit." >&2
+  exit "${1:-2}"
+}
+
+output=""
+method=GET
+body=""
+headers=''
+[ "${1:-}" = --help ] && usage 0
+while getopts 'o:X:H:d:h' option; do
+  case "$option" in
+    o) output=$OPTARG ;;
+    X) method=$OPTARG ;;
+    H) headers="${headers}${headers:+
+}${OPTARG}" ;;
+    d) body=$OPTARG; [ "$method" = GET ] && method=POST ;;
+    h) usage 0 ;;
+    *) usage 2 ;;
+  esac
+done
+shift $((OPTIND - 1))
+[ "$#" -eq 1 ] || usage 2
+url=$1
+[ -n "$output" ] || output=$(basename "${url%%\?*}")
+[ -n "$output" ] || output=index.html
+
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+tmp="/tmp/vmfetch-response.$$"
+trap 'rm -f "$tmp"' EXIT INT TERM
+
+# CheerpX: request and reply both travel through vmbro-rpc, so the /dev/tty
+# write and the stty echo suppression the v86 tool needs are gone.
+#
+# The reply is consumed in a subshell (it is the right-hand side of a pipe), so
+# the status cannot be assigned back to this shell directly — it is written to a
+# file and read afterwards. The v86 tool reads from stdin in the current shell
+# and does not have this constraint.
+status_file="/tmp/vmfetch-status.$$"
+trap 'rm -f "$tmp" "$status_file"' EXIT INT TERM
+echo 1 > "$status_file"
+
+vmbro-rpc FETCH "$(b64 "$method")" "$(b64 "$url")" "$(b64 "$headers")" "$(b64 "$body")" \
+  | while IFS="$(printf '\t')" read -r prefix response_id kind value; do
+      [ "$prefix" = '__V86RPC_RESPONSE__' ] || continue
+      case "$kind" in
+        META) printf %s "$value" | base64 -d >&2; echo >&2 ;;
+        DATA) printf %s "$value" | base64 -d >> "$tmp" ;;
+        ERROR) printf 'vmfetch: ' >&2; printf %s "$value" | base64 -d >&2; echo >&2; echo error > "$status_file"; break ;;
+        END) echo "$value" > "$status_file"; break ;;
+      esac
+    done
+
+status=$(cat "$status_file")
+[ "$status" = error ] && exit 1
+
+if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
+  if [ "$output" = - ]; then cat "$tmp"; rm -f "$tmp"; else mv "$tmp" "$output"; echo "saved $output"; fi
+  rm -f "$status_file"
+  trap - EXIT INT TERM
+  exit 0
+fi
+echo "vmfetch: HTTP status $status" >&2
+exit 22

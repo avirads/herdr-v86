@@ -1,0 +1,39 @@
+#!/bin/sh
+# CheerpX port of network/guest/rig-vm.
+#
+# Two changes from the v86 tool:
+#   - the request goes through vmbro-rpc instead of a raw write to /dev/ttyS0
+#   - the route JSON is built with printf rather than jq, which Debian slim does
+#     not ship (the Alpine guest image installs it)
+#
+# Still fire-and-forget, like upstream: this posts the task and exits, and the
+# agent's output arrives asynchronously in the terminal. The host answers the RPC
+# immediately so this does not block for the vmbro-rpc timeout.
+set -eu
+
+op=RIG
+provider=''
+model=''
+session=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --codeact) op=CODEACT; shift ;;
+    --provider) [ "$#" -ge 2 ] || exit 2; provider=$2; shift 2 ;;
+    --model) [ "$#" -ge 2 ] || exit 2; model=$2; shift 2 ;;
+    --session) [ "$#" -ge 2 ] || exit 2; session=$2; shift 2 ;;
+    -h|--help) echo 'usage: rig [--codeact] [--provider NAME] [--model MODEL] [--session ID] TASK...'; exit 0 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+[ "$#" -gt 0 ] || { echo 'usage: rig [--codeact] [--provider NAME] [--model MODEL] [--session ID] TASK...' >&2; exit 2; }
+
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+# Only these three fields, and each is a plain identifier here, so escaping
+# reduces to rejecting the characters that would break out of a JSON string.
+json_escape() { printf %s "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+route=$(printf '{"provider":"%s","model":"%s","sessionId":"%s"}' \
+  "$(json_escape "$provider")" "$(json_escape "$model")" "$(json_escape "$session")")
+
+vmbro-rpc "AGENT_$op" "$(b64 "$*")" "" "$(b64 "$route")" > /dev/null
+echo '[rig] submitted to the browser agent.'

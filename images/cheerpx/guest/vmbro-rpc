@@ -1,0 +1,59 @@
+#!/bin/sh
+# vmbro-rpc OP [BASE64_ARG...] — one host-bridge round trip, CheerpX transport.
+#
+# Prints the host's reply as __V86RPC_RESPONSE__ lines on stdout, byte-identical
+# to what the v86 serial bridge writes to the guest tty. That is the whole point:
+# porting a vm* tool to CheerpX becomes a one-line change,
+#
+#   -  printf '__V86RPC__\tCLIPBOARD_READ\t%s\n' "$id" > /dev/tty
+#   -  while ... read -r prefix response_id kind value; do ...   # from stdin
+#   +  vmbro-rpc CLIPBOARD_READ | while ... read -r prefix response_id kind value; do ...
+#
+# rather than a rewrite of each tool's response parsing.
+#
+# Transport: append one request line to the out-mount queue, then wait for the
+# host to drop a per-request response file on the in-mount. There is no shared
+# tty under CheerpX — every cx.run() is its own process — so a file queue takes
+# the UART's place.
+set -eu
+
+IN_DIR=${VMBRO_IN:-/vmbro/in}
+OUT_DIR=${VMBRO_OUT:-/vmbro/out}
+QUEUE="$OUT_DIR/rpc.queue"
+TIMEOUT=${VMBRO_RPC_TIMEOUT:-120}
+
+[ "$#" -ge 1 ] || { echo 'usage: vmbro-rpc OP [BASE64_ARG...]' >&2; exit 2; }
+
+operation=$1
+shift
+
+# Unique per process AND per call: the host is genuinely parallel, so two tools
+# started in the same second must not collide.
+id="$$-$(awk 'BEGIN{srand();printf "%06x", rand()*16777215}')"
+case "$id" in *[!A-Za-z0-9_-]*) echo 'bad request id' >&2; exit 2;; esac
+
+TAB=$(printf '\t')
+line="$id$TAB$operation"
+for argument in "$@"; do line="$line$TAB$argument"; done
+
+# A single short append is atomic on POSIX (O_APPEND, under PIPE_BUF), but take
+# the lock when flock exists so a large FETCH body cannot interleave.
+if command -v flock >/dev/null 2>&1; then
+  ( flock 9; printf '%s\n' "$line" >> "$QUEUE" ) 9>>"$QUEUE.lock"
+else
+  printf '%s\n' "$line" >> "$QUEUE"
+fi
+
+response="$IN_DIR/rpc-$id.res"
+waited=0
+while [ ! -f "$response" ]; do
+  sleep 0.05
+  waited=$((waited + 1))
+  if [ "$waited" -ge $((TIMEOUT * 20)) ]; then
+    echo "vmbro-rpc: no response from the browser after ${TIMEOUT}s (is the page still open?)" >&2
+    exit 1
+  fi
+done
+
+cat "$response"
+rm -f "$response" 2>/dev/null || true
