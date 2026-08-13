@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import test from 'node:test';
 
 const root = new URL('../../', import.meta.url);
-const build = await readFile(new URL('network/guest/build-network-image.sh', root), 'utf8');
+const build = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 const docs = await readFile(new URL('network/guest/agent-capabilities.md', root), 'utf8');
 const controller = await readFile(new URL('network/browser/vmagent-controller.js', root), 'utf8');
 const mastraSource = await readFile(new URL('agent/src/mastra-browser.js', root), 'utf8');

@@ -1,0 +1,3 @@
+src/main.ts
+src/styles.css
+dist/index.html

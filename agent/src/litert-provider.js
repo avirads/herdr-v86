@@ -1,3 +1,5 @@
+import { parseNamedCall, relaxedJsonParse, stripToolDelimiters } from './tool-call-syntax.js';
+
 // AI SDK `LanguageModelV2` provider over the page-local LiteRT-LM WebGPU
 // client (and, unchanged, the AutoBro `WebGpuLlmClient` — both expose the same
 // `chat(body)` / optional `chatStream(body, onChunk)` surface).
@@ -87,6 +89,9 @@ export function convertPrompt(prompt) {
 // Tool protocol
 // ---------------------------------------------------------------------------
 
+// Shared with litert-lm-client.js so the rig and vmlang tiers accept the same
+// set of model-native call shapes. See that module for the observed grammar.
+
 // Emitted shape matches `completionWithToolCall()` in litert-lm-client.js, so
 // the contract is identical whether the client normalized the reply or we do.
 export function toolProtocolInstruction(tools, toolChoice) {
@@ -147,14 +152,20 @@ function parseLooseJson(text) {
   const trimmed = String(text ?? '').trim();
   if (!trimmed) return undefined;
   const unfenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] ?? trimmed;
-  // Strip model-native delimiter tokens like <tool_call|> that the model
-  // appends after our JSON protocol object.
-  const stripped = unfenced.replace(/<tool_call\|>|<tool_result\|>|<\|[a-z_]+\|>$/g, '');
+  // Strip model-native delimiter tokens that wrap our JSON protocol object.
+  // The old pattern only caught trailing ones, so a reply opening with
+  // `<|tool_call>` never parsed and the whole turn was lost as prose.
+  const { text: delimiterFree } = stripToolDelimiters(unfenced);
+  const stripped = delimiterFree.replace(/<tool_result\|>|<\|[a-z_]+\|>$/g, '').trim();
   try {
     return JSON.parse(stripped);
   } catch {
     /* fall through */
   }
+  // `call:write_file{…}` puts the tool name outside the object, so no amount
+  // of brace repair recovers it — the name is simply not in the JSON.
+  const named = parseNamedCall(stripped);
+  if (named) return { tool_call: named };
   // The model sometimes base64-encodes the protocol object instead of
   // escaping its content. Decode and recurse only when the payload decodes
   // into something that looks like a JSON object we can act on.
@@ -182,11 +193,14 @@ function parseLooseJson(text) {
       try {
         return JSON.parse(candidate + '}');
       } catch {
-        /* not JSON */
+        /* fall through to the relaxed parse */
       }
     }
   }
-  return undefined;
+  // Last resort: bare object keys and single-quoted strings, which is how the
+  // model writes the object when it uses its own call syntax rather than ours.
+  // Kept last so a strictly-valid reply is never routed through a repair.
+  return relaxedJsonParse(stripped);
 }
 
 function normalizeArguments(value) {

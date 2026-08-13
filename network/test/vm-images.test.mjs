@@ -6,6 +6,13 @@ const root = new URL('../../', import.meta.url);
 const manifest = JSON.parse(await readFile(new URL('vm-images.json', root), 'utf8'));
 const html = await readFile(new URL('index.html', root), 'utf8');
 const devIndex = await readFile(new URL('network/guest/dev-template/dist/index.html', root), 'utf8');
+const devIdeIndex = await readFile(new URL('network/guest/dev-ide/index.html', root), 'utf8');
+const devIdeApp = await readFile(new URL('network/guest/dev-ide/app.js', root), 'utf8');
+const devIdeStyles = await readFile(new URL('network/guest/dev-ide/styles.css', root), 'utf8');
+const mastraAstro = await readFile(new URL('network/guest/templates/mastra-hono-astro/src/pages/index.astro', root), 'utf8');
+const mastraBundle = await readFile(new URL('agent/dist/mastra-agent.js', root), 'utf8');
+const clineBundle = await readFile(new URL('agent/dist/cline-agent.js', root), 'utf8');
+const devSupervisor = await readFile(new URL('network/guest/vmbro-httpd/main.go', root), 'utf8');
 const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 
@@ -16,11 +23,12 @@ const expected = [
   ['dev', 99614720],
   ['performance', 96468992],
   ['vapt', 103809024],
+  ['star', 134217728],
 ];
 
-test('VM image manifest defines six ordered cumulative tiers', () => {
+test('VM image manifest defines seven ordered tiers with an all-features Star image', () => {
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.defaultTier, 'ai-tools');
+  assert.equal(manifest.defaultTier, 'barebones');
   assert.deepEqual(Object.keys(manifest.tiers), expected.map(([tier]) => tier));
   for (const [tier, size] of expected) {
     const image = manifest.tiers[tier];
@@ -41,24 +49,36 @@ test('built image files match manifest byte sizes', async () => {
 test('tier builder applies each preceding installer and validates boundaries', () => {
   assert.match(builder, /number >= 2 \)\) && install_essentials/);
   assert.match(builder, /number >= 3 \)\) && install_ai_tools/);
-  assert.match(builder, /\[\[ "\$tier" == dev \]\] && install_dev/);
-  assert.match(builder, /\[\[ "\$tier" == performance \|\| "\$tier" == vapt \]\] && install_performance/);
-  assert.match(builder, /\[\[ "\$tier" == vapt \]\] && install_vapt/);
+  assert.match(builder, /\[\[ "\$tier" == dev \|\| "\$tier" == star \]\] && install_dev/);
+  assert.match(builder, /\[\[ "\$tier" == performance \|\| "\$tier" == vapt \|\| "\$tier" == star \]\] && install_performance/);
+  assert.match(builder, /\[\[ "\$tier" == vapt \|\| "\$tier" == star \]\] && install_vapt/);
   assert.match(builder, /! command -v curl; ! command -v vmagent-rpc/);
   assert.match(builder, /! command -v herdr; ! command -v rig; ! command -v git/);
   assert.match(builder, /! command -v k6/);
   assert.match(builder, /! command -v nuclei/);
   assert.match(builder, /command -v vaptr/);
   assert.match(builder, /command -v esbuild vmbro-httpd vmbro-dev/);
+  assert.match(builder, /command -v vmai vmllm vmlang vmmastra cline vmjs vmbench/);
   assert.match(builder, /test -f \/root\/project\/src\/pages\/index\.astro/);
   assert.match(builder, /for tool in httpx katana urlfinder ffuf interactsh-client hakrawler gospider nuclei/);
   assert.match(builder, /test -f \/opt\/vaptr\/configs\/native\.json/);
 });
 
+test('Cline is a lazy browser bundle with only its launcher installed in AI Tools images', () => {
+  assert.match(html, /createClineVMAgent/);
+  assert.match(html, /import\(`\.\/agent\/dist\/cline-agent\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\)/);
+  assert.match(html, /import\(`\.\/network\/browser\/vmagent-controller\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\)/);
+  assert.match(html, /import\(`\.\/network\/browser\/litert-lm-client\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\)/);
+  assert.match(clineBundle, /vmvm-cline/);
+  assert.match(builder, /cline-vm.*\/usr\/local\/bin\/cline/);
+});
+
 test('Settings selects a manifest image and warns before restart', () => {
   assert.match(html, /id="vm-image-tier"/);
   assert.match(html, /"dev": \{ name: "Dev".*url: "vm-dev-i386-ext4\.img".*size: 99614720/);
+  assert.match(html, /"star": \{ name: "Star".*url: "vm-star-i386-ext4\.img".*size: 134217728/);
   assert.match(html, /dev: "Dev tier · includes AI Tools"/);
+  assert.match(html, /star: "Star tier · includes Dev, Performance and VAPT"/);
   assert.match(html, /id="apply-vm-image"[^>]*>Apply &amp; restart/);
   assert.match(html, /Each image has an independent guest filesystem/);
   assert.match(html, /localStorage\.setItem\("vm\.imageTier", nextTier\)/);
@@ -66,17 +86,94 @@ test('Settings selects a manifest image and warns before restart', () => {
 });
 
 test('Dev tier starts and opens its app automatically', () => {
-  assert.match(startup, /\[ "\$\(cat \/etc\/vmvm\/tier 2>\/dev\/null\)" = "dev" \]/);
+  assert.match(startup, /dev\|star\)/);
   assert.match(startup, /\(sleep 5; cd \/root\/project && PORT=3000 \/usr\/local\/bin\/vmbro-dev >\/var\/log\/vmbro-dev\.log 2>&1\) &/);
   // The current VM tab enters the IDE only once the guest server is listening.
-  assert.match(html, /if \(vmImageTier === "dev"\) startDevAppPhase\(\)/);
+  assert.match(html, /const hasDevEnvironment = vmImageTier === "dev" \|\| vmImageTier === "star"/);
+  assert.match(html, /if \(hasDevEnvironment\) startDevAppPhase\(\)/);
   assert.match(html, /new URL\("\/ide\/", location\.origin\)\.href/);
   assert.match(html, /target\.searchParams\.set\("theme", document\.documentElement\.dataset\.theme \|\| "dark"\)/);
-  assert.match(html, /frame\.src = target\.href/);
-  assert.match(html, /frame\.hidden = false/);
+  assert.match(html, /devFrame\.src = target\.href/);
   assert.match(html, /finishBoot\(false\)/);
   assert.match(html, /finishDevApp\(true\)/);
+	assert.match(html, /await devNetworkReady/);
+	assert.match(html, /fetch\(DEV_APP_URL, \{ cache: "no-store" \}\)/);
+  assert.match(html, /the public IDE route did not become reachable/);
+  assert.match(html, /v86-websocket-network\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}/);
+	assert.match(html, /function finishDevInTerminal\(message\)/);
+	assert.match(html, /Shell ready — Dev IDE network unavailable/);
+	assert.match(html, /continuing in terminal/);
+	assert.match(html, /session\.active[\s\S]*public IDE is already in use by another VM tab/);
   assert.doesNotMatch(html, /Open Dev App|id="open-dev-app"|devAppButton/);
+});
+
+test('Dev and Star can switch between IDE and terminal without restarting the VM', () => {
+  assert.match(html, /id="toggle-dev-view"[^>]*hidden/);
+  assert.match(html, /function setDevView\(view\)/);
+  assert.match(html, /devFrame\.hidden = showTerminal/);
+  assert.match(html, /termHost\.style\.display = showTerminal \? "" : "none"/);
+  assert.match(html, /termHost\.style\.visibility = showTerminal \? "visible" : "hidden"/);
+  assert.match(html, /scheduleTerminalFit\(\)/);
+  assert.match(html, /Terminal — same running VM/);
+  assert.match(html, /devViewButton\.onclick = \(\) => setDevView\(devFrame\.hidden \? "ide" : "terminal"\)/);
+  assert.doesNotMatch(html, /toggle-dev-view[\s\S]{0,1000}location\.reload/);
+});
+
+test('Dev UI exposes the live VM terminal beside its Console view', () => {
+  assert.match(devIdeIndex, /id="console-tab"[^>]*>Console</);
+  assert.match(devIdeIndex, /id="terminal-tab"[^>]*>Terminal</);
+  assert.match(devIdeIndex, /id="embedded-terminal"[^>]*role="tabpanel"/);
+  assert.match(devIdeIndex, /src="\/xterm\.js"/);
+  assert.match(devIdeApp, /new Terminal\(/);
+  assert.match(devIdeApp, /function selectOutputView\(view\)/);
+  assert.match(devIdeApp, /type: 'vmvm-terminal-input'/);
+  assert.match(devIdeApp, /type: 'vmvm-terminal-ready'/);
+  assert.match(html, /type === "vmvm-terminal-input"/);
+  assert.match(html, /handleTerminalData\(event\.data\.data\)/);
+  assert.match(html, /DEV_TERMINAL_HISTORY_LIMIT = 65536/);
+  assert.match(html, /type: "vmvm-terminal-output"/);
+  assert.match(devIdeStyles, /\.embedded-terminal \{/);
+});
+
+test('Dev UI gives the output pane more space and focuses Terminal on load', () => {
+  assert.match(devIdeIndex, /id="terminal-tab" class="output-tab active"[^>]*aria-selected="true"/);
+  assert.match(devIdeIndex, /id="log-output"[^>]*hidden/);
+  assert.match(devIdeStyles, /\.log-pane \{[^}]*flex: 0 0 clamp\(260px, 34vh, 390px\);[^}]*min-height: 240px;/s);
+  assert.match(devIdeStyles, /\.log-output \{[^}]*flex: 1 1 auto;[^}]*min-height: 0;/s);
+  assert.match(devIdeApp, /cursor: '#fbbf24'/);
+  assert.match(devIdeApp, /requestAnimationFrame\(\(\) => selectOutputView\('terminal'\)\)/);
+  assert.match(devIdeApp, /embeddedTerm\.scrollToBottom\(\);/);
+  assert.match(devIdeApp, /embeddedTerm\.focus\(\);/);
+});
+
+test('Dev IDE autosaves editor changes so Astro rebuild and preview reload can run', () => {
+  assert.match(devIdeApp, /editor\.onDidChangeModelContent\(\(\) =>/);
+  assert.match(devIdeApp, /autoSaveTimer = setTimeout\(\(\) => \{/);
+  assert.match(devIdeApp, /if \(activeTab === path && openTabs\.get\(path\)\?\.dirty\) saveActive\(\)/);
+  assert.match(devIdeApp, /eventsSource\.addEventListener\('reload'/);
+  assert.match(devIdeApp, /reloadPreview\(\)/);
+  assert.match(devSupervisor, /func \(s \*supervisor\) handleWorkspaceChange\(\)/);
+  assert.match(devSupervisor, /if err := s\.startApp\(\); err != nil \{/);
+  assert.match(devSupervisor, /rebuild finished — app server restarted/);
+	assert.match(devSupervisor, /cp " \+ ws \+ "\/src\/pages\/index\.astro " \+ ws \+ "\/dist\/index\.html"/);
+	assert.doesNotMatch(mastraAstro, /^---$/m);
+});
+
+test('Mastra Astro reuses the VMVM model and reveals setup only when none is loaded', () => {
+  assert.match(html, /globalThis\.vmvmLocalModelClient = client/);
+  assert.match(html, /globalThis\.vmvmLocalModelReady = initialization/);
+  assert.match(html, /vmvm-local-model-client/);
+  assert.match(mastraAstro, /id="model-setup"[^>]*hidden/);
+  assert.match(mastraAstro, /sharedHost\.addEventListener\('vmvm-local-model-client'/);
+  assert.match(mastraAstro, /sharedClient = announced\?\.client/);
+  assert.match(mastraAstro, /if \(client\.modelName\) \{[\s\S]*setReady\(client\.modelName\);[\s\S]*return;/);
+  assert.match(mastraAstro, /else showModelSetup\(\)/);
+  assert.match(mastraAstro, /No downloaded model was found/);
+  assert.match(mastraAstro, /import\('\/network\/browser\/litert-lm-client\.js'\)/);
+  assert.doesNotMatch(mastraAstro, /\/vmmastra\/network\/browser\/litert-lm-client\.js/);
+	assert.match(mastraAstro, /import\('\/agent\/dist\/mastra-agent\.js\?v=2026\.08\.03\.1'\)/);
+  assert.doesNotMatch(mastraAstro, /\/vmmastra\/agent\/mastra-agent\.js/);
+	assert.match(mastraBundle, /export \{\s*Agent,[\s\S]*createLiteRt,[\s\S]*createMastraVMAgent/);
 });
 
 test('Dev IDE inherits and persists the VMVM theme', () => {
@@ -95,18 +192,28 @@ test('Dev tier boot progress reflects the app compile/serve phase', () => {
 });
 
 test('Dev tier allows the larger image enough time to produce VM output', () => {
-  assert.match(html, /vmImageTier === "dev" \? 300000 : 120000/);
+  assert.match(html, /compatibilityBoot \? 300000 : \(hasDevEnvironment \? 300000 : 120000\)/);
+  assert.match(html, /emulator-ready", \(\) => \{\s*armNoOutputWatchdog\(\)/);
+  assert.match(html, /after compatibility-mode emulator startup/);
   assert.match(html, /first boot may take several minutes/);
+});
+
+test('Star combines every specialized guest installer and behavior', () => {
+  assert.match(builder, /star\) echo 6/);
+  assert.match(builder, /star\) echo 134217728/);
+  assert.match(builder, /if \[\[ "\$tier" == dev \|\| "\$tier" == star \]\]/);
+  assert.match(builder, /if \[\[ "\$tier" == performance \|\| "\$tier" == vapt \|\| "\$tier" == star \]\]/);
+  assert.match(builder, /if \[\[ "\$tier" == vapt \|\| "\$tier" == star \]\]/);
+  assert.match(startup, /dev\|star\)/);
 });
 
 test('VMVM branding, themes, and refresh controls are present', () => {
   assert.match(html, /assets\/vmvm-logo\.png/);
   assert.match(html, /id="toggle-theme"/);
   assert.match(html, /localStorage\.setItem\("vm\.theme", next\)/);
-  assert.match(html, /id="refresh-app"/);
-  assert.match(html, /id="share-ide"/);
-  assert.match(html, /navigator\.clipboard\.writeText\(shareURL\)/);
-  assert.match(html, /aria-label="Settings">⚙/);
+  assert.doesNotMatch(html, /id="refresh-app"/);
+  assert.doesNotMatch(html, /id="share-ide"/);
+  assert.match(html, /aria-label="Settings">\s*<svg/);
 });
 
 test('host terminal control commands are hidden from xterm', () => {

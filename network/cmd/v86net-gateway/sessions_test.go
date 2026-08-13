@@ -77,6 +77,21 @@ func TestAllowedOriginMayCreatePublicSession(t *testing.T) {
 	}
 }
 
+func TestSessionReportsAnOccupiedNativeGateway(t *testing.T) {
+	gateway := &gateway{
+		adminToken: "admin-secret", defaultTTL: time.Minute, maxTTL: time.Hour,
+		sessions: newSessionStore(),
+	}
+	gateway.active.Store(true)
+	request := httptest.NewRequest(http.MethodPost, "/v1/sessions", strings.NewReader("{}"))
+	request.Header.Set("Authorization", "Bearer admin-secret")
+	response := httptest.NewRecorder()
+	gateway.handleSessions(response, request)
+	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), `"active":true`) {
+		t.Fatalf("occupied gateway was not reported: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestSessionRevocation(t *testing.T) {
 	store := newSessionStore()
 	created, err := store.create("", time.Minute)

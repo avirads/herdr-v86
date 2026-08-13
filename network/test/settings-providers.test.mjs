@@ -17,9 +17,9 @@ test('provider controls are grouped at the top of Settings', () => {
   assert.match(settings, /id="configure-autobro-later"[^>]*>Connect</);
   assert.match(settings, /id="reset-autobro"[^>]*>Reset</);
   assert.match(settings, /id="settings-autobro-status"[^>]*role="status"/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.8\.zip" download/);
+  assert.match(settings, /href="\/downloads\/autobro-web-bridge-2026\.07\.29\.8\.zip" download/);
   assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.8<\/a>/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/skills\/guidewire-policycenter-1\.0\.0\.zip" download/);
+  assert.match(settings, /href="\/skills\/guidewire-policycenter-1\.0\.0\.zip" download/);
   assert.match(settings, />Download Guidewire PolicyCenter skills 1\.0\.0<\/a>/);
   assert.match(settings, /id="load-voice"[^>]*>Load</);
   assert.match(settings, /id="reset-voice"[^>]*>Reset</);
@@ -106,8 +106,8 @@ test('Settings Close is at the top-right and Help remains the last content item'
   const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.indexOf('<dialog id="remote-dialog">'));
   assert.ok(settings.lastIndexOf('<strong>Help</strong>') > settings.lastIndexOf('id="diagnostics-settings-title"'));
   assert.ok(settings.lastIndexOf('<strong>Help</strong>') > settings.lastIndexOf('<strong>Remote agent</strong>'));
-  assert.ok(settings.indexOf('id="close-settings"') < settings.indexOf('<h2>Settings</h2>'));
-  assert.match(html, /#settings-dialog > \.settings-close \{[^}]*position: sticky;[^}]*top: 0;[^}]*display: block;[^}]*margin: -6px -6px -38px auto;/);
-  assert.doesNotMatch(html, /#settings-dialog > \.settings-close \{[^}]*float:/);
-  assert.match(html, /#settings-dialog > h2 \{ padding-right: 64px; \}/);
+  assert.ok(settings.indexOf('id="close-settings"') > settings.indexOf('<h2>Settings</h2>'));
+  assert.match(settings, /<div class="settings-heading">[\s\S]*<h2>Settings<\/h2>[\s\S]*id="close-settings"/);
+  assert.match(html, /\.settings-heading \{[^}]*position: sticky;[^}]*display: flex;[^}]*justify-content: space-between;/);
+  assert.match(html, /\.settings-heading \.settings-close \{[^}]*min-width: 52px;[^}]*min-height: 44px;/);
 });

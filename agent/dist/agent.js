@@ -95741,10 +95741,12 @@ function createDeepAgent(params = {}) {
 
 // src/guest-backend.js
 init_process_shim();
-function relativePath(path2) {
+function relativePath(path2, workspace = "") {
   const value = String(path2 || "/").replace(/\\/g, "/");
   if (!value.startsWith("/")) throw new Error(`Deep Agents path must be absolute: ${value}`);
-  const relative = value.replace(/^\/+/, "") || ".";
+  const root = String(workspace || "").replace(/\/+$/, "");
+  const collapsed = root && (value === root || value.startsWith(`${root}/`)) ? value.slice(root.length) || "/" : value;
+  const relative = collapsed.replace(/^\/+/, "") || ".";
   if (relative.split("/").includes("..")) throw new Error("path cannot contain ..");
   return relative;
 }
@@ -95775,16 +95777,25 @@ var V86DeepAgentsBackend = class {
     this.onActivity({ backend: operation, detail, approval: true });
     return await this.approve(operation, detail);
   }
+  /**
+   * Path mapping, aware of which real directory the virtual root stands for.
+   *
+   * The workspace is read from the guest client rather than fixed here, so
+   * `setWorkspace()` keeps working and the two stay in step by construction.
+   */
+  rel(path2) {
+    return relativePath(path2, this.guest?.workspace);
+  }
   async ls(path2 = "/") {
     try {
-      return { files: parseFileInfos(await this.guest.list(relativePath(path2))) };
+      return { files: parseFileInfos(await this.guest.list(this.rel(path2))) };
     } catch (error51) {
       return { error: error51.message };
     }
   }
   async read(path2, offset = 0, limit = 500) {
     try {
-      const content = await this.guest.read(relativePath(path2));
+      const content = await this.guest.read(this.rel(path2));
       return { content: content.split("\n").slice(offset, offset + limit).join("\n"), mimeType: mimeType(path2) };
     } catch (error51) {
       return { error: error51.message };
@@ -95798,7 +95809,7 @@ var V86DeepAgentsBackend = class {
   }
   async grep(pattern, path2 = "/", glob = null) {
     try {
-      const output = await this.guest.grep(pattern, relativePath(path2 || "/"));
+      const output = await this.guest.grep(pattern, this.rel(path2 || "/"));
       let matches = output.split("\n").filter(Boolean).map((line) => {
         const match = line.match(/^(.+?):(\d+):(.*)$/);
         return match ? { path: absolutePath(match[1]), line: Number(match[2]), text: match[3] } : null;
@@ -95814,7 +95825,7 @@ var V86DeepAgentsBackend = class {
   }
   async glob(pattern, path2 = "/") {
     try {
-      return { files: parseFileInfos(await this.guest.glob(pattern, relativePath(path2))) };
+      return { files: parseFileInfos(await this.guest.glob(pattern, this.rel(path2))) };
     } catch (error51) {
       return { error: error51.message };
     }
@@ -95822,7 +95833,7 @@ var V86DeepAgentsBackend = class {
   async write(path2, content) {
     if (!await this.permitted("write_file", { path: path2, bytes: new TextEncoder().encode(content).byteLength })) return { error: "Operation rejected by user." };
     try {
-      await this.guest.write(relativePath(path2), content);
+      await this.guest.write(this.rel(path2), content);
       return { path: path2, filesUpdate: null };
     } catch (error51) {
       return { error: error51.message };
@@ -95831,12 +95842,12 @@ var V86DeepAgentsBackend = class {
   async edit(path2, oldString, newString, replaceAll = false) {
     if (!await this.permitted("edit_file", { path: path2, replaceAll, oldPreview: oldString.slice(0, 160), newPreview: newString.slice(0, 160) })) return { error: "Operation rejected by user." };
     try {
-      const current = await this.guest.read(relativePath(path2));
+      const current = await this.guest.read(this.rel(path2));
       const occurrences = current.split(oldString).length - 1;
       if (!occurrences) return { error: `String not found in ${path2}` };
       if (!replaceAll && occurrences > 1) return { error: `String occurs ${occurrences} times; set replace_all or provide more context.` };
       const updated = replaceAll ? current.split(oldString).join(newString) : current.replace(oldString, newString);
-      await this.guest.write(relativePath(path2), updated);
+      await this.guest.write(this.rel(path2), updated);
       return { path: path2, occurrences: replaceAll ? occurrences : 1, filesUpdate: null };
     } catch (error51) {
       return { error: error51.message };
@@ -95845,7 +95856,7 @@ var V86DeepAgentsBackend = class {
   async delete(path2) {
     if (!await this.permitted("delete_file", { path: path2 })) return { error: "Operation rejected by user." };
     try {
-      await this.guest.delete(relativePath(path2));
+      await this.guest.delete(this.rel(path2));
       return { path: path2 };
     } catch (error51) {
       return { error: error51.message };
@@ -95864,6 +95875,82 @@ var V86DeepAgentsBackend = class {
   }
 };
 
+// src/tool-call-syntax.js
+init_process_shim();
+var TOOL_DELIMITER = /<\|?tool_call\|?>/gi;
+function stripToolDelimiters(text) {
+  const raw = String(text ?? "");
+  const delimited = new RegExp(TOOL_DELIMITER.source, "i").test(raw);
+  return { text: normalizeQuoteTokens(raw.replace(TOOL_DELIMITER, " ").trim()), delimited };
+}
+var QUOTE_TOKEN = '<|"|>';
+function normalizeQuoteTokens(text) {
+  if (!text.includes(QUOTE_TOKEN)) return text;
+  let out = "";
+  let rest = text;
+  for (; ; ) {
+    const open = rest.indexOf(QUOTE_TOKEN);
+    if (open < 0) return out + rest;
+    const close = rest.indexOf(QUOTE_TOKEN, open + QUOTE_TOKEN.length);
+    if (close < 0) return out + rest;
+    out += rest.slice(0, open);
+    out += JSON.stringify(rest.slice(open + QUOTE_TOKEN.length, close));
+    rest = rest.slice(close + QUOTE_TOKEN.length);
+  }
+}
+function normalizeJsonish(text) {
+  let out = "";
+  for (let index2 = 0; index2 < text.length; index2 += 1) {
+    const char = text[index2];
+    if (char === '"' || char === "'") {
+      const quote = char;
+      let body = "";
+      index2 += 1;
+      for (; index2 < text.length; index2 += 1) {
+        const inner = text[index2];
+        if (inner === "\\") {
+          body += inner + (text[index2 + 1] ?? "");
+          index2 += 1;
+          continue;
+        }
+        if (inner === quote) break;
+        body += inner === '"' ? '\\"' : inner;
+      }
+      out += `"${body}"`;
+      continue;
+    }
+    const word = /^[A-Za-z_$][\w$]*/.exec(text.slice(index2))?.[0];
+    if (word) {
+      out += /^\s*:/.test(text.slice(index2 + word.length)) ? `"${word}"` : word;
+      index2 += word.length - 1;
+      continue;
+    }
+    out += char;
+  }
+  return out.replace(/,(\s*[}\]])/g, "$1");
+}
+function relaxedJsonParse(text) {
+  for (const candidate of [text, normalizeJsonish(text)]) {
+    for (const suffix of ["", "}", "}}"]) {
+      try {
+        return JSON.parse(candidate + suffix);
+      } catch {
+      }
+    }
+  }
+  return void 0;
+}
+function parseNamedCall(text) {
+  const match = /^call\s*:\s*([A-Za-z_][\w.-]*)\s*([\s\S]*)$/.exec(text);
+  if (!match) return void 0;
+  const [, name, rest] = match;
+  const body = rest.trim();
+  if (!body) return { name, arguments: {} };
+  const parsed = relaxedJsonParse(body);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return void 0;
+  return { name, arguments: parsed };
+}
+
 // src/agent.js
 function contentText(message) {
   if (typeof message.content === "string") return message.content;
@@ -95880,20 +95967,36 @@ function deriveInstruction(args) {
   return [args.command, target].filter(Boolean).join(" ");
 }
 function parseDecision(text) {
-  const cleaned = String(text).trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const raw = String(text).trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const { text: cleaned } = stripToolDelimiters(raw);
+  const named = parseNamedCall(cleaned);
+  if (named) return { tool: named.name, args: named.arguments };
+  const decided = (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const call3 = value.tool_call || value.toolCall;
+    if (call3?.name) return { tool: call3.name, args: call3.arguments || {} };
+    return value;
+  };
   try {
-    return JSON.parse(cleaned);
+    return decided(JSON.parse(cleaned)) ?? { final: cleaned };
   } catch {
   }
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
   if (start >= 0 && end > start) {
     try {
-      return JSON.parse(cleaned.slice(start, end + 1));
+      return decided(JSON.parse(cleaned.slice(start, end + 1))) ?? { final: cleaned };
     } catch {
     }
   }
+  const relaxed = decided(relaxedJsonParse(cleaned));
+  if (relaxed) return relaxed;
   return { final: cleaned };
+}
+function decisionArgs(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  const parsed = relaxedJsonParse(String(value ?? "{}"));
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
 }
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'"'"'`)}'`;
@@ -95949,8 +96052,10 @@ Available tools: ${JSON.stringify(toolCatalog)}` : "";
       ]
     };
     const completion = await this.client.chat(body);
-    const raw = completion?.choices?.[0]?.message?.content ?? completion;
-    const decision = parseDecision(raw);
+    const choice = completion?.choices?.[0];
+    const native = choice?.message?.tool_calls?.[0];
+    const raw = choice?.message?.content ?? "";
+    const decision = native?.function?.name ? { tool: native.function.name, args: decisionArgs(native.function.arguments) } : parseDecision(raw !== "" ? raw : completion);
     let message;
     if (decision.tool) {
       message = new AIMessage({ content: "", tool_calls: [{ id: crypto.randomUUID(), name: decision.tool, args: decision.args || {}, type: "tool_call" }] });

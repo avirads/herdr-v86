@@ -2,19 +2,22 @@
 
 VMVM ships cumulative Alpine i386 guest images. Select an image under
 **Settings → VMVM Image**; changing the selection restarts the VM. AI Tools is
-the default and preserves the capabilities of the former single image.
+available when its tools are needed and preserves the capabilities of the
+former single image.
 
 | Tier | Guest contents |
 |---|---|
 | Barebones | Alpine, BusyBox, serial shell, boot support, and `/root/project` |
 | Essentials | Barebones plus CA certificates, `curl`, `jq`, QuickJS, networking, and the UART browser transport |
-| AI Tools | Essentials plus `tmux`, Herdr, Git, ripgrep, shfmt, ctags, make, patch, Zerostack, Rig, the `vm*` browser commands, vmlang, and vmmastra |
-| Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, and a ready-to-run Mastra + Hono + Astro starter in `/root/project` |
+| AI Tools | Essentials plus `tmux`, Herdr, Git, ripgrep, shfmt, ctags, make, patch, Zerostack, Rig, the `vm*` browser commands, vmlang, vmmastra, and the browser-hosted Cline SDK runtime |
+| Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, and the browsercode-style Dev IDE (Monaco editor, file tree, console, live preview) with 7 framework templates in `/opt/vmbro/templates` |
 | Performance testing | AI Tools plus Grafana k6 and `k6obs`, which streams k6 results to OpenObserve during and after a run |
+| VAPT — native scanner | AI Tools plus Grafana k6 and the self-contained Vaptr scanner; `k6obs` is not installed in this tier |
+| Star | Every guest feature: AI Tools, Dev IDE and templates, Performance testing, and VAPT |
 
-Each subsequent tier is built from the same clean rootfs and invokes every
-installer and validation step from the preceding tier. Build all images as root
-on Linux or WSL:
+Each image is built from the same clean rootfs. Specialized Dev, Performance,
+and VAPT images branch after AI Tools; Star invokes every installer and combines
+all of their features. Build all images as root on Linux or WSL:
 
 ```sh
 sudo bash network/guest/build-tier-images.sh all
@@ -23,20 +26,32 @@ sudo bash network/guest/build-tier-images.sh all
 The image URLs, exact byte sizes, versions, and SHA-256 checksums live in
 `vm-images.json`. Update the version and checksum whenever an image changes.
 The browser keeps a separate cache-version marker for each tier.
+The installed-package inventory is derived directly from the built filesystems
+and recorded in [runtime-inventory.md](runtime-inventory.md). Run
+`network/guest/verify-runtime-inventory.sh` before every push or release.
 
 Guest filesystems are independent. Export a project before changing tiers and
 import it after restart when files must move between images.
 
-The Dev tier starts its bundled project with:
+The Dev tier exposes a public IDE at `/ide/` (reverse-proxied to the running VM's
+port 3000) and serves the scaffolded app's live preview at `/preview/` (port
+3100). It starts its bundled project with:
 
 ```sh
 vmbro-dev
 ```
 
-Astro output is precompiled with the official browser WASM compiler before it is
-placed in the image. Guest edits to the Hono API can be rebuilt with native
-esbuild. Mastra, LiteRT-LM, WebGPU, and model weights remain browser-host
-facilities and are not duplicated inside the ext4 image.
+First boot is fast because the starter is precompiled at image build time:
+`dist/server.js` is produced by chrooted esbuild and the static Astro-compatible
+page is copied from `src/pages/index.astro` to `dist/index.html` before the image
+is finalized. This keeps the editable page as the single source of truth, so
+HMR rebuilds the page the user actually edited. The
+`.vmbro/build-stamp` lets the supervisor skip the rebuild entirely. The
+supervisor binds port 3000 immediately and scaffolds/builds in the background,
+so the IDE shell comes up as soon as the guest reaches its shell prompt. Guest
+edits to the Hono API can be rebuilt with native esbuild. Mastra, LiteRT-LM,
+WebGPU, and model weights remain browser-host facilities and are not duplicated
+inside the ext4 image.
 
 ## Browser and host facilities
 

@@ -214,6 +214,30 @@ test('JSON that is not a tool call stays text when tools are bound', () => {
   assert.equal(result.content[0].type, 'text');
 });
 
+test('gemma native call syntax becomes a tool call on the vmlang tier', () => {
+  // Same verbatim reply that defeated the rig tier: opening delimiter, the
+  // tool name outside the braces, bare keys. Before this it parsed as nothing
+  // and the turn was spent as prose — the shape of a 60-step recursion limit.
+  const reply =
+    '<|tool_call>call:mastra_workspace_write_file{path: "greet.js", ' +
+    'content: "export function greet(name) {\\n  return `hello, ${name}`;\\n}"\n}<tool_call|>';
+  const result = parseCompletion(completion(reply), { hasTools: true });
+  assert.equal(result.finishReason, 'tool-calls');
+  assert.equal(result.content[0].toolName, 'mastra_workspace_write_file');
+  const input = JSON.parse(result.content[0].input);
+  assert.equal(input.path, 'greet.js');
+  assert.equal(input.content, 'export function greet(name) {\n  return `hello, ${name}`;\n}');
+});
+
+test('a leading delimiter no longer costs the turn', () => {
+  const result = parseCompletion(
+    completion('<|tool_call>{"tool_call":{"name":"vmfetch","arguments":{"url":"/a"}}}<tool_call|>'),
+    { hasTools: true },
+  );
+  assert.equal(result.finishReason, 'tool-calls');
+  assert.equal(result.content[0].toolName, 'vmfetch');
+});
+
 test('a base64-encoded tool call is decoded, not leaked as junk text', () => {
   // The 2B model base64-encodes its protocol object to dodge escaping
   // embedded quotes and newlines. If we do not decode it, the base64 blob

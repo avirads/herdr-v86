@@ -5,11 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VMVM (v86)</title>
 <link rel="icon" type="image/png" href="assets/vmvm-logo.png">
+<link rel="manifest" href="app.webmanifest">
+<link rel="apple-touch-icon" href="assets/vmvm-apple-touch-icon.png">
+<meta name="theme-color" content="#161b22">
+<meta name="application-name" content="VMVM">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VMVM">
 <link rel="stylesheet" href="xterm.css">
 <script>
   document.documentElement.dataset.theme =
-    localStorage.getItem("vm.theme") ||
-    (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    localStorage.getItem("vm.theme") || "dark";
 </script>
 <style>
   :root { color-scheme: dark; }
@@ -53,8 +59,12 @@
   .model-downloads .tool-link:hover, .model-downloads .tool-link:focus-visible { border-color: #58a6ff; outline: none; }
   #screen_container { display: none; } /* VGA (tty1) hidden; serial is primary. */
   #tools { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
-  #tools button { width: 56px; height: 52px; min-height: 52px; min-width: 56px; display: grid; grid-template-rows: 1fr auto; place-items: center; gap: 3px; padding: 5px 0 4px; font-size: 20px; line-height: 1; touch-action: manipulation; }
+  #tools button { width: 56px; height: 52px; min-height: 52px; min-width: 56px; display: grid; grid-template-rows: 1fr auto; place-items: center; gap: 3px; padding: 5px 0 4px; font-size: 20px; line-height: 1; touch-action: manipulation; border: 1px solid transparent; background: transparent; transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.08s; }
   #tools button svg { width: 20px; height: 20px; display: block; }
+  #tools button:hover:not(:disabled) { color: #f0f6fc; background: #1b222c; border-color: #30363d; }
+  #tools button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; border-color: #58a6ff; color: #f0f6fc; }
+  #tools button:active:not(:disabled) { transform: translateY(1px); background: #21262d; border-color: #58a6ff; }
+  #tools button:disabled { opacity: 0.45; cursor: default; }
   #tools .tool-label { font-size: 9px; line-height: 1; letter-spacing: .03em; text-transform: uppercase; color: inherit; opacity: .9; white-space: nowrap; }
   #voice-button.listening { color: #fff; background: #da3633; border-color: #f85149; }
   #voice-button.loading { color: #f0f6fc; border-color: #58a6ff; }
@@ -80,6 +90,9 @@
   #vm-runtime-warning-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 7px; }
   button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
   .tool-link { color: #58a6ff; align-self: center; font-size: 12px; white-space: nowrap; }
+  .about-link { display: inline-block; margin-top: 20px; color: #58a6ff; font-size: 13px; text-underline-offset: 3px; }
+  .about-link:hover, .about-link:focus-visible { color: #79c0ff; }
+  .about-link:focus-visible { outline: 2px solid #58a6ff; outline-offset: 3px; border-radius: 4px; }
   dialog { color: #c9d1d9; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 18px; width: min(420px, calc(100vw - 48px)); }
   dialog::backdrop { background: rgb(0 0 0 / .65); }
   dialog h2 { margin: 0 0 14px; font-size: 17px; }
@@ -134,6 +147,11 @@
   :root[data-theme="light"] .role-card span { color: #57606a; }
   :root[data-theme="light"] button,
   :root[data-theme="light"] .model-downloads .tool-link { color: #24292f; background: #f6f8fa; border-color: #d0d7de; }
+  :root[data-theme="light"] .about-link { color: #0969da; }
+  :root[data-theme="light"] .about-link:hover, :root[data-theme="light"] .about-link:focus-visible { color: #0550ae; }
+  :root[data-theme="light"] #tools button:hover:not(:disabled) { color: #1f2328; background: #eaeef2; border-color: #c3cdd9; }
+  :root[data-theme="light"] #tools button:focus-visible { outline-color: #0969da; border-color: #0969da; color: #1f2328; }
+  :root[data-theme="light"] #tools button:active:not(:disabled) { background: #e2e8ee; border-color: #0969da; }
   :root[data-theme="light"] .provider-section,
   :root[data-theme="light"] dialog input,
   :root[data-theme="light"] dialog select,
@@ -181,6 +199,16 @@
     #vm-runtime-warning-actions { margin-left: 0; }
     #vm-runtime-warning-actions button { flex: 1 1 auto; min-height: 44px; }
   }
+  @media (max-width: 420px) {
+    header { padding-top: max(8px, env(safe-area-inset-top)); padding-left: 8px; padding-right: 8px; }
+    header h1 { font-size: 13px; }
+    #tools { gap: 4px; }
+    #tools button { width: 46px; height: 46px; min-height: 46px; min-width: 46px; font-size: 19px; }
+    #voice-progress, #model-progress { width: calc(100vw - 16px); }
+    dialog { width: calc(100vw - 16px); padding: 14px; }
+    .remote-actions { margin-top: 12px; }
+  }
+  button { -webkit-tap-highlight-color: transparent; }
 </style>
 </head>
 <body>
@@ -210,6 +238,7 @@
         <small>Connect to agent →</small>
       </button>
     </div>
+    <a class="about-link" href="docs/about.html">About this project — architecture, components &amp; licenses</a>
   </div>
 </div>
 <div id="boot-overlay" role="status" aria-live="polite">
@@ -226,6 +255,13 @@
   <div id="browser-status">AutoBro: not connected</div>
   <div id="voice-status">Voice: ready to load</div>
   <div id="tools">
+    <button id="toggle-dev-view" type="button" title="Open terminal in this VM" aria-label="Open terminal in this VM" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="3" width="20" height="18" rx="2"/>
+        <path d="m7 8 3 3-3 3M13 15h4"/>
+      </svg>
+      <span class="tool-label">Terminal</span>
+    </button>
     <button id="copy-terminal" type="button" title="Copy terminal" aria-label="Copy terminal">
       <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="9" y="9" width="12" height="12" rx="2"/>
@@ -248,27 +284,12 @@
       </svg>
       <span class="tool-label">Voice</span>
     </button>
-    <button id="share-ide" type="button" title="Copy public IDE link" aria-label="Copy public IDE link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-        <polyline points="15 3 21 3 21 9"/>
-        <line x1="10" y1="14" x2="21" y2="3"/>
-      </svg>
-      <span class="tool-label">Share</span>
-    </button>
     <button id="toggle-theme" type="button" title="Switch light or dark theme" aria-label="Switch theme">
       <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="5"/>
         <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
       </svg>
       <span class="tool-label">Theme</span>
-    </button>
-    <button id="refresh-app" type="button" title="Refresh VMVM" aria-label="Refresh VMVM">
-      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="23 4 23 10 17 10"/>
-        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-      </svg>
-      <span class="tool-label">Refresh</span>
     </button>
     <button id="open-settings" type="button" title="Settings" aria-label="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -332,9 +353,9 @@
         <button id="reset-llm" type="button">Reset</button>
       </div>
       <div id="settings-model-downloads" class="model-downloads" aria-label="Download an AI model not yet loaded">
-        <a class="tool-link" data-model-file="gemma-4-E2B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download Gemma 4 E2B</a>
-        <a class="tool-link" data-model-file="gemma-4-E4B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 E4B</a>
-        <a class="tool-link" data-model-file="gemma-4-12B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 12B</a>
+        <a class="tool-link" data-model-file="gemma-4-E2B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm?download=true" target="_blank" rel="noopener noreferrer">Download Gemma 4 E2B (2.0 GB)</a>
+        <a class="tool-link" data-model-file="gemma-4-E4B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 E4B (3.0 GB)</a>
+        <a class="tool-link" data-model-file="gemma-4-12B-it-web.litertlm" href="https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm" target="_blank" rel="noopener noreferrer">Download Gemma 4 12B (6.0 GB)</a>
       </div>
       <details class="model-more-info">
         <summary>More info</summary>
@@ -359,6 +380,7 @@
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
             <option value="gemini">Gemini</option>
+            <option value="copilot">GitHub Copilot</option>
             <option value="compatible">OpenAI-compatible</option>
           </select>
         </label>
@@ -373,6 +395,7 @@
         <label>Zerostack default <select class="agent-provider-default" data-agent="zerostack"></select></label>
         <label>vmlang default <select class="agent-provider-default" data-agent="vmlang"></select></label>
         <label>vmmastra default <select class="agent-provider-default" data-agent="vmmastra"></select></label>
+        <label>Cline default <select class="agent-provider-default" data-agent="cline"></select></label>
       </div>
       <small id="cloud-provider-status" role="status" aria-live="polite"></small>
     </details>
@@ -380,16 +403,16 @@
       <summary><h3 id="autobro-settings-title">AutoBro</h3></summary>
       <small id="settings-autobro-status" role="status" aria-live="polite">Connect browser automation or forget the current pairing.</small>
       <div class="provider-actions">
-        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro Chrome extension 2026.07.29.8</a>
-        <a class="tool-link" href="https://fapstaff.com/skills/guidewire-policycenter-1.0.0.zip" download>Download Guidewire PolicyCenter skills 1.0.0</a>
-        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
+        <a class="tool-link" href="/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro Chrome extension 2026.07.29.8</a>
+        <a class="tool-link" href="/skills/guidewire-policycenter-1.0.0.zip" download>Download Guidewire PolicyCenter skills 1.0.0</a>
+        <a class="tool-link" href="/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
         <button id="configure-autobro-later" type="button">Connect</button>
         <button id="reset-autobro" type="button">Reset</button>
       </div>
       <div id="autobro-install-help" class="autobro-install-help" role="alert" hidden>
         <strong>AutoBro is not installed or enabled.</strong>
         <ol>
-          <li><a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro 2026.07.29.8</a> and extract the ZIP.</li>
+          <li><a class="tool-link" href="/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro 2026.07.29.8</a> and extract the ZIP.</li>
           <li>Open <code>chrome://extensions</code> in Chrome or Chromium.</li>
           <li>Enable <strong>Developer mode</strong>, then select <strong>Load unpacked</strong>.</li>
           <li>Select the extracted folder containing <code>manifest.json</code>.</li>
@@ -429,6 +452,13 @@
     <div id="diagnostics-status" role="status" aria-live="polite"></div>
     <div class="provider-actions">
       <button id="copy-diagnostics" type="button">Copy diagnostics</button>
+    </div>
+  </details>
+  <details class="provider-section" aria-labelledby="pwa-settings-title">
+    <summary><h3 id="pwa-settings-title">App installation</h3></summary>
+    <small id="pwa-install-status" role="status" aria-live="polite">Install VMVM for a standalone window and launcher icon.</small>
+    <div class="provider-actions">
+      <button id="install-pwa" type="button" disabled>Install VMVM</button>
     </div>
   </details>
   <div class="settings-action">
@@ -493,6 +523,44 @@ if ("serviceWorker" in navigator) {
 }
 
 const status = (m) => document.getElementById("status").textContent = m;
+let deferredInstallPrompt = null;
+const installPwaButton = document.getElementById("install-pwa");
+const pwaInstallStatus = document.getElementById("pwa-install-status");
+const isStandalonePwa = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+function refreshPwaInstallUi() {
+  if (isStandalonePwa()) {
+    installPwaButton.disabled = true;
+    installPwaButton.textContent = "Installed";
+    pwaInstallStatus.textContent = "VMVM is running as an installed app.";
+  } else if (deferredInstallPrompt) {
+    installPwaButton.disabled = false;
+    installPwaButton.textContent = "Install VMVM";
+    pwaInstallStatus.textContent = "VMVM is ready to install on this device.";
+  } else {
+    installPwaButton.disabled = true;
+    pwaInstallStatus.textContent = /iphone|ipad|ipod/i.test(navigator.userAgent)
+      ? "In Safari, use Share → Add to Home Screen."
+      : "Use your browser menu's Install app or Add to Home Screen option when available.";
+  }
+}
+addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  refreshPwaInstallUi();
+});
+addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  refreshPwaInstallUi();
+});
+installPwaButton.onclick = async () => {
+  if (!deferredInstallPrompt) return refreshPwaInstallUi();
+  const prompt = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  await prompt.prompt();
+  const choice = await prompt.userChoice;
+  pwaInstallStatus.textContent = choice.outcome === "accepted" ? "VMVM installed." : "Installation was dismissed.";
+  refreshPwaInstallUi();
+};
 const networkStatus = message => {
   console.info("[vm-network]", message);
   if (/^(?:connected|error|disconnected)/.test(String(message))) status(`network: ${message}`);
@@ -539,14 +607,15 @@ const bootMessage = document.getElementById("boot-message");
 // otherwise varies per install path.
 const AUTOBRO_EXTENSION_ID = "aaigkodgcmkbipbacijelgebhchknkln";
 const VM_IMAGE_FALLBACK = {
-  defaultTier: "ai-tools",
+  defaultTier: "barebones",
   tiers: {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "vm-barebones-i386-ext4.img", size: 67108864, version: "2026.07.29.1" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "vm-essentials-i386-ext4.img", size: 83886080, version: "2026.07.29.1" },
-    "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.07.29.1" },
-    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.07.31.9" },
-    "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.08.01.1" },
-    "vapt": { name: "VAPT — native scanner", description: "Performance plus Vaptr, the self-contained native scanner (no external tools; runs in the v86 guest).", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.07.30.1" },
+    "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, browser-hosted Cline and other coding agents, browser tools and AI frameworks.", url: "vm-ai-tools-i386-ext4.img", size: 92274688, version: "2026.08.10.9" },
+    "dev": { name: "Dev", description: "AI Tools plus native esbuild, Chi HTTP serving and a ready-to-run Mastra + Hono + Astro project.", url: "vm-dev-i386-ext4.img", size: 99614720, version: "2026.08.10.9" },
+    "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs.", url: "vm-performance-i386-ext4.img", size: 96468992, version: "2026.08.10.9" },
+    "vapt": { name: "VAPT — native scanner", description: "AI Tools plus Grafana k6 and Vaptr; k6obs and external tools are not bundled in this tier.", url: "vm-vapt-i386-ext4.img", size: 103809024, version: "2026.08.10.9" },
+    "star": { name: "Star", description: "All guest features: AI Tools, Dev IDE and templates, k6/k6obs performance testing, and Vaptr.", url: "vm-star-i386-ext4.img", size: 134217728, version: "2026.08.10.9" },
   },
 };
 let vmImageManifest = VM_IMAGE_FALLBACK;
@@ -557,6 +626,7 @@ try {
 const bootOptions = new URLSearchParams(location.search);
 const requestedVmTier = bootOptions.get("tier") || localStorage.getItem("vm.imageTier") || vmImageManifest.defaultTier;
 const vmImageTier = vmImageManifest.tiers[requestedVmTier] ? requestedVmTier : vmImageManifest.defaultTier;
+const hasDevEnvironment = vmImageTier === "dev" || vmImageTier === "star";
 const vmImage = vmImageManifest.tiers[vmImageTier];
 localStorage.setItem("vm.imageTier", vmImageTier);
 const DISK_SIZE = vmImage.size;
@@ -572,6 +642,7 @@ let llmReady = false;
 let autobroReady = false;
 let shellReady = false;
 let bootProgress = 1;
+let bootFailed = false;
 function setBootProgress(value, message) {
   bootProgress = Math.max(bootProgress, Math.min(100, Math.round(value)));
   bootRing.style.setProperty("--progress", `${bootProgress}%`);
@@ -581,8 +652,8 @@ function setBootProgress(value, message) {
 bootTicker = setInterval(() => {
   if (bootProgress < 90) {
     setBootProgress(bootProgress + 1, `Starting VMVM [${vmImageDisplaySource}]…`);
-  } else if (!shellReady && vmImageTier === "dev") {
-    bootMessage.textContent = `Starting Dev VMVM [${vmImageDisplaySource}] — first boot may take several minutes…`;
+  } else if (!shellReady && hasDevEnvironment) {
+    bootMessage.textContent = `Starting ${vmImage.name} VMVM [${vmImageDisplaySource}] — first boot may take several minutes…`;
   }
 }, 700);
 function finishBoot(showTerminal = true) {
@@ -593,6 +664,7 @@ function finishBoot(showTerminal = true) {
   setTimeout(() => {
     bootReady = true;
     shellReady = true;
+    window.dispatchEvent(new Event("vmvm-shell-ready"));
     bootOverlay.classList.add("done");
     if (showTerminal) {
       term.clear();
@@ -608,8 +680,15 @@ function finishBoot(showTerminal = true) {
 }
 function failBoot(message) {
   clearInterval(bootTicker);
+  bootFailed = true;
   bootOverlay.classList.add("error");
   bootMessage.textContent = message;
+}
+function finishDevInTerminal(message) {
+  devViewButton.hidden = true;
+  setDevView("terminal");
+  finishBoot(true);
+  setTimeout(() => status(message), 350);
 }
 // --- Dev tier: fold the app compile/serve into the boot progress, then open it ---
 // The guest autostarts `vmbro-dev` (esbuild bundle + Chi server on :3000), which
@@ -621,14 +700,43 @@ const DEVAPP_READY_MARKER = "DEVAPP-READY-OK";
 let devAppPhase = false;
 let devAppTicker = null;
 let devAppTimeout = null;
+let devNetworkReady = Promise.resolve();
+const devViewButton = document.getElementById("toggle-dev-view");
+const devFrame = document.getElementById("dev-ide");
+const termHost = document.getElementById("term");
+function setDevView(view) {
+  const showTerminal = view === "terminal";
+  devFrame.hidden = showTerminal;
+  termHost.style.display = showTerminal ? "" : "none";
+  termHost.style.visibility = showTerminal ? "visible" : "hidden";
+  devViewButton.title = showTerminal ? "Return to IDE" : "Open terminal in this VM";
+  devViewButton.setAttribute("aria-label", devViewButton.title);
+  devViewButton.querySelector(".tool-label").textContent = showTerminal ? "IDE" : "Terminal";
+  status(showTerminal ? "Terminal — same running VM" : "Dev IDE ready");
+  if (showTerminal) {
+    scheduleTerminalFit();
+    term.focus();
+  } else {
+    devFrame.contentWindow?.focus();
+  }
+}
+devViewButton.onclick = () => setDevView(devFrame.hidden ? "ide" : "terminal");
+addEventListener("message", event => {
+  if (event.origin !== location.origin || event.source !== devFrame.contentWindow) return;
+  if (event.data?.type === "vmvm-terminal-input" && typeof event.data.data === "string") {
+    handleTerminalData(event.data.data);
+  } else if (event.data?.type === "vmvm-terminal-ready") {
+    const history = Uint8Array.from(devTerminalHistory);
+    if (history.length) devFrame.contentWindow.postMessage({ type: "vmvm-terminal-output", data: history }, location.origin);
+  }
+});
 function enterDevIDE() {
   status("Dev app ready — entering IDE");
   const target = new URL(DEV_APP_URL);
   target.searchParams.set("theme", document.documentElement.dataset.theme || "dark");
-  const frame = document.getElementById("dev-ide");
-  frame.src = target.href;
-  frame.hidden = false;
-  document.getElementById("term").style.display = "none";
+  devFrame.src = target.href;
+  devViewButton.hidden = false;
+  setDevView("ide");
 }
 function startDevAppPhase() {
   devAppPhase = true;
@@ -652,20 +760,40 @@ function startDevAppPhase() {
   // Never trap the user on the overlay: reveal the shell even if the app stalls.
   devAppTimeout = setTimeout(() => finishDevApp(false), 300000);
 }
-function finishDevApp(ready) {
+async function finishDevApp(ready) {
   if (!devAppPhase) return;
   devAppPhase = false;
   clearInterval(devAppTicker);
   clearTimeout(devAppTimeout);
   if (!ready) {
-    failBoot("Dev IDE did not start within five minutes. Reload to retry.");
+    finishDevInTerminal("Shell ready — Dev IDE did not start");
+    return;
+  }
+  setBootProgress(99, "Dev app ready — connecting its public route…");
+  try {
+    await devNetworkReady;
+    let routeReady = false;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      try {
+        const response = await fetch(DEV_APP_URL, { cache: "no-store" });
+        if (response.ok) {
+          routeReady = true;
+          break;
+        }
+      } catch { /* The TAP route can take a moment after WebSocket opens. */ }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    if (!routeReady) throw new Error("the public IDE route did not become reachable");
+  } catch (error) {
+    console.warn("Dev IDE public route unavailable; continuing in terminal:", error);
+    finishDevInTerminal(`Shell ready — Dev IDE network unavailable: ${error.message}`);
     return;
   }
   setBootProgress(100, "Dev app ready");
   enterDevIDE();
   finishBoot(false);
 }
-const APP_VERSION = "2026.07.29.1";
+const APP_VERSION = "2026.08.10.14";
 const RUNTIME_FAULT_KEY = "vm.lastRuntimeFault";
 let pendingShellCommand = "";
 let lastSubmittedShellCommand = "";
@@ -915,7 +1043,7 @@ window.addEventListener("resize", scheduleTerminalFit, { passive: true });
 requestAnimationFrame(() => requestAnimationFrame(fitTerminal));
 
 if (compatibilityBoot) {
-  status(`compatibility boot [${vmImageDisplaySource}] — loading full ${Math.round(DISK_SIZE / 1048576)} MiB disk…`);
+  status(`compatibility boot [${vmImageDisplaySource}] — range-backed disk with ATA PIO…`);
 }
 const emulator = new V86({
   wasm_path: "v86-network.wasm",
@@ -935,7 +1063,10 @@ const emulator = new V86({
   // rootflags=noatime here: noatime is a VFS flag, not an ext4 option, and
   // the root mount rejects it (VFS panic). rc.startup remounts / noatime.
   cmdline: `root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic mitigations=off nopti nospectre_v1 nospectre_v2 nokaslr norandmaps quiet loglevel=4${compatibilityBoot ? " libata.force=pio4" : ""}`,
-  hda: { url: diskURL, async: !compatibilityBoot, size: DISK_SIZE },
+  // Compatibility mode changes ATA I/O to PIO in the guest kernel; it must
+  // not disable v86's range-backed disk. Preloading the whole image caused
+  // browsers to abort large requests and remain at the boot progress cap.
+  hda: { url: diskURL, async: true, size: DISK_SIZE },
   net_device: { type: "virtio" },
   uart1: true,
   screen_container: document.getElementById("screen_container"),
@@ -979,12 +1110,20 @@ async function writeAgentTerminal(output) {
 // and flushed to xterm as a single write per microtask. flushSerialOutput()
 // keeps direct term.write() callers ordered with respect to queued bytes.
 const serialOutQueue = [];
+const devTerminalHistory = [];
+const DEV_TERMINAL_HISTORY_LIMIT = 65536;
 let serialFlushScheduled = false;
 function flushSerialOutput() {
   if (!serialOutQueue.length) return;
   const chunk = Uint8Array.from(serialOutQueue);
   serialOutQueue.length = 0;
   term.write(chunk);
+  if (hasDevEnvironment) {
+    devTerminalHistory.push(...chunk);
+    if (devTerminalHistory.length > DEV_TERMINAL_HISTORY_LIMIT)
+      devTerminalHistory.splice(0, devTerminalHistory.length - DEV_TERMINAL_HISTORY_LIMIT);
+    devFrame.contentWindow?.postMessage({ type: "vmvm-terminal-output", data: chunk }, location.origin);
+  }
 }
 function queueSerialOutput(data) {
   if (typeof data === "number") serialOutQueue.push(data);
@@ -1022,7 +1161,7 @@ import("./network/browser/v86-host-bridge.js").then(async module => {
   import("./network/browser/v86-guest-readonly.js").then(({ V86GuestReadonlyClient }) => {
     guestReadonlyClient = new V86GuestReadonlyClient(emulator, hostBridge, { rpcSerial: 1 });
     window.v86GuestReadonly = guestReadonlyClient;
-    import("./network/browser/vmagent-controller.js").then(async ({ VmAgentController }) => {
+    import(`./network/browser/vmagent-controller.js?v=${encodeURIComponent(APP_VERSION)}`).then(async ({ VmAgentController }) => {
       vmAgentController = new VmAgentController({
         createAgent: async options => {
           const { createVMAgent } = await import("./agent/dist/agent.js");
@@ -1059,6 +1198,12 @@ import("./network/browser/v86-host-bridge.js").then(async module => {
             sandboxOptions: { captureStderr: false },
           });
         },
+        // Cline's official browser-safe AgentRuntime. Like Mastra, this is
+        // lazy so users who choose another tier never download its bundle.
+        createClineAgent: async options => {
+          const { createClineVMAgent } = await import(`./agent/dist/cline-agent.js?v=${encodeURIComponent(APP_VERSION)}`);
+          return createClineVMAgent(options);
+        },
         getLlmClient: (agent, route) => llmProviderRouter.resolve(agent, route),
         getGuest: () => guestReadonlyClient,
         getBrowserClient: () => autobroClient,
@@ -1077,7 +1222,7 @@ onBusy: async busy => {
           if (busy) term.write("\r\x1b[2K");
         },
       });
-      hostBridge.setAgentHandler((command, value, cwd) => vmAgentController.handle(command, value, cwd));
+      hostBridge.setAgentHandler((command, value, cwd, route) => vmAgentController.handle(command, value, cwd, route));
       setInterval(() => {
         if (!agentBusy && !vmAgentController?.conversationActive) hostBridge.send("vmagent-poll").catch(() => {});
       }, 500);
@@ -1358,6 +1503,7 @@ function updateVmImageDescription() {
     dev: "Dev tier · includes AI Tools",
     performance: "Tier 4 · includes AI Tools",
     vapt: "Tier 5 · includes Performance",
+    star: "Star tier · includes Dev, Performance and VAPT",
   };
   vmImageDescription.textContent = `${cumulative[vmImageTierSelect.value]} — ${selected.description} (${Math.round(selected.size / 1048576)} MiB)`;
   document.getElementById("apply-vm-image").disabled = vmImageTierSelect.value === vmImageTier;
@@ -1592,6 +1738,7 @@ const providerTypeDefaults = {
   openai: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com/v1",
   gemini: "https://generativelanguage.googleapis.com/v1beta",
+  copilot: "https://api.githubcopilot.com",
   compatible: "http://localhost:11434/v1",
 };
 function refreshCloudProviderSettings(selectedId = "") {
@@ -1620,6 +1767,13 @@ cloudProviderSelect.onchange = () => {
 cloudProviderFields.type.onchange = () => {
   if (!cloudProviderFields.baseUrl.value || Object.values(providerTypeDefaults).includes(cloudProviderFields.baseUrl.value)) {
     cloudProviderFields.baseUrl.value = providerTypeDefaults[cloudProviderFields.type.value];
+  }
+  if (cloudProviderFields.type.value === "copilot") {
+    cloudProviderFields.apiKey.placeholder = "GitHub token with Copilot access (ghu_/gho_…)";
+    if (!cloudProviderFields.model.value) cloudProviderFields.model.value = "gpt-4o";
+    cloudProviderStatus.textContent = "GitHub Copilot: paste a GitHub OAuth token that has Copilot enabled. It is exchanged for a short-lived Copilot token per request.";
+  } else {
+    cloudProviderFields.apiKey.placeholder = "kept for this tab";
   }
 };
 document.getElementById("save-cloud-provider").onclick = () => {
@@ -1656,6 +1810,7 @@ for (const select of document.querySelectorAll(".agent-provider-default")) {
 }
 document.getElementById("open-settings").onclick = () => {
   settingsDialog.showModal();
+  refreshPwaInstallUi();
   refreshCloudProviderSettings(cloudProviderSelect.value);
   refreshCachedModelSelect().catch(error => llmStatus("could not list cached models — " + error.message));
 };
@@ -1802,9 +1957,10 @@ document.getElementById("reset-voice").onclick = async () => {
 if (localStorage.getItem("vm.autobroExtensionId") && localStorage.getItem("vm.autobroPairingToken")) connectAutoBro();
 const llmFileInput = document.getElementById("llm-file-input");
 try {
-  const { LiteRtLmClient } = await import("./network/browser/litert-lm-client.js");
+  const { LiteRtLmClient } = await import(`./network/browser/litert-lm-client.js?v=${encodeURIComponent(APP_VERSION)}`);
   const client = new LiteRtLmClient();
   webGpuLlmClient = client;
+  globalThis.vmvmLocalModelClient = client;
   client.addEventListener("activity", event => {
     // Detailed cache byte/progress text belongs in the prominent progress
     // card; duplicating it in the main-page header makes the UI look noisy.
@@ -1815,7 +1971,21 @@ try {
   });
   hostBridge?.setLlmClient(client);
   const portableMode = new URLSearchParams(location.search).get("portable") === "1";
-  const initialization = client.initialize({ bundledModelUrl: portableMode ? "./models/gemma-4-E2B-it-web.litertlm" : "" });
+  // Let v86 reach its shell before compiling/loading a cached WebGPU model.
+  // Starting both heavyweight WASM runtimes together can starve compatibility
+  // boot for minutes even though the guest is making progress.
+  llmStatus("waiting for VMVM boot");
+  const vmBootReady = shellReady
+    ? Promise.resolve()
+    : new Promise(resolve => window.addEventListener("vmvm-shell-ready", resolve, { once: true }));
+  const initialization = vmBootReady.then(() => {
+    llmStatus("loading LiteRT-LM runtime");
+    return client.initialize({ bundledModelUrl: portableMode ? "./models/gemma-4-E2B-it-web.litertlm" : "" });
+  });
+  globalThis.vmvmLocalModelReady = initialization;
+  globalThis.dispatchEvent(new CustomEvent("vmvm-local-model-client", {
+    detail: { client, ready: initialization }
+  }));
   initialization.then(result => {
     hostBridge?.setLlmClient(client);
     llmStatus(result.modelName ? `ready — ${result.modelName}` : "ready — choose Configure model to load a model");
@@ -1928,16 +2098,6 @@ document.getElementById("toggle-theme").onclick = () => {
   document.getElementById("dev-ide").contentWindow?.postMessage({ type: "vmvm-theme", theme: next }, location.origin);
   status(`${next[0].toUpperCase()}${next.slice(1)} theme`);
 };
-document.getElementById("refresh-app").onclick = () => location.reload();
-document.getElementById("share-ide").onclick = async () => {
-  const shareURL = new URL("/ide/", location.origin).href;
-  try {
-    await navigator.clipboard.writeText(shareURL);
-    status("Public IDE link copied — available while this VM is running");
-  } catch {
-    window.prompt("Copy the public IDE link", shareURL);
-  }
-};
 
 async function importFileIntoVm(file, afterImport = "") {
   if (!file) return;
@@ -1981,19 +2141,29 @@ const networkConfig = new URLSearchParams(location.hash.slice(1));
 const gatewayURL = networkConfig.get("gateway");
 const sessionToken = networkConfig.get("token");
 async function connectWebSocketGateway(url, token) {
-  const { V86WebSocketNetwork } = await import("./network/browser/v86-websocket-network.js");
+  const moduleUrl = `./network/browser/v86-websocket-network.js?v=${encodeURIComponent(APP_VERSION)}`;
+  const { V86WebSocketNetwork } = await import(moduleUrl);
   window.v86Network = new V86WebSocketNetwork(emulator, {
     url,
     token,
     onStatus: networkStatus,
   }).start();
+  await window.v86Network.waitUntilConnected();
 }
 if (gatewayURL && sessionToken) {
   history.replaceState(null, "", location.pathname + location.search);
-  connectWebSocketGateway(gatewayURL, sessionToken)
+  devNetworkReady = connectWebSocketGateway(gatewayURL, sessionToken);
+  devNetworkReady
     .catch(error => networkStatus("error — " + error.message));
-} else if (vmImageTier === "dev" && location.protocol === "https:" && location.hostname === "fapstaff.com") {
-  fetch("/v1/sessions", {
+// No hostname check. This branch is the only thing that mints a gateway session
+// when one is not handed in via the URL fragment, so pinning it to a single
+// hostname meant the emulator silently had no network anywhere else -- the page
+// loaded, booted, and simply never said "network: connected". The gateway's own
+// -allow-origin list is the real boundary: an unlisted origin gets a 401 here
+// and the catch below reports it, which is a visible failure rather than a
+// missing feature.
+} else if (hasDevEnvironment && location.protocol === "https:") {
+  devNetworkReady = fetch("/v1/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ttlSeconds: 3600 }),
@@ -2001,12 +2171,17 @@ if (gatewayURL && sessionToken) {
     .then(async response => {
       if (!response.ok) throw new Error(`session request failed (${response.status})`);
       const session = await response.json();
+	  if (session.active) throw new Error("public IDE is already in use by another VM tab");
       await connectWebSocketGateway(`wss://${location.host}/v1/ethernet`, session.token);
     })
-    .catch(error => networkStatus("error — public IDE network unavailable: " + error.message));
+    .catch(error => {
+      networkStatus("error — public IDE network unavailable: " + error.message);
+      throw error;
+    });
 }
 
 emulator.add_listener("emulator-ready", () => {
+  armNoOutputWatchdog();
   setBootProgress(28, compatibilityBoot
     ? `Starting VMVM [${vmImageDisplaySource}] in compatibility mode…`
     : `Starting VMVM [${vmImageDisplaySource}]…`);
@@ -2020,6 +2195,7 @@ function isVmDiskDownload(fileName) {
   }
 }
 emulator.add_listener("download-progress", (e) => {
+  if (bootFailed) return;
   if (e.file_name && e.loaded != null && e.total) {
     const fraction = Math.max(0, Math.min(1, e.loaded / e.total));
     const percent = Math.round(100 * fraction);
@@ -2027,9 +2203,6 @@ emulator.add_listener("download-progress", (e) => {
       const action = vmImageSource === "local cache" ? "Loading cached VMVM" : "Downloading VMVM";
       setBootProgress(10 + fraction * 55, `${action} [${vmImageDisplaySource}]…`);
       status(`${action.toLowerCase()} [${vmImageDisplaySource}] ${percent}%`);
-    } else {
-      setBootProgress(10 + fraction * 55, `Downloading VMVM [${vmImageDisplaySource}]…`);
-      status(`downloading VMVM [${vmImageDisplaySource}] ${percent}%`);
     }
   }
 });
@@ -2048,15 +2221,23 @@ window.onerror = (msg, source) => {
   failBoot("Startup error: " + msg);
 };
 let gotSerial = false;
-const noOutputTimeoutMs = vmImageTier === "dev" ? 300000 : 120000;
-setTimeout(() => {
-  if (!gotSerial) {
-    const seconds = noOutputTimeoutMs / 1000;
-    const message = `No VM output after ${seconds} seconds. Reload to retry automatic compatibility boot.`;
-    status(message);
-    failBoot(message);
-  }
-}, noOutputTimeoutMs);
+let noOutputTimer = 0;
+function armNoOutputWatchdog() {
+  if (noOutputTimer) return;
+  // Asset downloads happen before emulator-ready. Starting this timer at page
+  // load made slow compatibility-image downloads fail before the CPU started.
+  const noOutputTimeoutMs = compatibilityBoot ? 300000 : (hasDevEnvironment ? 300000 : 120000);
+  noOutputTimer = setTimeout(() => {
+    if (!gotSerial) {
+      const seconds = noOutputTimeoutMs / 1000;
+      const message = compatibilityBoot
+        ? `No VM output ${seconds} seconds after compatibility-mode emulator startup. Reload to retry the range-backed PIO boot.`
+        : `No VM output ${seconds} seconds after emulator startup. Reload to retry automatic compatibility boot.`;
+      status(message);
+      failBoot(message);
+    }
+  }, noOutputTimeoutMs);
+}
 // The kernel serial console has no window size (TIOCGWINSZ reports 0x0).
 // Set it once at the first shell prompt, matching the xterm.js geometry above.
 let recentOutput = "";
@@ -2110,7 +2291,7 @@ emulator.add_listener("serial0-output-byte", (byte) => {
       for (const ch of `: __V86TERM_CONTROL__; export HISTFILE=/root/.ash_history HISTSIZE=200; set -o emacs 2>/dev/null || true; stty rows ${term.rows} cols ${term.cols}; mkdir -p /root/project /mnt/host-transfer; mount | grep -q ' /mnt/host-transfer ' || mount -t 9p host9p /mnt/host-transfer -o trans=virtio,version=9p2000.L,cache=loose; cd /root/project\n`) {
         emulator.serial0_send(ch);
       }
-      if (vmImageTier === "dev") startDevAppPhase();
+      if (hasDevEnvironment) startDevAppPhase();
       else finishBoot();
     }
   }

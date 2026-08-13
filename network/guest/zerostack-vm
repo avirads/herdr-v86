@@ -107,4 +107,10 @@ fi
 
 export ZS_CONFIG_DIR="$config_dir"
 export VM_WEBGPU_API_KEY="local-browser-bridge"
+# VMVM's other one-shot agents accept `agent "TASK"`. Keep Zerostack's native
+# flags intact, but translate one quoted positional task to its required -p
+# form so it does not silently enter the interactive CLI path.
+if [ "$#" -eq 1 ] && [ "${1#-}" = "$1" ]; then
+  set -- -p "$1"
+fi
 "$core" "$@"

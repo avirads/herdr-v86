@@ -41,7 +41,7 @@ const BODY_MARKER = '__V86_FS_BODY__';
 // path + shell helpers
 // ---------------------------------------------------------------------------
 
-export function toGuestPath(path) {
+export function toGuestPath(path, workspace = '') {
   const value = String(path ?? '/').replace(/\\/g, '/');
 
   // Relative paths resolve against the workspace root rather than throwing.
@@ -54,7 +54,21 @@ export function toGuestPath(path) {
   // Traversal is still refused below, so this loosens ergonomics, not safety.
   const rooted = value.startsWith('/') ? value : `/${value.replace(/^\.\/+/, '')}`;
 
-  const relative = rooted.replace(/^\/+/, '') || '.';
+  // The same courtesy for the opposite mistake. "/" is the project root, but
+  // the model is told it works in /root/project and writes that prefix in
+  // full, so /root/project/greet.js arrived here and became the guest-relative
+  // "root/project/greet.js" — a second project tree nested inside the first.
+  // The agent then could not see the file it had just written, ran
+  // `mkdir -p root/project`, wrote it again, and got no further.
+  //
+  // Both spellings name the same file, so accept both. Anything genuinely
+  // outside the workspace is untouched and still fails downstream.
+  const root = String(workspace || '').replace(/\/+$/, '');
+  const collapsed = root && (rooted === root || rooted.startsWith(`${root}/`))
+    ? rooted.slice(root.length) || '/'
+    : rooted;
+
+  const relative = collapsed.replace(/^\/+/, '') || '.';
   if (relative.split('/').includes('..')) throw new Error('path cannot contain ..');
   return relative;
 }
@@ -149,6 +163,13 @@ export function splitStderr(output) {
 // ---------------------------------------------------------------------------
 
 export class V86Filesystem extends MastraFilesystem {
+  /**
+   * Guest path for a workspace path, aware of the real directory the
+   * workspace root stands for. Read from the guest client rather than fixed,
+   * so setWorkspace() keeps the two in step. See toGuestPath().
+   */
+  _path(path) { return toGuestPath(path, this.guest?.workspace); }
+
   constructor({
     guest,
     id = 'v86-guest-fs',
@@ -209,7 +230,7 @@ export class V86Filesystem extends MastraFilesystem {
   _invalidate(...paths) {
     for (const path of paths) {
       if (path == null) continue;
-      const relative = toGuestPath(path);
+      const relative = this._path(path);
       this._cache.delete(relative);
       const parent = relative.includes('/') ? relative.slice(0, relative.lastIndexOf('/')) : '.';
       this._cache.delete(parent);
@@ -242,7 +263,7 @@ export class V86Filesystem extends MastraFilesystem {
   }
 
   async readFile(path, options = {}) {
-    const relative = toGuestPath(path);
+    const relative = this._path(path);
     // Usually already here: Mastra stats before reading, and stat brings the
     // body back with it.
     let content = this._cacheGet(relative, 'content');
@@ -280,22 +301,22 @@ export class V86Filesystem extends MastraFilesystem {
     }
     if (options.recursive) await this.mkdir(parentPath(path), { recursive: true });
 
-    await this.guest.write(toGuestPath(path), text);
+    await this.guest.write(this._path(path), text);
     this._invalidate(path);
   }
 
   async appendFile(path, content) {
     this._assertWritable('appendFile');
-    const existing = (await this.exists(path)) ? await this.guest.read(toGuestPath(path)) : '';
+    const existing = (await this.exists(path)) ? await this.guest.read(this._path(path)) : '';
     const text = typeof content === 'string' ? content : new TextDecoder().decode(content);
-    await this.guest.write(toGuestPath(path), existing + text);
+    await this.guest.write(this._path(path), existing + text);
     this._invalidate(path);
   }
 
   async deleteFile(path, options = {}) {
     this._assertWritable('deleteFile');
     if (options.force && !(await this.exists(path))) return;
-    await this.guest.delete(toGuestPath(path));
+    await this.guest.delete(this._path(path));
     this._invalidate(path);
   }
 
@@ -307,7 +328,7 @@ export class V86Filesystem extends MastraFilesystem {
       throw error;
     }
     const flag = options.recursive ? '-r ' : '';
-    await this._sh(`cp ${flag}-- ${shellQuote(toGuestPath(src))} ${shellQuote(toGuestPath(dest))}`);
+    await this._sh(`cp ${flag}-- ${shellQuote(this._path(src))} ${shellQuote(this._path(dest))}`);
     this._invalidate(dest);
   }
 
@@ -318,28 +339,28 @@ export class V86Filesystem extends MastraFilesystem {
       error.code = 'FILE_EXISTS';
       throw error;
     }
-    await this._sh(`mv -- ${shellQuote(toGuestPath(src))} ${shellQuote(toGuestPath(dest))}`);
+    await this._sh(`mv -- ${shellQuote(this._path(src))} ${shellQuote(this._path(dest))}`);
     this._invalidate(src, dest);
   }
 
   async mkdir(path, options = {}) {
     this._assertWritable('mkdir');
     const flag = options.recursive ? '-p ' : '';
-    await this._sh(`mkdir ${flag}-- ${shellQuote(toGuestPath(path))}`);
+    await this._sh(`mkdir ${flag}-- ${shellQuote(this._path(path))}`);
     this._invalidate(path);
   }
 
   async rmdir(path, options = {}) {
     this._assertWritable('rmdir');
     const command = options.recursive
-      ? `rm -rf -- ${shellQuote(toGuestPath(path))}`
-      : `rmdir -- ${shellQuote(toGuestPath(path))}`;
+      ? `rm -rf -- ${shellQuote(this._path(path))}`
+      : `rmdir -- ${shellQuote(this._path(path))}`;
     await this._sh(command, { allowFailure: Boolean(options.force) });
     this._invalidate(path);
   }
 
   async readdir(path = '/', options = {}) {
-    const relative = toGuestPath(path);
+    const relative = this._path(path);
     const raw = options.recursive
       ? await this.guest.glob(options.pattern || '**/*', relative)
       : await this.guest.list(relative);
@@ -363,14 +384,14 @@ export class V86Filesystem extends MastraFilesystem {
   }
 
   async exists(path) {
-    const { exitCode } = await this._sh(`[ -e ${shellQuote(toGuestPath(path))} ]`, {
+    const { exitCode } = await this._sh(`[ -e ${shellQuote(this._path(path))} ]`, {
       allowFailure: true,
     });
     return exitCode === 0;
   }
 
   async stat(path, { fresh = false } = {}) {
-    const relative = toGuestPath(path);
+    const relative = this._path(path);
     if (!fresh) {
       const cached = this._cacheGet(relative, 'stat');
       if (cached) return cached;
@@ -421,7 +442,7 @@ export class V86Filesystem extends MastraFilesystem {
 
   /** Not part of the abstract contract, but Workspace search uses it when present. */
   async grep(pattern, path = '/') {
-    const output = await this.guest.grep(pattern, toGuestPath(path));
+    const output = await this.guest.grep(pattern, this._path(path));
     return String(output ?? '')
       .split('\n')
       .filter(Boolean)
@@ -440,6 +461,13 @@ export class V86Filesystem extends MastraFilesystem {
 // ---------------------------------------------------------------------------
 
 export class V86Sandbox extends MastraSandbox {
+  /**
+   * Guest path for a workspace path, aware of the real directory the
+   * workspace root stands for. Read from the guest client rather than fixed,
+   * so setWorkspace() keeps the two in step. See toGuestPath().
+   */
+  _path(path) { return toGuestPath(path, this.guest?.workspace); }
+
   constructor({
     guest,
     id = 'v86-guest',
@@ -484,7 +512,7 @@ export class V86Sandbox extends MastraSandbox {
   _wrap(command, { cwd, env } = {}) {
     const directory = cwd ?? this.workingDirectory;
     const parts = [];
-    const relative = toGuestPath(directory);
+    const relative = this._path(directory);
     if (relative !== '.') parts.push(`cd ${shellQuote(relative)}`);
     for (const [key, value] of Object.entries({ ...this.env, ...(env || {}) })) {
       if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) parts.push(`export ${key}=${shellQuote(value)}`);
@@ -594,7 +622,7 @@ export class V86Sandbox extends MastraSandbox {
     for (const file of files) {
       const content =
         typeof file.content === 'string' ? file.content : new TextDecoder().decode(file.content);
-      await this.guest.write(toGuestPath(file.path), content);
+      await this.guest.write(this._path(file.path), content);
     }
   }
 

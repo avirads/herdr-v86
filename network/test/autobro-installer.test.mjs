@@ -32,8 +32,11 @@ test('CMD helper installer is per-user and needs no PowerShell or elevation', as
 
 test('Settings links the helper ZIP beside the extension', async () => {
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.8\.zip" download>Download AutoBro Chrome extension 2026\.07\.29\.8/);
-  assert.match(html, /href="https:\/\/fapstaff\.com\/downloads\/autobro-helper-windows-amd64\.zip" download>Download Windows networking helper/);
+  // Same-origin paths, not absolute URLs to one host. These assertions used to
+  // pin the download links to fapstaff.com, which is what kept them pointing at
+  // the old origin after the site moved.
+  assert.match(html, /href="\/downloads\/autobro-web-bridge-2026\.07\.29\.8\.zip" download>Download AutoBro Chrome extension 2026\.07\.29\.8/);
+  assert.match(html, /href="\/downloads\/autobro-helper-windows-amd64\.zip" download>Download Windows networking helper/);
   assert.doesNotMatch(html, /Install-AutoBro\.cmd|install-autobro\.ps1/);
 });
 

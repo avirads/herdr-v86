@@ -13,6 +13,7 @@ const images = {
   dev: ["vm-dev-i386-ext4.img", 99614720, 4],
   performance: ["vm-performance-i386-ext4.img", 96468992, 4],
   vapt: ["vm-vapt-i386-ext4.img", 103809024, 5],
+  star: ["vm-star-i386-ext4.img", 134217728, 6],
 };
 const [image, size, level] = images[tier];
 const status = document.getElementById("status");
@@ -51,12 +52,16 @@ emulator.add_listener("serial0-output-byte", byte => {
       `test "$(cat /etc/vmvm/tier)" = "${tier}"`,
       `test "$(cat /etc/vmvm/tier-level)" = "${level}"`,
       level >= 2 ? "command -v curl jq qjs vmagent-rpc >/dev/null" : "! command -v curl >/dev/null",
-      level >= 3 ? "command -v tmux herdr git rg zerostack rig vmfetch vmllm vmlang vmmastra >/dev/null" : "! command -v rig >/dev/null",
-      tier === "dev"
-        ? "command -v esbuild vmbro-httpd vmbro-dev >/dev/null && test -f /root/project/src/pages/index.astro && ! command -v k6 >/dev/null && for i in $(seq 1 30); do grep -q 'listening on' /var/log/vmbro-dev.log 2>/dev/null && break; sleep 1; done && grep -q 'listening on' /var/log/vmbro-dev.log"
-        : level >= 4
-          ? "command -v k6 >/dev/null"
-          : "! command -v k6 >/dev/null",
+      level >= 3 ? "command -v tmux herdr git rg zerostack rig vmfetch vmllm vmlang vmmastra >/dev/null && grep -q 'set -- -p' /usr/local/bin/zerostack" : "! command -v rig >/dev/null",
+      tier === "dev" || tier === "star"
+        ? "command -v esbuild vmbro-httpd vmbro-dev >/dev/null && test -f /root/project/src/pages/index.astro && for i in $(seq 1 30); do grep -q 'listening on' /var/log/vmbro-dev.log 2>/dev/null && break; sleep 1; done && grep -q 'listening on' /var/log/vmbro-dev.log"
+        : "! command -v vmbro-dev >/dev/null",
+      tier === "performance" || tier === "vapt" || tier === "star"
+        ? "command -v k6 k6obs >/dev/null"
+        : "! command -v k6 >/dev/null",
+      tier === "vapt" || tier === "star"
+        ? "command -v vaptr >/dev/null && test -f /opt/vaptr/configs/native.json"
+        : "! command -v vaptr >/dev/null",
     ].join(" && ");
     emulator.serial0_send(`echo TIER_CHECK_BEGIN; ${checks}; echo TIER_CHECK_RESULT:$?\n`);
   }

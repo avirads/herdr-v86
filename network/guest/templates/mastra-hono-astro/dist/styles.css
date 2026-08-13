@@ -1,0 +1,46 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #e8edf7; background: #090c14; }
+:root[data-theme="light"] { color-scheme: light; color: #18202f; background: #f5f7fb; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse 70% 45% at 50% -10%, rgb(99 102 241 / 12%), transparent 72%), #090c14; }
+button, input, .button { font: inherit; }
+.shell { width: min(760px, calc(100% - 2rem)); min-height: calc(100vh - 4rem); margin: 2rem auto; display: grid; grid-template-rows: auto auto 1fr auto; overflow: hidden; border: 1px solid #27304a; border-radius: 1.25rem; background: rgb(12 16 28 / 92%); box-shadow: 0 24px 80px #0008; }
+header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; padding: 1.5rem; border-bottom: 1px solid #27304a; }
+.brand, .header-actions { display: flex; align-items: center; gap: .75rem; }
+.brand img { width: 42px; height: 42px; object-fit: contain; }
+.header-actions { justify-content: flex-end; flex-wrap: wrap; }
+h1 { margin: .15rem 0; font-size: clamp(1.7rem, 5vw, 2.4rem); }
+.eyebrow { margin: 0; color: #a78bfa; font-size: .72rem; font-weight: 800; letter-spacing: .14em; }
+.subtitle, small { color: #9aa6bd; }
+.subtitle { margin: 0; }
+.status { padding: .4rem .65rem; border-radius: 999px; color: #b8c5dc; background: #202840; font-size: .75rem; white-space: nowrap; }
+.connection { padding: 1rem 1.5rem; border-bottom: 1px solid #27304a; }
+.connection label { display: block; margin-bottom: .45rem; font-size: .8rem; font-weight: 700; }
+.row, .composer { display: flex; gap: .6rem; }
+.row { align-items: center; }
+.model { flex: 1; display: grid; gap: .25rem; }
+input { min-width: 0; flex: 1; border: 1px solid #34405f; border-radius: .7rem; padding: .8rem .9rem; outline: 0; color: #eef2ff; background: #0a0f1d; }
+input:focus { border-color: #8b5cf6; box-shadow: 0 0 0 3px #8b5cf633; }
+button, .button { border: 0; border-radius: .7rem; padding: .8rem 1.1rem; color: white; background: #7c3aed; cursor: pointer; font-weight: 700; text-decoration: none; white-space: nowrap; }
+button:hover, .button:hover { background: #8b5cf6; }
+button:disabled { opacity: .55; cursor: wait; }
+button.secondary { border: 1px solid #3a4666; background: #202840; }
+.quiet { padding: .4rem .65rem; border: 1px solid #3a4666; color: #b8c5dc; background: transparent; font-size: .75rem; }
+.icon-button { width: 36px; height: 36px; display: grid; place-items: center; padding: 0; font-size: 1.05rem; line-height: 1; }
+.button.secondary { border: 1px solid #3a4666; background: #202840; }
+.model-help { margin: .75rem 0 0; color: #9aa6bd; font-size: .8rem; }
+.model-help a { color: #c4b5fd; }
+.messages { min-height: 16rem; margin: 0; padding: 1.5rem; overflow-y: auto; list-style: none; }
+.message { width: fit-content; max-width: 82%; margin-bottom: .85rem; padding: .75rem 1rem; border-radius: 1rem; white-space: pre-wrap; line-height: 1.5; }
+.message.assistant { border: 1px solid #2d3855; border-bottom-left-radius: .25rem; background: #171e31; }
+.message.user { margin-left: auto; border-bottom-right-radius: .25rem; background: #6d28d9; }
+.composer { padding: 1rem 1.5rem 1.5rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+:root[data-theme="light"] body { background: radial-gradient(ellipse 70% 45% at 50% -10%, rgb(79 70 229 / 8%), transparent 72%), #f5f7fb; }
+:root[data-theme="light"] .shell { border-color: #d8deea; background: rgb(255 255 255 / 94%); box-shadow: 0 18px 55px rgb(36 46 66 / 10%); }
+:root[data-theme="light"] header, :root[data-theme="light"] .connection { border-color: #d8deea; }
+:root[data-theme="light"] .subtitle, :root[data-theme="light"] small, :root[data-theme="light"] .model-help { color: #657087; }
+:root[data-theme="light"] .status { color: #4b5568; background: #edf0f7; }
+:root[data-theme="light"] input { color: #18202f; background: #fff; border-color: #cbd3e1; }
+:root[data-theme="light"] .message.assistant { border-color: #d8deea; background: #f2f4f8; }
+:root[data-theme="light"] .quiet, :root[data-theme="light"] .button.secondary { color: #35405a; background: #f2f4f8; border-color: #cbd3e1; }
+@media (max-width: 560px) { .shell { width: 100%; min-height: 100vh; margin: 0; border: 0; border-radius: 0; } header { flex-direction: column; } }

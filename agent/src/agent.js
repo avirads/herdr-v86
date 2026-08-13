@@ -6,6 +6,7 @@ import { MemorySaver } from '@langchain/langgraph';
 import { createDeepAgent } from 'deepagents/browser';
 import { z } from 'zod';
 import { V86DeepAgentsBackend } from './guest-backend.js';
+import { parseNamedCall, relaxedJsonParse, stripToolDelimiters } from './tool-call-syntax.js';
 
 function contentText(message) {
   if (typeof message.content === 'string') return message.content;
@@ -37,15 +38,43 @@ function deriveInstruction(args) {
   return [args.command, target].filter(Boolean).join(' ');
 }
 
+// This tier asks for {"tool":…,"args":…} rather than the {"tool_call":…} shape
+// the other two use, but the model does not read our protocol description as
+// binding: it answers in its own trained syntax regardless of which of the
+// three it was asked for. Accept that syntax here too, via the same shared
+// grammar, so a tier does not lose a turn to spelling.
 function parseDecision(text) {
-  const cleaned = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  try { return JSON.parse(cleaned); } catch {}
+  const raw = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const { text: cleaned } = stripToolDelimiters(raw);
+
+  // `call:write_file{…}` — the name rides outside the object.
+  const named = parseNamedCall(cleaned);
+  if (named) return { tool: named.name, args: named.arguments };
+
+  const decided = value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    // A model that reaches for the other tiers' shape still means it.
+    const call = value.tool_call || value.toolCall;
+    if (call?.name) return { tool: call.name, args: call.arguments || {} };
+    return value;
+  };
+
+  try { return decided(JSON.parse(cleaned)) ?? { final: cleaned }; } catch {}
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
   if (start >= 0 && end > start) {
-    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
+    try { return decided(JSON.parse(cleaned.slice(start, end + 1))) ?? { final: cleaned }; } catch {}
   }
+  const relaxed = decided(relaxedJsonParse(cleaned));
+  if (relaxed) return relaxed;
   return { final: cleaned };
+}
+
+/** Tool arguments arrive as an object or as a JSON string, depending on path. */
+function decisionArgs(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  const parsed = relaxedJsonParse(String(value ?? '{}'));
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
 }
 
 function shellQuote(value) {
@@ -101,8 +130,19 @@ export class WebGpuToolChatModel extends BaseChatModel {
       ],
     };
     const completion = await this.client.chat(body);
-    const raw = completion?.choices?.[0]?.message?.content ?? completion;
-    const decision = parseDecision(raw);
+    const choice = completion?.choices?.[0];
+
+    // The client may already have recovered a tool call from the model's native
+    // syntax, and it sets `content: null` when it does. Reading content first
+    // and falling back to `completion` then handed the whole object to
+    // parseDecision, which stringified it to "[object Object]" and spent the
+    // turn on a non-answer. Take the structured call when there is one.
+    const native = choice?.message?.tool_calls?.[0];
+    const raw = choice?.message?.content ?? '';
+    const decision = native?.function?.name
+      ? { tool: native.function.name, args: decisionArgs(native.function.arguments) }
+      : parseDecision(raw !== '' ? raw : completion);
+
     let message;
     if (decision.tool) {
       message = new AIMessage({ content: '', tool_calls: [{ id: crypto.randomUUID(), name: decision.tool, args: decision.args || {}, type: 'tool_call' }] });
