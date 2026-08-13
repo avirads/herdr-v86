@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vmvapt/schemas/finding.schema.json",
+  "title": "Finding",
+  "description": "One record of findings.jsonl (Agents 7-9). The file is newline-delimited JSON; this schema validates a single line.",
+  "type": "object",
+  "required": ["id", "title", "severity", "confidence", "affected_url", "evidence", "reproduction", "remediation", "first_seen"],
+  "properties": {
+    "id": { "type": "string" },
+    "template_id": { "type": "string" },
+    "title": { "type": "string" },
+    "severity": { "$ref": "#/$defs/Severity" },
+    "confidence": { "$ref": "#/$defs/Confidence" },
+    "affected_url": { "type": "string" },
+    "matcher": { "type": "string" },
+    "evidence": { "type": "string" },
+    "reproduction": { "type": "string" },
+    "remediation": { "type": "string" },
+    "references": { "type": "array", "items": { "type": "string" } },
+    "oast_callback": { "$ref": "#/$defs/OASTEvent" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "first_seen": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "Severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+    "Confidence": { "enum": ["informational", "candidate", "verified", "needs_manual_validation", "false_positive"] },
+    "OASTEvent": {
+      "type": "object",
+      "required": ["correlation_id", "protocol", "remote_addr", "timestamp"],
+      "properties": {
+        "correlation_id": { "type": "string" },
+        "protocol": { "enum": ["dns", "http", "smtp"] },
+        "remote_addr": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "raw_request": { "type": "string" }
+      }
+    }
+  }
+}

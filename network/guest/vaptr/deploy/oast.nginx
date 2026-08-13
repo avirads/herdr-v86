@@ -1,0 +1,29 @@
+# nginx reverse proxy for the self-hosted interactsh OAST server.
+# Deploy to /etc/nginx/sites-available/oast.<domain> and symlink into
+# sites-enabled, then: nginx -t && systemctl reload nginx
+#
+# interactsh serves HTTP on 127-visible :8071; nginx fronts it on 80/443 for the
+# base domain (client polling) and the wildcard (HTTP OAST callbacks).
+# The HTTPS server block is added by certbot AFTER the DNS delegation is live:
+#   certbot --nginx -d oast.fapstaff.com
+# HTTPS OAST callbacks to *.oast.fapstaff.com additionally need a wildcard cert
+# via a DNS-01 challenge (registrar API or a manual TXT record).
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name oast.fapstaff.com *.oast.fapstaff.com;
+
+    # Let certbot answer HTTP-01 locally instead of proxying it to interactsh.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        proxy_pass http://82.180.132.123:8071;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;   # interactsh -origin-ip-header
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 30s;
+    }
+}
