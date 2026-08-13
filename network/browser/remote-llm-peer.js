@@ -11,7 +11,12 @@ function send(connection, message) {
 }
 
 export const DEFAULT_PEER_OPTIONS = Object.freeze({
-  host: 'fapstaff.com',
+  // Follow whoever serves the page, the way the gateway URL already does
+  // (wss://${location.host}/v1/ethernet). Hardcoding the host meant that after
+  // the site moved to a new origin, remote chat kept signalling through the old
+  // one -- working, but still depending on the host we had just left. Guarded
+  // so the module still parses outside a browser.
+  host: (typeof location !== 'undefined' && location.hostname) || 'fapstaff.com',
   path: '/peerjs',
   secure: true,
   key: 'peerjs',

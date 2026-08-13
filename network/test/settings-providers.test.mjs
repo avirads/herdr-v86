@@ -17,9 +17,9 @@ test('provider controls are grouped at the top of Settings', () => {
   assert.match(settings, /id="configure-autobro-later"[^>]*>Connect</);
   assert.match(settings, /id="reset-autobro"[^>]*>Reset</);
   assert.match(settings, /id="settings-autobro-status"[^>]*role="status"/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/downloads\/autobro-web-bridge-2026\.07\.29\.8\.zip" download/);
+  assert.match(settings, /href="\/downloads\/autobro-web-bridge-2026\.07\.29\.8\.zip" download/);
   assert.match(settings, />Download AutoBro Chrome extension 2026\.07\.29\.8<\/a>/);
-  assert.match(settings, /href="https:\/\/fapstaff\.com\/skills\/guidewire-policycenter-1\.0\.0\.zip" download/);
+  assert.match(settings, /href="\/skills\/guidewire-policycenter-1\.0\.0\.zip" download/);
   assert.match(settings, />Download Guidewire PolicyCenter skills 1\.0\.0<\/a>/);
   assert.match(settings, /id="load-voice"[^>]*>Load</);
   assert.match(settings, /id="reset-voice"[^>]*>Reset</);

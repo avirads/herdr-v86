@@ -403,16 +403,16 @@
       <summary><h3 id="autobro-settings-title">AutoBro</h3></summary>
       <small id="settings-autobro-status" role="status" aria-live="polite">Connect browser automation or forget the current pairing.</small>
       <div class="provider-actions">
-        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro Chrome extension 2026.07.29.8</a>
-        <a class="tool-link" href="https://fapstaff.com/skills/guidewire-policycenter-1.0.0.zip" download>Download Guidewire PolicyCenter skills 1.0.0</a>
-        <a class="tool-link" href="https://fapstaff.com/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
+        <a class="tool-link" href="/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro Chrome extension 2026.07.29.8</a>
+        <a class="tool-link" href="/skills/guidewire-policycenter-1.0.0.zip" download>Download Guidewire PolicyCenter skills 1.0.0</a>
+        <a class="tool-link" href="/downloads/autobro-helper-windows-amd64.zip" download>Download Windows networking helper</a>
         <button id="configure-autobro-later" type="button">Connect</button>
         <button id="reset-autobro" type="button">Reset</button>
       </div>
       <div id="autobro-install-help" class="autobro-install-help" role="alert" hidden>
         <strong>AutoBro is not installed or enabled.</strong>
         <ol>
-          <li><a class="tool-link" href="https://fapstaff.com/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro 2026.07.29.8</a> and extract the ZIP.</li>
+          <li><a class="tool-link" href="/downloads/autobro-web-bridge-2026.07.29.8.zip" download>Download AutoBro 2026.07.29.8</a> and extract the ZIP.</li>
           <li>Open <code>chrome://extensions</code> in Chrome or Chromium.</li>
           <li>Enable <strong>Developer mode</strong>, then select <strong>Load unpacked</strong>.</li>
           <li>Select the extracted folder containing <code>manifest.json</code>.</li>
@@ -2155,7 +2155,14 @@ if (gatewayURL && sessionToken) {
   devNetworkReady = connectWebSocketGateway(gatewayURL, sessionToken);
   devNetworkReady
     .catch(error => networkStatus("error — " + error.message));
-} else if (hasDevEnvironment && location.protocol === "https:" && location.hostname === "fapstaff.com") {
+// No hostname check. This branch is the only thing that mints a gateway session
+// when one is not handed in via the URL fragment, so pinning it to a single
+// hostname meant the emulator silently had no network anywhere else -- the page
+// loaded, booted, and simply never said "network: connected". The gateway's own
+// -allow-origin list is the real boundary: an unlisted origin gets a 401 here
+// and the catch below reports it, which is a visible failure rather than a
+// missing feature.
+} else if (hasDevEnvironment && location.protocol === "https:") {
   devNetworkReady = fetch("/v1/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

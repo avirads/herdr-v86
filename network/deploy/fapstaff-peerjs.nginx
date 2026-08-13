@@ -15,6 +15,15 @@ server {
     root /var/www/herdr-v86/current;
     index index.html;
 
+    # Emit relative redirects. nginx builds absolute ones from its own listen
+    # scheme, which is correct here but wrong the moment this sits behind a
+    # proxy that terminates TLS upstream: every redirect comes back as http://
+    # and an https page blocks it as mixed content. /peerjs -> /peerjs/ broke
+    # exactly that way. Harmless with TLS terminated locally, so it belongs in
+    # both configurations rather than only the proxied one.
+    absolute_redirect off;
+    port_in_redirect off;
+
     ssl_certificate /etc/letsencrypt/live/fapstaff.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/fapstaff.com/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
