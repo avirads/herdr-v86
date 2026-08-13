@@ -40,10 +40,28 @@ test('VM image manifest defines seven ordered tiers with an all-features Star im
 });
 
 test('built image files match manifest byte sizes', async () => {
+  // The images are build artifacts and are no longer committed, so a fresh
+  // clone has the manifest and none of the files. Check whatever is present
+  // and skip the rest rather than failing on a clone that is perfectly valid.
+  //
+  // The size still matters -- index.html compares it against the Range
+  // preflight's content-range total, and a mismatch silently downgrades every
+  // boot to compatibility mode. It just cannot be checked from here. Build the
+  // images with network/guest/build-tier-images.sh to exercise this properly.
+  let checked = 0;
   for (const [tier, size] of expected) {
     const image = manifest.tiers[tier];
-    assert.equal((await stat(new URL(image.url, root))).size, size);
+    let actual;
+    try {
+      actual = (await stat(new URL(image.url, root))).size;
+    } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw error;
+    }
+    assert.equal(actual, size, `${tier}: ${image.url}`);
+    checked += 1;
   }
+  console.log(`  checked ${checked} of ${expected.length} images present locally`);
 });
 
 test('tier builder applies each preceding installer and validates boundaries', () => {
