@@ -1,0 +1,110 @@
+#!/bin/sh
+# zot against the page-local WebGPU model.
+#
+# zot is a coding agent that runs IN the guest and talks to an OpenAI-compatible
+# endpoint. The guest already has one: vm-openai-proxy listens on 11435 and
+# bridges /v1/chat/completions over the ttyS1 RPC channel to the browser tab,
+# where LlmProviderRouter answers from the local LiteRT-LM model on WebGPU. So
+# nothing here reaches the internet: the prompt goes guest -> serial -> tab, and
+# the tokens come back the same way.
+#
+# This is why zot fits where the Cline CLI does not. zot is pure Go and
+# cross-compiles to linux/386, which is all either VM provider can execute;
+# Cline ships native binaries for x64 and arm64 only.
+#
+# Both providers ship this, but only v86 can run it today: the CheerpX guest has
+# no TCP stack at all, not even loopback, so `nc -lk` cannot listen and zot has
+# nothing to dial. That is detected below and reported plainly rather than
+# failing as a connection refused three layers down.
+set -eu
+
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH
+
+PORT="${VM_OPENAI_PORT:-11435}"
+ZOT_HOME="${ZOT_HOME:-/root/.zot}"
+export ZOT_HOME
+
+# Provider id "vmvm" is not cosmetic: zot derives the API-key environment
+# variable from it in upper snake case, so this must stay in step with
+# VMVM_API_KEY below. The proxy ignores credentials entirely -- the model is a
+# tab away, not behind an account -- but zot still requires a non-empty key
+# before it will select a provider.
+: "${VMVM_API_KEY:=local}"
+export VMVM_API_KEY
+
+mkdir -p "$ZOT_HOME"
+if [ ! -f "$ZOT_HOME/models.json" ]; then
+  cat > "$ZOT_HOME/models.json" <<EOF
+{
+  "providers": {
+    "vmvm": {
+      "baseUrl": "http://127.0.0.1:${PORT}/v1",
+      "api": "openai",
+      "models": [
+        { "id": "webgpu", "name": "VMVM local WebGPU (LiteRT-LM in the browser tab)" }
+      ]
+    }
+  }
+}
+EOF
+fi
+
+# No TCP stack means no bridge and no way to reach the model. CheerpX reports
+# this as "address already in use" from bind(), which sends you looking for a
+# port conflict that does not exist, so name it here instead.
+if [ ! -e /proc/net/tcp ]; then
+  cat >&2 <<'EOF'
+vmzot: this guest has no TCP stack, so the local model bridge cannot listen.
+
+That is the CheerpX provider: it has no sockets at all, not even loopback, so
+zot has nothing to connect to. The v86 provider does support this.
+
+On CheerpX use the browser-side agents instead -- they reach the same WebGPU
+model over the RPC bridge rather than over HTTP:
+
+  vmai "..."      one-shot completion
+  vmlang / vmmastra   agent tiers
+EOF
+  exit 1
+fi
+
+# Is something already serving on $PORT?
+#
+# NOT /dev/tcp/127.0.0.1/$PORT. That is a bash feature and this is /bin/sh --
+# BusyBox ash in the guest -- where it is just a missing path. The redirect then
+# fails every time, so the probe reports "nothing listening" whatever the truth,
+# which meant starting a second nc that could not bind and then declaring the
+# bridge dead after fifty successful-but-unseen seconds.
+#
+# curl is present from the ai-tools tier and proves the endpoint answers rather
+# than merely that a socket exists. /proc/net/tcp is the fallback: listening
+# sockets appear there with the port in uppercase hex (11435 -> 2CAB).
+bridge_up() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -sf -o /dev/null --max-time 3 "http://127.0.0.1:${PORT}/v1/models"
+  else
+    grep -qi ":$(printf '%04X' "$PORT") " /proc/net/tcp 2>/dev/null
+  fi
+}
+
+if ! bridge_up; then
+  VM_OPENAI_TTY="${VM_OPENAI_TTY:-/dev/ttyS1}" \
+    /usr/local/libexec/vm-openai-proxy >/tmp/zot-openai-proxy.log 2>&1 &
+  # Wait for the listener rather than sleeping a fixed amount: first boot is
+  # slow and a fixed sleep is either a stall or a race.
+  waited=0
+  while [ "$waited" -lt 50 ]; do
+    bridge_up && break
+    waited=$((waited + 1))
+    sleep 1
+  done
+  if [ "$waited" -ge 50 ]; then
+    echo "zot: the local model bridge did not start on port $PORT." >&2
+    echo "     Check /tmp/zot-openai-proxy.log, and that a model is loaded in the browser tab." >&2
+    exit 1
+  fi
+fi
+
+# TUI by default -- pass a prompt for one-shot, or -p to print and exit.
+exec /usr/local/libexec/zot --provider vmvm --model webgpu "$@"

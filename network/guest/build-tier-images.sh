@@ -12,6 +12,8 @@ K6_BINARY="${K6_BINARY:-$PROJECT_DIR/network/guest/bin/k6}"
 VAPTR_BINARY="${VAPTR_BINARY:-$PROJECT_DIR/network/guest/bin/vaptr}"
 VAPTR_CONFIG="${VAPTR_CONFIG:-$PROJECT_DIR/network/guest/vaptr-native.json}"
 DOMAIN_SKILLS_PACKAGE="${DOMAIN_SKILLS_PACKAGE:-$PROJECT_DIR/skills/guidewire-policycenter-1.0.0.zip}"
+ZOT_BINARY="${ZOT_BINARY:-$PROJECT_DIR/network/guest/bin/zot}"
+SHELLEY_BINARY="${SHELLEY_BINARY:-$PROJECT_DIR/network/guest/bin/shelley}"
 ESBUILD_BINARY="${ESBUILD_BINARY:-$PROJECT_DIR/network/guest/bin/esbuild}"
 VMBRO_HTTPD_BINARY="${VMBRO_HTTPD_BINARY:-$PROJECT_DIR/network/guest/bin/vmbro-httpd}"
 DEV_TEMPLATE="${DEV_TEMPLATE:-$PROJECT_DIR/network/guest/dev-template}"
@@ -115,6 +117,54 @@ install_essentials() {
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/bin/vmagent-rpc"
 }
 
+seed_shelley_db() {
+  local seed="$MOUNT_DIR/usr/local/share/shelley/shelley.db"
+  local port=39117 waited=0 pid=
+  install -d -m 0755 "$(dirname "$seed")"
+  rm -f "$seed"
+
+  "$SHELLEY_BINARY" --db "$seed" serve --port "$port" >/tmp/shelley-seed.log 2>&1 &
+  pid=$!
+  while (( waited < 60 )); do
+    curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:$port/api/custom-models" && break
+    kill -0 "$pid" 2>/dev/null || { echo "shelley seed: server exited; see /tmp/shelley-seed.log" >&2; exit 1; }
+    # NOT (( waited++ )): post-increment evaluates to the OLD value, so the
+    # first pass returns 0, which is exit status 1, which set -e treats as a
+    # failure and kills the build one second in. An assignment always succeeds.
+    waited=$((waited + 1)); sleep 1
+  done
+  (( waited < 60 )) || { kill "$pid" 2>/dev/null; echo "shelley seed: server never answered" >&2; exit 1; }
+
+  # provider_type "openai" is chat-completions, which is what vm-openai-proxy
+  # serves on 11435. "openai-responses" would post to /v1/responses and 404.
+  curl -sf -X POST --max-time 10 "http://127.0.0.1:$port/api/custom-models" \
+    -H 'Content-Type: application/json' \
+    -d '{"display_name":"VMVM local WebGPU","provider_type":"openai",
+         "endpoint":"http://127.0.0.1:11435/v1","api_key":"local",
+         "model_name":"webgpu","max_tokens":4096,
+         "image_support":"no","reasoning_support":"no"}' >/dev/null \
+    || { kill "$pid" 2>/dev/null; echo "shelley seed: model registration failed" >&2; exit 1; }
+
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+
+  # Checkpoint, do not delete. SQLite is in WAL mode and SIGTERM does not
+  # checkpoint on the way out, so the row just written lives only in the -wal.
+  # The first attempt at this removed the sidecars to get a single-file seed and
+  # silently threw the model away with them -- the migrations were already in
+  # the main database, so the result looked correct and was not.
+  # TRUNCATE folds the WAL back in and removes both sidecars itself.
+  command -v sqlite3 >/dev/null || { echo "shelley seed: sqlite3 is required to checkpoint the seed" >&2; exit 1; }
+  sqlite3 "$seed" 'PRAGMA wal_checkpoint(TRUNCATE);' >/dev/null
+
+  # Verify against the file that ships, not against the API that wrote it.
+  local rows
+  rows=$(sqlite3 "$seed" "select count(*) from models where display_name = 'VMVM local WebGPU';")
+  [[ "$rows" == "1" ]] || { echo "shelley seed: model row missing after checkpoint (got '$rows')" >&2; exit 1; }
+  [[ -s "$seed" ]] || { echo "shelley seed: no database produced" >&2; exit 1; }
+  chmod 0644 "$seed"
+}
+
 install_ai_tools() {
   require_file "$RIG_PACKAGE"
   require_file "$ZEROSTACK_PACKAGE"
@@ -134,6 +184,12 @@ install_ai_tools() {
   install -D -m 0755 "$PROJECT_DIR/network/guest/cline-vm" "$MOUNT_DIR/usr/local/bin/cline"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmjs" "$MOUNT_DIR/usr/local/bin/vmjs"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bin/vmbench"
+  # Shelley: a Go server with an embedded web UI, driven from the guest by
+  # vmshelley and reaching the page-local model through vm-openai-proxy below.
+  require_file "$SHELLEY_BINARY"
+  install -D -m 0755 "$SHELLEY_BINARY" "$MOUNT_DIR/usr/local/libexec/shelley"
+  install -D -m 0755 "$PROJECT_DIR/network/guest/vmshelley" "$MOUNT_DIR/usr/local/bin/vmshelley"
+  seed_shelley_db
   install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-proxy" "$MOUNT_DIR/usr/local/libexec/vm-openai-proxy"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-request" "$MOUNT_DIR/usr/local/libexec/vm-openai-request"
   install -D -m 0644 "$PROJECT_DIR/network/guest/skills/mastra/SKILL.md" "$MOUNT_DIR/usr/local/share/mastra/SKILL.md"
@@ -159,6 +215,12 @@ install_dev() {
   [[ -d "$DEV_IDE" ]] || { echo "required directory not found: $DEV_IDE" >&2; exit 1; }
   install -D -m 0755 "$ESBUILD_BINARY" "$MOUNT_DIR/usr/local/bin/esbuild"
   install -D -m 0755 "$VMBRO_HTTPD_BINARY" "$MOUNT_DIR/usr/local/bin/vmbro-httpd"
+  # zot lives with the dev stack rather than with the AI tools: it is a 16 MB
+  # binary and belongs next to the project and toolchain it edits. It depends
+  # on vm-openai-proxy from install_ai_tools, which dev always includes.
+  require_file "$ZOT_BINARY"
+  install -D -m 0755 "$ZOT_BINARY" "$MOUNT_DIR/usr/local/libexec/zot"
+  install -D -m 0755 "$PROJECT_DIR/network/guest/vmzot" "$MOUNT_DIR/usr/local/bin/vmzot"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmbro-dev" "$MOUNT_DIR/usr/local/bin/vmbro-dev"
   # All framework templates ship into /opt/vmbro/templates/<id>. The Dev IDE
   # supervisor scaffolds from these on first boot; the mastra starter is also
@@ -225,7 +287,9 @@ verify_tier() {
     chroot "$MOUNT_DIR" /bin/sh -ec '
       command -v tmux herdr git rg shfmt ctags make patch
       command -v zerostack rig vmfetch vmclip vmexport vmproject vmgithub
-      command -v vmai vmllm vmlang vmmastra cline vmjs vmbench
+      command -v vmai vmllm vmlang vmmastra cline vmjs vmbench vmshelley
+      test -x /usr/local/libexec/shelley
+      test -s /usr/local/share/shelley/shelley.db
       test -x /usr/local/libexec/rig-agent
       test -f /usr/local/share/vm-skills/guidewire-policycenter-1.0.0.zip
     '
@@ -234,7 +298,8 @@ verify_tier() {
   fi
   if [[ "$tier" == dev || "$tier" == star ]]; then
     chroot "$MOUNT_DIR" /bin/sh -ec '
-      command -v esbuild vmbro-httpd vmbro-dev
+      command -v esbuild vmbro-httpd vmbro-dev vmzot
+      test -x /usr/local/libexec/zot
       test -f /root/project/src/pages/index.astro
       test -f /root/project/src/server.ts
       test -f /root/project/dist/index.html
