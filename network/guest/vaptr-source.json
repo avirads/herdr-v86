@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/avirads/vmvapt",
+  "commit": "ddef5e9a6a660a4a86cdc6d96ebbae7b0bc085cb",
+  "version": "0.1.0",
+  "target": "linux/386",
+  "go": "go1.26.2",
+  "compression": "none",
+  "size": 6684834,
+  "note": "sha256 is host-dependent: Go stamps a build ID from the build action graph. Size, toolchain and module commit are the stable identity; check with 'go version -m'."
+}
