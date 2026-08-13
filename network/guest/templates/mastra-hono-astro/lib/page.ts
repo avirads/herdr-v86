@@ -68,7 +68,7 @@ export const $$metadata = $$createMetadata("/src/pages/index.astro", { modules: 
 
 			const boot = async () => {
 				if (!('gpu' in navigator)) throw new Error('WebGPU is unavailable. Use a current WebGPU-enabled browser.');
-				const { LiteRtLmClient } = await import('/vmmastra/network/browser/litert-lm-client.js');
+				const { LiteRtLmClient } = await import('/vmmastra/shared/litert-lm-client.js');
 				client = new LiteRtLmClient();
 				client.addEventListener('activity', (event) => {
 					progress.textContent = event.detail?.message || 'Working…';

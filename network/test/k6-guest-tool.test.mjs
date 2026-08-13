@@ -5,7 +5,7 @@ import test from 'node:test';
 const root = new URL('../../', import.meta.url);
 const build = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 const docs = await readFile(new URL('network/guest/agent-capabilities.md', root), 'utf8');
-const controller = await readFile(new URL('network/browser/vmagent-controller.js', root), 'utf8');
+const controller = await readFile(new URL('shared/vmagent-controller.js', root), 'utf8');
 const mastraSource = await readFile(new URL('agent/src/mastra-browser.js', root), 'utf8');
 const mastraSkill = await readFile(new URL('network/guest/skills/mastra/SKILL.md', root), 'utf8');
 const source = JSON.parse(await readFile(new URL('network/guest/k6-source.json', root), 'utf8'));

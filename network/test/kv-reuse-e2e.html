@@ -20,7 +20,7 @@ const FILLER = ('The quick brown fox jumps over the lazy dog while the engine ke
   'A resident session keeps the key-value cache warm and only ingests the delta. ').repeat(3);
 
 try {
-  const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+  const { LiteRtLmClient } = await import('../../shared/litert-lm-client.js');
   const client = new LiteRtLmClient();
   const t0 = performance.now();
   await client.initialize({ autoLoad: true, bundledModelUrl: '../../models/gemma-4-E2B-it-web.litertlm' });

@@ -1150,18 +1150,18 @@ function writeSerialByte(byte) {
   }
   queueSerialOutput(byte);
 }
-import("./network/browser/v86-host-bridge.js").then(async module => {
-  const { LlmProviderRouter } = await import("./network/browser/llm-provider-router.js");
+import("./providers/v86/host-bridge.js").then(async module => {
+  const { LlmProviderRouter } = await import("./shared/llm-provider-router.js");
   llmProviderRouter = new LlmProviderRouter({ getLocalClient: () => webGpuLlmClient });
   hostBridge = new module.V86HostBridge(emulator, {
     llmClient: webGpuLlmClient,
     llmResolver: (agent, route) => llmProviderRouter.resolve(agent, route),
   });
   window.v86HostBridge = hostBridge;
-  import("./network/browser/v86-guest-readonly.js").then(({ V86GuestReadonlyClient }) => {
+  import("./providers/v86/guest-client.js").then(({ V86GuestReadonlyClient }) => {
     guestReadonlyClient = new V86GuestReadonlyClient(emulator, hostBridge, { rpcSerial: 1 });
     window.v86GuestReadonly = guestReadonlyClient;
-    import(`./network/browser/vmagent-controller.js?v=${encodeURIComponent(APP_VERSION)}`).then(async ({ VmAgentController }) => {
+    import(`./shared/vmagent-controller.js?v=${encodeURIComponent(APP_VERSION)}`).then(async ({ VmAgentController }) => {
       vmAgentController = new VmAgentController({
         createAgent: async options => {
           const { createVMAgent } = await import("./agent/dist/agent.js");
@@ -1432,7 +1432,7 @@ async function connectAutoBro({ extensionId = null, token = null } = {}) {
   if (!extensionId || !token) return;
   browserStatus("pairing…");
   try {
-    const { AutoBroClient } = await import("./network/browser/autobro-client.js");
+    const { AutoBroClient } = await import("./shared/autobro-client.js");
     const client = new AutoBroClient({ extensionId: extensionId.trim(), token: token.trim(), getLlmClient: () => webGpuLlmClient });
     const health = await client.pair();
     autobroClient = client;
@@ -1462,7 +1462,7 @@ async function oneClickConnectAutoBro(statusElement = document.getElementById("s
   const installHelp = document.getElementById("autobro-install-help");
   try {
     statusElement.textContent = "Checking for the AutoBro extension…";
-    const { probeAutoBro, requestAutoBroPairing } = await import("./network/browser/autobro-client.js");
+    const { probeAutoBro, requestAutoBroPairing } = await import("./shared/autobro-client.js");
     if (!await probeAutoBro(AUTOBRO_EXTENSION_ID)) {
       installHelp.hidden = false;
       statusElement.textContent = "AutoBro extension not detected. Download and install it using the steps below.";
@@ -1536,7 +1536,7 @@ function logRemoteActivity(detail) {
 async function getRemoteLlmPeer() {
   if (remoteLlmPeer) return remoteLlmPeer;
   if (!globalThis.Peer) throw new Error("PeerJS signaling library did not load");
-  const { RemoteLlmPeer } = await import("./network/browser/remote-llm-peer.js?v=20260723-private-peerjs");
+  const { RemoteLlmPeer } = await import("./shared/remote-llm-peer.js?v=20260723-private-peerjs");
   remoteLlmPeer = new RemoteLlmPeer({
     Peer: globalThis.Peer,
     getLlmClient: () => webGpuLlmClient,
@@ -1622,7 +1622,7 @@ async function collectGpuDiagnostics() {
 async function connectAutoBroUserspaceNetwork(client) {
   if (window.v86Network || new URLSearchParams(location.hash.slice(1)).get("gateway")) return;
   try {
-    const { V86AutoBroNetwork } = await import("./network/browser/v86-autobro-network.js");
+    const { V86AutoBroNetwork } = await import("./providers/v86/autobro-network.js");
     window.v86Network = new V86AutoBroNetwork(emulator, {
       extensionId: client.extensionId,
       token: client.token,
@@ -1957,7 +1957,7 @@ document.getElementById("reset-voice").onclick = async () => {
 if (localStorage.getItem("vm.autobroExtensionId") && localStorage.getItem("vm.autobroPairingToken")) connectAutoBro();
 const llmFileInput = document.getElementById("llm-file-input");
 try {
-  const { LiteRtLmClient } = await import(`./network/browser/litert-lm-client.js?v=${encodeURIComponent(APP_VERSION)}`);
+  const { LiteRtLmClient } = await import(`./shared/litert-lm-client.js?v=${encodeURIComponent(APP_VERSION)}`);
   const client = new LiteRtLmClient();
   webGpuLlmClient = client;
   globalThis.vmvmLocalModelClient = client;
@@ -2141,7 +2141,7 @@ const networkConfig = new URLSearchParams(location.hash.slice(1));
 const gatewayURL = networkConfig.get("gateway");
 const sessionToken = networkConfig.get("token");
 async function connectWebSocketGateway(url, token) {
-  const moduleUrl = `./network/browser/v86-websocket-network.js?v=${encodeURIComponent(APP_VERSION)}`;
+  const moduleUrl = `./providers/v86/websocket-network.js?v=${encodeURIComponent(APP_VERSION)}`;
   const { V86WebSocketNetwork } = await import(moduleUrl);
   window.v86Network = new V86WebSocketNetwork(emulator, {
     url,

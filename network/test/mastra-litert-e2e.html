@@ -12,8 +12,8 @@
 //
 // above the engine seam is the genuine client: message normalisation, session
 // handling and tool-call parsing. Assertions remain on GUEST SIDE EFFECTS.
-import { V86HostBridge } from '../browser/v86-host-bridge.js';
-import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+import { V86HostBridge } from '../../providers/v86/host-bridge.js';
+import { V86GuestAgentClient } from '../../providers/v86/guest-client.js';
 
 const logEl = document.querySelector('#log');
 const steps = [];
@@ -72,7 +72,7 @@ emulator.add_listener('serial0-output-byte', (byte) => {
 async function run() {
   log('importing Mastra bundle + the real LiteRtLmClient');
   const { createMastraVMAgent } = await import('../../agent/dist/mastra-agent.js');
-  const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+  const { LiteRtLmClient } = await import('../../shared/litert-lm-client.js');
 
   // The genuine client, not a stand-in. Only `engine` — the WASM/WebGPU
   // inference handle — is replaced, because headless has no GPU adapter.

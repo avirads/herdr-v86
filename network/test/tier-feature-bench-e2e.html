@@ -16,8 +16,8 @@
 // The metric that matters is GUEST ROUND-TRIPS. Each one is a real serial
 // exchange with an emulated i686; vmbench puts that guest at ~1 s for 100k
 // syscalls, so round-trip count dominates wall clock for anything a tier does.
-import { V86HostBridge } from '../browser/v86-host-bridge.js';
-import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+import { V86HostBridge } from '../../providers/v86/host-bridge.js';
+import { V86GuestAgentClient } from '../../providers/v86/guest-client.js';
 
 const logEl = document.querySelector('#log');
 const steps = [];

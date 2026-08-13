@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { WebGpuLlmClient } from '../browser/webgpu-llm-client.js';
+import { WebGpuLlmClient } from '../../shared/webgpu-llm-client.js';
 
 const calls = [];
 globalThis.chrome = {

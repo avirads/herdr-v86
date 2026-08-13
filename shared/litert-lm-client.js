@@ -1,6 +1,6 @@
 // First-party LiteRT-LM WebGPU provider. Models are stored in this page's OPFS;
 // no extension, native process, API key, or guest network is involved.
-import { parseNamedCall, relaxedJsonParse, stripToolDelimiters } from '../../agent/src/tool-call-syntax.js';
+import { parseNamedCall, relaxedJsonParse, stripToolDelimiters } from '../agent/src/tool-call-syntax.js';
 
 const LAST_MODEL_KEY = 'vm.litert.lastModel';
 const MAX_CONTEXT_TOKENS = 16384;
@@ -169,7 +169,7 @@ export class LiteRtLmClient extends EventTarget {
   async initialize({ autoLoad = true, bundledModelUrl = '' } = {}) {
     if (!navigator.gpu) throw new Error('WebGPU is unavailable in this browser');
     try {
-      const runtime = await import('../../llm/vendor/litert-lm/dist/index.js');
+      const runtime = await import('../llm/vendor/litert-lm/dist/index.js');
       this.Engine = runtime.Engine;
       this.loadLiteRtLm = runtime.loadLiteRtLm;
     } catch (error) {
@@ -198,7 +198,7 @@ export class LiteRtLmClient extends EventTarget {
   async ensureWasm() {
     if (this.wasmLoaded) return;
     this.activity('loading LiteRT-LM WebAssembly runtime');
-    const wasmDirectory = new URL('../../llm/vendor/litert-lm/wasm/', import.meta.url).href;
+    const wasmDirectory = new URL('../llm/vendor/litert-lm/wasm/', import.meta.url).href;
     await this.loadLiteRtLm(wasmDirectory);
     this.wasmLoaded = true;
   }

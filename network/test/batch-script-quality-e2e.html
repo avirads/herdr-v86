@@ -110,7 +110,7 @@ async function run() {
     if (!adapter) throw new Error('no WebGPU adapter — run this in a real browser window');
     log(`WebGPU adapter: ${adapter.info?.vendor ?? '?'} ${adapter.info?.architecture ?? ''}`);
 
-    const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+    const { LiteRtLmClient } = await import('../../shared/litert-lm-client.js');
     const client = new LiteRtLmClient();
 
     // initialize() imports the runtime and populates Engine/loadLiteRtLm;

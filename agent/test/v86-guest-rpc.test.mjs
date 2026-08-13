@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { V86GuestAgentClient } from '../../network/browser/v86-guest-readonly.js';
+import { V86GuestAgentClient } from '../../providers/v86/guest-client.js';
 
 // A guest RPC is a line typed at a tty and a line read back from it. Everything
 // here is about what happens when that line does not arrive intact — the case

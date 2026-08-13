@@ -398,7 +398,7 @@ test('extractToolCall accepts a flattened call, as real gemma-4-E2B emits', () =
 });
 
 test('the client turns a flattened tool call into a real OpenAI tool_calls message', async () => {
-  const { LiteRtLmClient } = await import('../../network/browser/litert-lm-client.js');
+  const { LiteRtLmClient } = await import('../../shared/litert-lm-client.js');
   const client = new LiteRtLmClient();
   client.modelName = 'test';
   // Drive the real _chat path with the engine seam replaced.

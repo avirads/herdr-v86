@@ -28,7 +28,7 @@
 // measure nothing but failures. Iterations, VUs and iteration_duration are
 // real k6 metrics and exercise the whole pipeline; load against a real target
 // needs the gateway and is a separate exercise.
-import { V86HostBridge } from '../browser/v86-host-bridge.js';
+import { V86HostBridge } from '../../providers/v86/host-bridge.js';
 
 const params = new URLSearchParams(location.search);
 const OO_URL = params.get('oo') || 'https://oo.oast.fapstaff.com';

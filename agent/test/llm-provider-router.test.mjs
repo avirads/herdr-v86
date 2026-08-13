@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LlmProviderRouter } from "../../network/browser/llm-provider-router.js";
+import { LlmProviderRouter } from "../../shared/llm-provider-router.js";
 
 class Storage {
   constructor() { this.values = new Map(); }

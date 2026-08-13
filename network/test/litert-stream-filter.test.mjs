@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { StreamingTextFilter } from '../browser/litert-lm-client.js';
+import { StreamingTextFilter } from '../../shared/litert-lm-client.js';
 
 test('stream filter allows startup padding but stops a confirmed pad loop', () => {
   const filter = new StreamingTextFilter();

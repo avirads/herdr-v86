@@ -161,7 +161,7 @@ Create v86 without its built-in network relay, then attach the adapter after
 constructing the emulator:
 
 ```js
-import { V86WebSocketNetwork } from './browser/v86-websocket-network.js';
+import { V86WebSocketNetwork } from '../providers/v86/websocket-network.js';
 
 const emulator = new V86({
   wasm_path: '/v86.wasm',
@@ -243,7 +243,7 @@ statistics and `/metrics` exposes Prometheus counters. The browser adapter
 batches Ethernet frames for fewer JS/WebSocket transitions while the gateway
 continues accepting the original one-frame format.
 
-For UDP/QUIC-sensitive deployments, `browser/v86-datachannel-network.js`
+For UDP/QUIC-sensitive deployments, `../providers/v86/datachannel-network.js`
 provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
 
 ## Guest artifacts
