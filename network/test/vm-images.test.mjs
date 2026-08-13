@@ -42,6 +42,27 @@ test('VM image manifest defines seven ordered tiers with an all-features Star im
   }
 });
 
+test("index.html's fallback manifest mirrors the real one", () => {
+  // A fourth place every tier's size and url is written down: VM_IMAGE_FALLBACK,
+  // used whenever the vm-images.json fetch fails. It had drifted on all seven
+  // tiers -- pre-headroom sizes and pre-images/v86 urls -- and the failure is
+  // silent, because index.html compares the size against the Range preflight's
+  // content-range total and quietly falls back to ATA PIO compatibility mode
+  // when they disagree. A stale fallback is worse than no fallback.
+  const start = html.indexOf('const VM_IMAGE_FALLBACK');
+  assert.ok(start > 0, 'index.html has no VM_IMAGE_FALLBACK');
+  const block = html.slice(start, html.indexOf('\n};', start));
+
+  assert.match(block, new RegExp(`defaultTier: ["']${manifest.defaultTier}["']`));
+  for (const [tier, entry] of Object.entries(manifest.tiers)) {
+    const line = block.split('\n').find(l => l.includes(`"${tier}":`));
+    assert.ok(line, `fallback has no entry for ${tier}`);
+    assert.equal(Number(line.match(/size: (\d+)/)[1]), entry.size, `${tier}: fallback size`);
+    assert.equal(line.match(/url: "([^"]+)"/)[1], entry.url, `${tier}: fallback url`);
+    assert.equal(line.match(/version: "([^"]+)"/)[1], entry.version, `${tier}: fallback version`);
+  }
+});
+
 test('tier builder allocates exactly the sizes the manifest advertises', () => {
   // The size of every tier is stated three times: here, in vm-images.json, and
   // in tier_bytes(). Nothing compared the last two, so they drifted -- the
@@ -109,8 +130,12 @@ test('Cline is a lazy browser bundle with only its launcher installed in AI Tool
 
 test('Settings selects a manifest image and warns before restart', () => {
   assert.match(html, /id="vm-image-tier"/);
-  assert.match(html, /"dev": \{ name: "Dev".*url: "vm-dev-i386-ext4\.img".*size: 99614720/);
-  assert.match(html, /"star": \{ name: "Star".*url: "vm-star-i386-ext4\.img".*size: 134217728/);
+  // Presence only. These lines used to restate the url and size of each tier,
+  // which is how the fallback drifted on all seven without a test noticing:
+  // the assertion and the code held the same stale numbers. Sizes and urls are
+  // compared against the real manifest above, in one place.
+  assert.match(html, /"dev": \{ name: "Dev"/);
+  assert.match(html, /"star": \{ name: "Star"/);
   assert.match(html, /dev: "Dev tier · includes AI Tools"/);
   assert.match(html, /star: "Star tier · includes Dev, Performance and VAPT"/);
   assert.match(html, /id="apply-vm-image"[^>]*>Apply &amp; restart/);
