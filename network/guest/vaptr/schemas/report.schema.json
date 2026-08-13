@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vmvapt/schemas/report.schema.json",
+  "title": "Report",
+  "description": "Output of Agent 10: report.json",
+  "type": "object",
+  "required": ["target", "generated", "summary", "findings"],
+  "properties": {
+    "target": { "type": "string" },
+    "generated": { "type": "string", "format": "date-time" },
+    "summary": {
+      "type": "object",
+      "required": ["total", "by_severity", "by_confidence"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "by_severity": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "by_confidence": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "finding.schema.json" }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "target": "local-testserver",
+  "targets": ["http://127.0.0.1:8899"],
+  "workspace": "./workspace/live-local",
+  "scope": {
+    "allowed_domains": ["127.0.0.1"],
+    "allow_private": true,
+    "rate_limit": 50,
+    "max_concurrency": 5,
+    "authorization": "LOCAL-TEST / operator-owned loopback test server"
+  },
+  "llm": { "provider": "none" }
+}

@@ -1,0 +1,17 @@
+# Scan output workspaces (runtime artifacts).
+# Anchored so they do NOT match the internal/workspace Go package.
+/workspace/
+/examples/*/workspace/
+*.jsonl.tmp
+
+# Build outputs (anchored so they do NOT match the cmd/vaptr package).
+/dist/
+/bin/
+/vaptr
+/vaptr.exe
+/vaptr-386
+/vaptr-linux-386
+
+# OS / editor
+.DS_Store
+*.swp

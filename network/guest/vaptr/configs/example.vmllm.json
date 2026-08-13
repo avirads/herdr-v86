@@ -1,0 +1,17 @@
+{
+  "target": "scanme.example.com",
+  "targets": ["https://scanme.example.com"],
+  "workspace": "./workspace/scanme",
+  "scope": {
+    "allowed_domains": ["scanme.example.com"],
+    "allow_subdomains": true,
+    "rate_limit": 25,
+    "max_concurrency": 5,
+    "authorization": "SoW-2026-001 / written permission on file"
+  },
+  "llm": {
+    "provider": "vmllm",
+    "command": "vmllm",
+    "max_tokens": 256
+  }
+}

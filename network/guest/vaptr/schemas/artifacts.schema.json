@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vmvapt/schemas/artifacts.schema.json",
+  "title": "Intermediate artifacts",
+  "description": "Schemas for the intermediate pipeline artifacts. JSONL artifacts (httpx.jsonl, katana.jsonl) validate one line at a time against the referenced $def.",
+  "$defs": {
+    "Fingerprint": {
+      "title": "httpx.jsonl line (Agent 2)",
+      "type": "object",
+      "required": ["url", "status_code"],
+      "properties": {
+        "url": { "type": "string" },
+        "input": { "type": "string" },
+        "status_code": { "type": "integer" },
+        "title": { "type": "string" },
+        "technologies": { "type": "array", "items": { "type": "string" } },
+        "server": { "type": "string" },
+        "redirects": { "type": "array", "items": { "type": "string" } },
+        "content_type": { "type": "string" },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string" },
+            "issuer": { "type": "string" },
+            "subject_cn": { "type": "string" },
+            "not_before": { "type": "string", "format": "date-time" },
+            "not_after": { "type": "string", "format": "date-time" },
+            "version": { "type": "string" }
+          }
+        }
+      }
+    },
+    "CrawlItem": {
+      "title": "katana.jsonl line (Agent 3)",
+      "type": "object",
+      "required": ["url", "kind"],
+      "properties": {
+        "url": { "type": "string" },
+        "method": { "type": "string" },
+        "kind": { "enum": ["page", "form", "js", "api", "swagger", "graphql"] },
+        "source": { "type": "string" },
+        "form_data": { "type": "string" }
+      }
+    },
+    "URLRecord": {
+      "title": "urls.json element (Agent 4)",
+      "type": "object",
+      "required": ["url", "host", "path", "sources"],
+      "properties": {
+        "url": { "type": "string" },
+        "host": { "type": "string" },
+        "path": { "type": "string" },
+        "params": { "type": "array", "items": { "type": "string" } },
+        "sources": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "ParamRecord": {
+      "title": "parameters.json element (Agent 5)",
+      "type": "object",
+      "required": ["url", "method", "params"],
+      "properties": {
+        "url": { "type": "string" },
+        "method": { "enum": ["GET", "POST"] },
+        "params": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "ContentRecord": {
+      "title": "content.json element (Agent 6)",
+      "type": "object",
+      "required": ["url", "status", "category"],
+      "properties": {
+        "url": { "type": "string" },
+        "status": { "type": "integer" },
+        "length": { "type": "integer" },
+        "words": { "type": "integer" },
+        "category": { "enum": ["admin", "upload", "backup", "config", "api", "hidden"] }
+      }
+    }
+  }
+}

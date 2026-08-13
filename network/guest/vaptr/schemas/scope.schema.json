@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vmvapt/schemas/scope.schema.json",
+  "title": "ScopeResult",
+  "description": "Output of Agent 1 (Scope Guard): scope.json",
+  "type": "object",
+  "required": ["config", "decisions", "approved"],
+  "properties": {
+    "config": { "$ref": "#/$defs/ScopeConfig" },
+    "decisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ScopeDecision" }
+    },
+    "approved": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Flat list of scope-approved targets passed to downstream stages"
+    }
+  },
+  "$defs": {
+    "ScopeConfig": {
+      "type": "object",
+      "required": ["allowed_domains", "authorization"],
+      "properties": {
+        "allowed_domains": { "type": "array", "items": { "type": "string" } },
+        "allow_subdomains": { "type": "boolean" },
+        "allowed_cidrs": { "type": "array", "items": { "type": "string", "format": "cidr" } },
+        "allow_private": { "type": "boolean" },
+        "allow_wildcard": { "type": "boolean" },
+        "rate_limit": { "type": "integer", "minimum": 0 },
+        "max_concurrency": { "type": "integer", "minimum": 0 },
+        "authorization": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ScopeDecision": {
+      "type": "object",
+      "required": ["target", "in_scope", "reason", "decided_at"],
+      "properties": {
+        "target": { "type": "string" },
+        "in_scope": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "decided_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{"input":"http://127.0.0.1:8899","source":"body","type":"url","output":"http://127.0.0.1:8899","status":200,"length":10}
+{"input":"http://127.0.0.1:8899","source":"body","type":"form","output":"http://127.0.0.1:8899/login","status":0,"length":0}
+{"input":"http://127.0.0.1:8899","source":"body","type":"javascript","output":"http://127.0.0.1:8899/static/app.js","status":0,"length":0}
+{"input":"http://127.0.0.1:8899","source":"body","type":"url","output":"http://127.0.0.1:8899/about","status":200,"length":0}
+{"input":"http://127.0.0.1:8899","source":"body","type":"url","output":"http://127.0.0.1:8899/api/products?q=apple","status":200,"length":0}
+[url] - [code-200] - http://127.0.0.1:8899/static/app.js

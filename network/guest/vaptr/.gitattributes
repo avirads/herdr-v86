@@ -1,0 +1,4 @@
+# Normalize line endings to LF — this builds on Linux and ships shell scripts.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
