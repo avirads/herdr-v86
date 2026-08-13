@@ -395,7 +395,6 @@
         <label>Zerostack default <select class="agent-provider-default" data-agent="zerostack"></select></label>
         <label>vmlang default <select class="agent-provider-default" data-agent="vmlang"></select></label>
         <label>vmmastra default <select class="agent-provider-default" data-agent="vmmastra"></select></label>
-        <label>Cline default <select class="agent-provider-default" data-agent="cline"></select></label>
       </div>
       <small id="cloud-provider-status" role="status" aria-live="polite"></small>
     </details>
@@ -616,7 +615,7 @@ const VM_IMAGE_FALLBACK = {
   tiers: {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "images/v86/vm-barebones-i386-ext4.img", size: 134217728, version: "2026.08.11.4" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "images/v86/vm-essentials-i386-ext4.img", size: 150994944, version: "2026.08.11.6" },
-    "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents including browser-hosted Cline, browser tools and AI frameworks.", url: "images/v86/vm-ai-tools-i386-ext4.img", size: 159383552, version: "2026.08.13.3" },
+    "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks, including Shelley on the page-local WebGPU model.", url: "images/v86/vm-ai-tools-i386-ext4.img", size: 159383552, version: "2026.08.13.3" },
     "dev": { name: "Dev", description: "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.", url: "images/v86/vm-dev-i386-ext4.img", size: 218103808, version: "2026.08.11.6" },
     "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs OpenObserve streaming.", url: "images/v86/vm-performance-i386-ext4.img", size: 163577856, version: "2026.08.11.6" },
     "vapt": { name: "VAPT  native scanner", description: "AI Tools plus Grafana k6 and Vaptr, the self-contained native scanner. k6obs and external tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.", url: "images/v86/vm-vapt-i386-ext4.img", size: 170917888, version: "2026.08.11.6" },
@@ -1202,12 +1201,6 @@ import("./providers/v86/host-bridge.js").then(async module => {
             ...options,
             sandboxOptions: { captureStderr: false },
           });
-        },
-        // Cline's official browser-safe AgentRuntime. Like Mastra, this is
-        // lazy so users who choose another tier never download its bundle.
-        createClineAgent: async options => {
-          const { createClineVMAgent } = await import(`./agent/dist/cline-agent.js?v=${encodeURIComponent(APP_VERSION)}`);
-          return createClineVMAgent(options);
         },
         getLlmClient: (agent, route) => llmProviderRouter.resolve(agent, route),
         getGuest: () => guestReadonlyClient,

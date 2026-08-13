@@ -104,7 +104,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 ## Quick capability check
 
 ```sh
-command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmlang rig vmmastra cline tmux
+command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmlang rig vmmastra tmux
 ip route
 vmfetch --help
 ```

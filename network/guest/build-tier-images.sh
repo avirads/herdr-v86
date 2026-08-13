@@ -181,7 +181,6 @@ install_ai_tools() {
   install -D -m 0755 "$PROJECT_DIR/network/guest/rig-vm" "$MOUNT_DIR/usr/local/bin/rig"
   install -D -m 0755 "$PROJECT_DIR/network/guest/zerostack-vm" "$MOUNT_DIR/usr/local/bin/zerostack"
   install -D -m 0755 "$PROJECT_DIR/network/guest/mastra-vm" "$MOUNT_DIR/usr/local/bin/vmmastra"
-  install -D -m 0755 "$PROJECT_DIR/network/guest/cline-vm" "$MOUNT_DIR/usr/local/bin/cline"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmjs" "$MOUNT_DIR/usr/local/bin/vmjs"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bin/vmbench"
   # Shelley: a Go server with an embedded web UI, driven from the guest by
@@ -287,7 +286,7 @@ verify_tier() {
     chroot "$MOUNT_DIR" /bin/sh -ec '
       command -v tmux herdr git rg shfmt ctags make patch
       command -v zerostack rig vmfetch vmclip vmexport vmproject vmgithub
-      command -v vmai vmllm vmlang vmmastra cline vmjs vmbench vmshelley
+      command -v vmai vmllm vmlang vmmastra vmjs vmbench vmshelley
       test -x /usr/local/libexec/shelley
       test -s /usr/local/share/shelley/shelley.db
       test -x /usr/local/libexec/rig-agent

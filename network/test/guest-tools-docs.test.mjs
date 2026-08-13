@@ -10,7 +10,6 @@ const deepAgentHtml = await readFile(new URL('../../docs/deep-agent.html', impor
 const projects = [
   ['Rig', 'https://github.com/0xPlaygrounds/rig'],
   ['Zerostack', 'https://github.com/gi-dellav/zerostack'],
-  ['Cline', 'https://github.com/cline/cline'],
   ['DeepAgentsJS', 'https://github.com/langchain-ai/deepagentsjs'],
   ['Mastra', 'https://github.com/mastra-ai/mastra'],
 ];
