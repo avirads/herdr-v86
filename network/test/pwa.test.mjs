@@ -29,7 +29,19 @@ test("service worker caches the shell but excludes VM and model payloads", () =>
   assert.match(worker, /cache\.addAll\(APP_SHELL\)/);
   assert.match(worker, /request\.headers\.has\("range"\)/);
   assert.match(worker, /\\\.\(\?:img\|litertlm\|task\|zip\)/);
-  assert.match(worker, /\^\\\/\(\?:models\|downloads\|agent\\\/dist\|network\\\/browser\|ide\|preview\|v1\|peerjs\|plu\)/);
+  // Read the excluded prefixes out of the worker and compare them as a set,
+  // rather than restating the alternation as one long regex. The previous form
+  // spelled the list out a second time, so when network/browser became shared/
+  // and providers/, the worker went on excluding a directory that no longer
+  // existed and this assertion still passed -- it agreed with its own copy of
+  // the list, not with the tree.
+  const exclusionLine = worker.split('\n').find(line => line.includes('models|downloads'));
+  assert.ok(exclusionLine, 'service worker has no path-prefix exclusion list');
+  const excluded = exclusionLine.match(/\(\?:([^)]*)\)/)[1].split('|').map(name => name.replace(/\\/g, ''));
+  assert.deepEqual(
+    excluded,
+    ['models', 'downloads', 'agent/dist', 'shared', 'providers', 'ide', 'preview', 'v1', 'peerjs', 'plu'],
+  );
   assert.match(worker, /offline\.html/);
 	assert.match(worker, /agent\\\/dist/);
   assert.match(worker, /vmvm-app-shell-v8/);
