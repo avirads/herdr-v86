@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { LiteRtLmClient } from '../../network/browser/litert-lm-client.js';
-import { DEFAULT_PEER_OPTIONS, RemoteLlmPeer } from '../../network/browser/remote-llm-peer.js';
+import { LiteRtLmClient } from '../../shared/litert-lm-client.js';
+import { DEFAULT_PEER_OPTIONS, RemoteLlmPeer } from '../../shared/remote-llm-peer.js';
 
 if (!globalThis.CustomEvent) {
   globalThis.CustomEvent = class CustomEvent extends Event {

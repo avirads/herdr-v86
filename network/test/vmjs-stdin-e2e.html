@@ -27,7 +27,7 @@ const emulator = new V86({
   screen_container: document.querySelector('#screen_container'),
   autostart: true,
 });
-const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
+const { V86HostBridge } = await import('../../providers/v86/host-bridge.js');
 new V86HostBridge(emulator);
 
 setTimeout(() => submit(false, 'vmjs stdin test timed out'), 120000);

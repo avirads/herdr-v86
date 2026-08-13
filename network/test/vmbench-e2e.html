@@ -17,8 +17,8 @@
 // `termio` is excluded on purpose — it writes 100 KB to /dev/tty, which is the
 // same serial console this page scrapes, so it would destroy the output being
 // parsed. `herdr` self-skips when absent.
-import { V86HostBridge } from '../browser/v86-host-bridge.js';
-import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+import { V86HostBridge } from '../../providers/v86/host-bridge.js';
+import { V86GuestAgentClient } from '../../providers/v86/guest-client.js';
 
 const logEl = document.querySelector('#log');
 const steps = [];

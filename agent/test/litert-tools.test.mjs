@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { completionWithToolCall, parseToolCall } from '../../network/browser/litert-lm-client.js';
+import { completionWithToolCall, parseToolCall } from '../../shared/litert-lm-client.js';
 
 const completionOf = content => completionWithToolCall({
   choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }],

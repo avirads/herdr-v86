@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { RemoteLlmPeer } from '../browser/remote-llm-peer.js';
+import { RemoteLlmPeer } from '../../shared/remote-llm-peer.js';
 
-const source = await readFile(new URL('../browser/remote-llm-peer.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../../shared/remote-llm-peer.js', import.meta.url), 'utf8');
 
 test('WebRTC uses the same stable non-streaming LiteRT path as terminal agents', () => {
   const servePrompt = source.slice(source.indexOf('async servePrompt'), source.indexOf('async connect'));

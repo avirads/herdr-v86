@@ -3,7 +3,7 @@
 <script type="module">
 try {
   const runtime = await import('../../llm/vendor/litert-lm/dist/index.js');
-  const { LiteRtLmClient } = await import('../browser/litert-lm-client.js');
+  const { LiteRtLmClient } = await import('../../shared/litert-lm-client.js');
   const client = new LiteRtLmClient();
   const root = await navigator.storage.getDirectory();
   const directory = await root.getDirectoryHandle('vm-litert-test', { create: true });

@@ -21,8 +21,8 @@
 // The scripts are checked in as data rather than regenerated here, because a
 // 2 GB model and an emulator in one tab is how you run out of memory. Refresh
 // them by re-running phase 1 and pasting its output.
-import { V86HostBridge } from '../browser/v86-host-bridge.js';
-import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+import { V86HostBridge } from '../../providers/v86/host-bridge.js';
+import { V86GuestAgentClient } from '../../providers/v86/guest-client.js';
 
 const logEl = document.querySelector('#log');
 const steps = [];

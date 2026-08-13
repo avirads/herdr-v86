@@ -13,14 +13,14 @@
 //     -> VmAgentController.handle('mastra', ...) -> Mastra harness
 //     -> onOutput back to the terminal
 //
-// The controller is the real one from network/browser, wired the way
+// The controller is the real one from shared/, wired the way
 // index.html wires it. Only the model is scripted — WebGPU is unavailable
 // headless, and this is a plumbing test, not a model test.
 //
 // Assertions are on GUEST SIDE EFFECTS plus the controller's output, never on
 // agent text alone.
-import { V86HostBridge } from '../browser/v86-host-bridge.js';
-import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+import { V86HostBridge } from '../../providers/v86/host-bridge.js';
+import { V86GuestAgentClient } from '../../providers/v86/guest-client.js';
 
 const logEl = document.querySelector('#log');
 const steps = [];
@@ -64,7 +64,7 @@ const cliCommands = [];
 let harnessOptions = null;
 
 async function wireController() {
-  const { VmAgentController } = await import('../browser/vmagent-controller.js');
+  const { VmAgentController } = await import('../../shared/vmagent-controller.js');
 
   // Scripted model. status() must report a loaded model or the controller
   // short-circuits with "no model loaded" — which is itself behaviour worth

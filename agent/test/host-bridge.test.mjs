@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { V86HostBridge } from '../../network/browser/v86-host-bridge.js';
+import { V86HostBridge } from '../../providers/v86/host-bridge.js';
 
 test('host bridge handles each agent RPC request id only once', async () => {
   const listeners = new Map();

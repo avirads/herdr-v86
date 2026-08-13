@@ -9,8 +9,8 @@
 // The guest resolves globs with `find -path "$target/$pattern"`, which is NOT
 // the same matcher as a shell or as picomatch: in `-path`, `*` crosses `/`.
 // Rather than reason about it, ask the guest.
-import { V86HostBridge } from '../browser/v86-host-bridge.js';
-import { V86GuestAgentClient } from '../browser/v86-guest-readonly.js';
+import { V86HostBridge } from '../../providers/v86/host-bridge.js';
+import { V86GuestAgentClient } from '../../providers/v86/guest-client.js';
 
 const logEl = document.querySelector('#log');
 const steps = [];

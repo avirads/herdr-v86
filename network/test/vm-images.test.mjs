@@ -101,8 +101,8 @@ test('tier builder applies each preceding installer and validates boundaries', (
 test('Cline is a lazy browser bundle with only its launcher installed in AI Tools images', () => {
   assert.match(html, /createClineVMAgent/);
   assert.match(html, /import\(`\.\/agent\/dist\/cline-agent\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\)/);
-  assert.match(html, /import\(`\.\/network\/browser\/vmagent-controller\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\)/);
-  assert.match(html, /import\(`\.\/network\/browser\/litert-lm-client\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\)/);
+  assert.match(html, /import\(`\.\/shared\/vmagent-controller\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\)/);
+  assert.match(html, /import\(`\.\/shared\/litert-lm-client\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}`\)/);
   assert.match(clineBundle, /vmvm-cline/);
   assert.match(builder, /cline-vm.*\/usr\/local\/bin\/cline/);
 });
@@ -133,7 +133,7 @@ test('Dev tier starts and opens its app automatically', () => {
 	assert.match(html, /await devNetworkReady/);
 	assert.match(html, /fetch\(DEV_APP_URL, \{ cache: "no-store" \}\)/);
   assert.match(html, /the public IDE route did not become reachable/);
-  assert.match(html, /v86-websocket-network\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}/);
+  assert.match(html, /providers\/v86\/websocket-network\.js\?v=\$\{encodeURIComponent\(APP_VERSION\)\}/);
 	assert.match(html, /function finishDevInTerminal\(message\)/);
 	assert.match(html, /Shell ready — Dev IDE network unavailable/);
 	assert.match(html, /continuing in terminal/);
@@ -203,8 +203,8 @@ test('Mastra Astro reuses the VMVM model and reveals setup only when none is loa
   assert.match(mastraAstro, /if \(client\.modelName\) \{[\s\S]*setReady\(client\.modelName\);[\s\S]*return;/);
   assert.match(mastraAstro, /else showModelSetup\(\)/);
   assert.match(mastraAstro, /No downloaded model was found/);
-  assert.match(mastraAstro, /import\('\/network\/browser\/litert-lm-client\.js'\)/);
-  assert.doesNotMatch(mastraAstro, /\/vmmastra\/network\/browser\/litert-lm-client\.js/);
+  assert.match(mastraAstro, /import\('\/shared\/litert-lm-client\.js'\)/);
+  assert.doesNotMatch(mastraAstro, /\/vmmastra\/shared\/litert-lm-client\.js/);
 	assert.match(mastraAstro, /import\('\/agent\/dist\/mastra-agent\.js\?v=2026\.08\.03\.1'\)/);
   assert.doesNotMatch(mastraAstro, /\/vmmastra\/agent\/mastra-agent\.js/);
 	assert.match(mastraBundle, /export \{\s*Agent,[\s\S]*createLiteRt,[\s\S]*createMastraVMAgent/);

@@ -172,7 +172,7 @@
 					showModelSetup();
 					return;
 				}
-				const { LiteRtLmClient } = await import('/network/browser/litert-lm-client.js');
+				const { LiteRtLmClient } = await import('/shared/litert-lm-client.js');
 				client = new LiteRtLmClient();
 				client.addEventListener('activity', (event) => {
 					progress.textContent = event.detail?.message || 'Working…';

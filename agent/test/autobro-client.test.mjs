@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AutoBroClient, probeAutoBro, requestAutoBroPairing } from '../../network/browser/autobro-client.js';
+import { AutoBroClient, probeAutoBro, requestAutoBroPairing } from '../../shared/autobro-client.js';
 
 const EXT_ID = 'a'.repeat(32);
 

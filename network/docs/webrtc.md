@@ -1,6 +1,6 @@
 # Optional WebRTC data plane
 
-`browser/v86-datachannel-network.js` carries the same raw Ethernet frames over
+`../../providers/v86/datachannel-network.js` carries the same raw Ethernet frames over
 an already-negotiated `RTCDataChannel`. The application owns signaling and
 ties it to the same short-lived v86 session identity used by the WebSocket
 gateway.

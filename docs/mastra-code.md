@@ -74,7 +74,7 @@ in `code` or `batch` mode.  Chat mode never loads it.  The harness itself
 | `agent/test/mastra-code.test.mjs` | Unit tests (9 tests) |
 | `agent/test/mastra-code.e2e.test.mjs` | E2E tests (12 tests) |
 | `network/guest/mastra-vm` | Guest script: `code` subcommand + interactive `code>` prompt |
-| `network/browser/vmagent-controller.js` | Controller: `handleMastraCode` dispatch, stop/reset wiring |
+| `shared/vmagent-controller.js` | Controller: `handleMastraCode` dispatch, stop/reset wiring |
 | `index.html` | Lazy import binding |
 
 The `CodeAgentHarness` delegates to `createMastraVMAgent` (from

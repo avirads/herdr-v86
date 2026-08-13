@@ -6,7 +6,7 @@
 <div id="screen_container" hidden><div></div><canvas></canvas></div>
 <script src="../../libv86-network.js"></script>
 <script type="module">
-import { V86WebSocketNetwork } from '../browser/v86-websocket-network.js';
+import { V86WebSocketNetwork } from '../../providers/v86/websocket-network.js';
 
 const config = new URLSearchParams(location.hash.slice(1));
 const gateway = config.get('gateway');

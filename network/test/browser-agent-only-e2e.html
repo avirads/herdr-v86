@@ -10,7 +10,7 @@ const emulator = new V86({ wasm_path:'../../v86-network.wasm', memory_size:256<<
   cmdline:'root=/dev/sda rw console=ttyS0 tsc=reliable noapic nolapic',
   hda:{url:'../../vm-network-ext4.img',async:true,size:100663296}, uart1:true,
   screen_container:document.querySelector('#screen_container'), autostart:true });
-const { V86HostBridge } = await import('../browser/v86-host-bridge.js');
+const { V86HostBridge } = await import('../../providers/v86/host-bridge.js');
 new V86HostBridge(emulator,{llmClient:{async chat(){hostCalls++;return {id:'vmllm-ok',model:'webgpu',choices:[{index:0,message:{role:'assistant',content:'browser-agent-model-ok'},finish_reason:'stop'}]};}}});
 async function submit(ok,reason=''){if(submitted)return;submitted=true;await fetch('/__result',{method:'POST',body:JSON.stringify({ok,reason,hostCalls,serial})});}
 emulator.add_listener('serial0-output-byte',byte=>{

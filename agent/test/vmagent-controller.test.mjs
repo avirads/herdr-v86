@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VmAgentController } from '../../network/browser/vmagent-controller.js';
+import { VmAgentController } from '../../shared/vmagent-controller.js';
 
 test('vmlang command controller runs a persistent harness and reports in the terminal', async () => {
   const outputs = [];
