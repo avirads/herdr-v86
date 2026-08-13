@@ -18,3 +18,18 @@ network/guest/vmbro-httpd/vmbro-httpd-linux-386
 
 build-dev.log
 
+
+# v86 disk images: build artifacts, not sources. Reproducible with
+# network/guest/build-tier-images.sh and published by uploading to the server,
+# not by committing them. Tracked here until 2026-08-13; seven of the eight
+# were raw blobs of 67-104 MB against GitHub's 100 MB hard limit, and the
+# eighth (vm-star) had already been pushed into Git LFS to get under it.
+#
+# They were also stale: this repo carried vm-ai-tools at 92,274,688 bytes while
+# the live tier is 159,383,552. The 64 MiB of headroom every tier now carries
+# landed after they were committed, so anything deploying from git was shipping
+# images that no longer matched production.
+#
+# A fresh clone therefore has vm-images.json but no images. Build or fetch them.
+vm-*.img
+*.ext2
