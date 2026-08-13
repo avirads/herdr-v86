@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VMVM (CheerpX)</title>
+<link rel="icon" type="image/png" href="../assets/vmvm-logo.png">
+<link rel="stylesheet" href="../xterm.css">
+<script>
+  document.documentElement.dataset.theme =
+    localStorage.getItem("vm.theme") ||
+    (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+</script>
+<style>
+  /* Chrome copied from index.html so the two providers are visually identical.
+     Only the backend differs: CheerpX instead of v86. */
+  :root { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  html { width: 100%; height: 100%; background: #0d1117; overflow: hidden; }
+  body { box-sizing: border-box; margin: 0; width: 100%; height: 100vh; height: 100dvh; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  header { box-sizing: border-box; flex: 0 0 auto; width: 100%; padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; }
+  header h1 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .brand-logo { width: 28px; height: 28px; object-fit: contain; }
+  #status { font-size: 12px; color: #8b949e; }
+  #llm-status { font-size: 12px; color: #8b949e; }
+  .provider-chip { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: #58a6ff; border: 1px solid #1f6feb; border-radius: 999px; padding: 1px 7px; }
+  /* IDE workspace: project and templates on the left, code and preview side by
+     side, terminal across the bottom. Grid rather than nested flex on purpose --
+     the terminal pane's height is then fixed by the layout instead of by its
+     content. CheerpX fixes the console's rows and columns at construction, so
+     the pane must already be at its final size when the console is built. */
+  #workspace { --side-w: 15rem; --term-h: 14rem; flex: 1 1 auto; min-width: 0; min-height: 0; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) var(--term-h); gap: 1px; background: #30363d; }
+  #workspace > section, #workspace > aside { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #0d1117; overflow: hidden; }
+  #sidebar { grid-column: 1; grid-row: 1 / span 2; }
+  #editor-pane { grid-column: 2; grid-row: 1; }
+  #preview-pane { grid-column: 3; grid-row: 1; }
+  #terminal-pane { grid-column: 2 / span 2; grid-row: 2; }
+  .pane-head { flex: 0 0 auto; display: flex; align-items: center; gap: .375rem; padding: .375rem .5rem; background: #161b22; border-bottom: 1px solid #30363d; font-size: .6875rem; text-transform: uppercase; letter-spacing: .04em; color: #8b949e; }
+  .pane-actions { margin-left: auto; display: flex; gap: .25rem; }
+  .pane-head button { font-size: .625rem; padding: .1875rem .375rem; text-transform: uppercase; letter-spacing: .04em; }
+  .side-tab { background: transparent; border: 0; color: #8b949e; font: inherit; cursor: pointer; padding: .1875rem .375rem; border-radius: .25rem; }
+  .side-tab.is-active { color: #f0f6fc; background: #21262d; }
+  .side-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: .375rem; }
+  .tree-item, .tree-dir { display: block; width: 100%; text-align: left; font: 12px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; padding: 0 .375rem; border-radius: .25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tree-item { background: transparent; border: 0; color: #c9d1d9; cursor: pointer; }
+  .tree-item:hover { background: #21262d; }
+  .tree-item.is-active { background: #1f6feb; color: #fff; }
+  .tree-dir { color: #8b949e; }
+  .template-item { display: block; width: 100%; text-align: left; background: #161b22; border: 1px solid #30363d; border-radius: .3125rem; color: #c9d1d9; padding: .5rem; margin-bottom: .375rem; cursor: pointer; }
+  .template-item:hover { border-color: #58a6ff; }
+  .template-item strong { display: block; color: #f0f6fc; font-size: .8125rem; }
+  .template-item span { display: block; margin-top: .25rem; color: #8b949e; font-size: .6875rem; line-height: 1.4; white-space: normal; }
+  #editor-path { margin-left: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+  #editor-wrap { flex: 1 1 auto; min-height: 0; display: flex; overflow: hidden; }
+  #editor-gutter { flex: 0 0 auto; margin: 0; padding: .5rem .375rem .5rem .5rem; overflow: hidden; text-align: right; color: #6e7681; background: #0d1117; border-right: 1px solid #21262d; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; user-select: none; }
+  #editor { flex: 1 1 auto; min-width: 0; box-sizing: border-box; margin: 0; padding: .5rem; resize: none; border: 0; outline: none; color: #c9d1d9; background: #0d1117; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre; overflow: auto; }
+  /* Deliberately NOT visibility:hidden until boot finishes. xterm's DOM renderer
+     flushes through requestAnimationFrame, and a hidden element gets no frames,
+     so text written during boot can land in the buffer with nothing painted --
+     a live shell behind a blank pane. The boot overlay already covers the
+     screen, so there is nothing to hide from anyway. */
+  #term { box-sizing: border-box; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 0; padding: 0 .5rem .5rem; overflow: hidden; }
+  #term .xterm { height: 100%; }
+  #dev-ide { box-sizing: border-box; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 0; border: 0; background: #090c14; }
+  #preview-empty { flex: 1 1 auto; display: grid; place-items: center; padding: 1rem; color: #6e7681; font-size: .75rem; text-align: center; line-height: 1.6; }
+  #preview-empty[hidden] { display: none; }
+  /* Terminal filling the workspace. The terminal pane normally occupies the
+     bottom row across columns 2-3, so going full screen means spanning every
+     track rather than just hiding neighbours -- otherwise it keeps the sidebar's
+     column offset and sits inset from the left. */
+  #workspace.terminal-focus { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  #workspace.terminal-focus > #sidebar,
+  #workspace.terminal-focus > #editor-pane,
+  #workspace.terminal-focus > #preview-pane { display: none; }
+  #workspace.terminal-focus > #terminal-pane { grid-column: 1 / -1; grid-row: 1 / -1; }
+  #dev-ide[hidden] { display: none; }
+  #boot-overlay { box-sizing: border-box; position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 1000; display: grid; place-items: center; padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); overflow: hidden; background: #0d1117; transition: opacity .35s ease; }
+  #boot-overlay.done { opacity: 0; pointer-events: none; }
+  #boot-loader { position: relative; width: min(100%, 320px); height: 112px; display: grid; place-items: center; text-align: center; }
+  #boot-ring { width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(#58a6ff var(--progress, 1%), #21262d 0); position: relative; transition: background .25s linear; }
+  #boot-ring::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: #0d1117; }
+  #boot-percent { position: relative; font: 600 24px/1 monospace; color: #f0f6fc; }
+  #boot-message { position: absolute; top: calc(100% + 18px); left: 0; width: 100%; color: #8b949e; font-size: 13px; }
+  #boot-overlay.error #boot-ring { background: #da3633; }
+  #boot-overlay.error #boot-message { color: #ff7b72; max-width: 80vw; text-align: left; white-space: pre-wrap; }
+  /* Toolbar metrics are rem, not px, so the controls follow the reader's browser
+     font size instead of ignoring it. rem rather than em because the buttons set
+     their own font-size: em would resolve against that 1.25rem and compound.
+     One custom property drives width, height and the hit target together --
+     changing --tool-w alone cannot desynchronise them. At a default 16px root
+     these resolve to the same 56x52 the pixel version produced. 1px borders stay
+     1px: a hairline that scales is a hairline that blurs, and with border-box
+     they sit inside the box and do not affect layout. */
+  #tools { --tool-w: 3.5rem; --tool-h: 3.25rem; margin-left: auto; display: flex; flex-wrap: wrap; gap: .375rem; }
+  /* box-sizing is not decoration here. There is no reset in this file: <button>
+     gets border-box from the browser's own stylesheet, and a bare <a> does not.
+     So the switch-provider link came out 58x63 against the buttons' 56x52 --
+     its 1px border and vertical padding added on top of the fixed size -- and
+     stretched the whole toolbar row to 63px. */
+  #tools button, #tools a.tool-button { box-sizing: border-box; width: var(--tool-w); height: var(--tool-h); min-height: var(--tool-h); min-width: var(--tool-w); display: grid; grid-template-rows: 1fr auto; place-items: center; gap: .1875rem; padding: .3125rem 0 .25rem; font-size: 1.25rem; line-height: 1; touch-action: manipulation; text-decoration: none; color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: .3125rem; cursor: pointer; }
+  #tools button svg, #tools a.tool-button svg { width: 1.25rem; height: 1.25rem; display: block; }
+  #tools .tool-label { font-size: .5625rem; line-height: 1; letter-spacing: .03em; text-transform: uppercase; color: inherit; opacity: .9; white-space: nowrap; }
+  #tools button:hover, #tools a.tool-button:hover { border-color: #58a6ff; }
+  button { color: #c9d1d9; background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; }
+  .tool-link { color: #58a6ff; align-self: center; font-size: 12px; white-space: nowrap; }
+  dialog { color: #c9d1d9; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 18px; width: min(460px, calc(100vw - 48px)); max-height: 84vh; }
+  dialog::backdrop { background: rgb(0 0 0 / .65); }
+  dialog h2 { margin: 0 0 14px; font-size: 17px; }
+  dialog label { display: grid; gap: 5px; margin: 12px 0; font-size: 12px; color: #8b949e; }
+  dialog input, dialog select { box-sizing: border-box; width: 100%; color: #f0f6fc; background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 8px; }
+  .provider-section { padding: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 7px; margin-bottom: 10px; }
+  .provider-section > summary { min-height: 44px; display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .row { display: flex; gap: 8px; align-items: end; }
+  .row > * { flex: 1; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  small.hint { color: #8b949e; display: block; margin-top: 6px; line-height: 1.45; }
+  .status-line { font-size: 12px; color: #8b949e; margin-top: 8px; }
+  code { font: 12px ui-monospace, Consolas, monospace; color: #79c0ff; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="toolbar-icon-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#58a6ff"/>
+      <stop offset="55%" stop-color="#bc8cff"/>
+      <stop offset="100%" stop-color="#ff7b72"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div id="boot-overlay" role="status" aria-live="polite">
+  <div id="boot-loader">
+    <div id="boot-ring"><span id="boot-percent">0%</span></div>
+    <div id="boot-message">Preparing…</div>
+  </div>
+</div>
+
+<header>
+  <h1><img class="brand-logo" src="../assets/vmvm-logo.png" alt="">VMVM <span class="provider-chip">CheerpX</span></h1>
+  <div id="status">loading CheerpX…</div>
+  <div id="llm-status">Local AI model: not configured</div>
+  <div id="tools">
+    <button id="copy-terminal" type="button" title="Copy terminal" aria-label="Copy terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="9" width="12" height="12" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      <span class="tool-label">Copy</span>
+    </button>
+    <button id="paste-terminal" type="button" title="Paste into terminal" aria-label="Paste into terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+      </svg>
+      <span class="tool-label">Paste</span>
+    </button>
+    <button id="toggle-ide" type="button" title="Show the terminal full screen" aria-label="Show the terminal full screen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="4" width="20" height="16" rx="2"/>
+        <path d="M2 9h20"/>
+      </svg>
+      <span class="tool-label">Terminal</span>
+    </button>
+    <!-- Deliberately NOT "Share", which is what the v86 page calls this. There
+         /ide/ is an nginx proxy to a dev server in the guest, so the link is
+         genuinely public. Here the preview exists only in this browser's Cache
+         Storage, so a shared link 404s for the recipient. -->
+    <button id="share-ide" type="button" title="Open the preview in a new tab (this browser only)" aria-label="Open the preview in a new tab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+        <polyline points="15 3 21 3 21 9"/>
+        <line x1="10" y1="14" x2="21" y2="3"/>
+      </svg>
+      <span class="tool-label">Open</span>
+    </button>
+    <button id="toggle-theme" type="button" title="Switch light or dark theme" aria-label="Switch theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="5"/>
+        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      <span class="tool-label">Theme</span>
+    </button>
+    <button id="refresh-app" type="button" title="Refresh VMVM" aria-label="Refresh VMVM">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="23 4 23 10 17 10"/>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </svg>
+      <span class="tool-label">Refresh</span>
+    </button>
+    <a class="tool-button" id="switch-provider" href="../index.html" title="Switch to the v86 provider" aria-label="Switch to v86">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+        <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+      </svg>
+      <span class="tool-label">v86</span>
+    </a>
+    <button id="open-settings" type="button" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="url(#toolbar-icon-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+      </svg>
+      <span class="tool-label">Settings</span>
+    </button>
+  </div>
+</header>
+
+<main id="workspace">
+  <aside id="sidebar">
+    <div class="pane-head">
+      <button class="side-tab is-active" id="tab-files" type="button">Project</button>
+      <button class="side-tab" id="tab-templates" type="button">Templates</button>
+      <span class="pane-actions"><button id="tree-refresh" type="button" title="Re-read the project from the guest">↻</button></span>
+    </div>
+    <div class="side-body" id="side-files"><div id="file-tree"></div></div>
+    <div class="side-body" id="side-templates" hidden><div id="template-list"></div></div>
+  </aside>
+
+  <section id="editor-pane">
+    <div class="pane-head">
+      <span id="editor-path">no file open</span>
+      <span class="pane-actions">
+        <button id="editor-save" type="button" disabled>Save</button>
+      </span>
+    </div>
+    <div id="editor-wrap">
+      <pre id="editor-gutter" aria-hidden="true">1</pre>
+      <textarea id="editor" spellcheck="false" wrap="off" aria-label="File contents"
+                placeholder="Select a file in Project to open it here."></textarea>
+    </div>
+  </section>
+
+  <section id="preview-pane">
+    <div class="pane-head">
+      <span>Preview</span>
+      <span class="pane-actions">
+        <button id="preview-build" type="button">Build &amp; render</button>
+        <button id="preview-reload" type="button" title="Re-render from the guest">↻</button>
+      </span>
+    </div>
+    <div id="preview-empty">Nothing rendered yet.<br>Pick a template, or press Build &amp; render.</div>
+    <iframe id="dev-ide" title="Project preview" hidden></iframe>
+  </section>
+
+  <section id="terminal-pane">
+    <div class="pane-head"><span>Terminal</span><span class="pane-actions" id="term-hint"></span></div>
+    <div id="term"></div>
+  </section>
+</main>
+
+<dialog id="settings-dialog">
+  <h2>Settings</h2>
+
+  <details class="provider-section" open>
+    <summary><strong>VMVM image</strong></summary>
+    <label>Image tier
+      <select id="image-tier"></select>
+    </label>
+    <div id="image-description" class="status-line"></div>
+  </details>
+
+  <details class="provider-section">
+    <summary><strong>Cloud AI providers</strong></summary>
+    <label>Configured
+      <select id="provider-select"></select>
+    </label>
+    <div class="row">
+      <label>Name<input id="provider-id" placeholder="acme"></label>
+      <label>Type
+        <select id="provider-type">
+          <option value="openai">OpenAI</option>
+          <option value="compatible">OpenAI-compatible</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="gemini">Gemini</option>
+        </select>
+      </label>
+    </div>
+    <label>Base URL<input id="provider-url" placeholder="https://api.openai.com/v1"></label>
+    <label>Model<input id="provider-model" placeholder="gpt-4o-mini"></label>
+    <label>API key<input id="provider-key" type="password" placeholder="stored in this tab only"></label>
+    <label style="display:flex;align-items:center;gap:8px;">
+      <input id="provider-persist" type="checkbox" style="width:auto;"> Remember the key in this browser
+    </label>
+    <div class="dialog-actions">
+      <button id="provider-delete" type="button">Delete</button>
+      <button id="provider-save" type="button">Save provider</button>
+    </div>
+    <div id="provider-status" class="status-line"></div>
+    <small class="hint">
+      Providers are shared with the v86 page — same origin, same storage, same
+      <code>LlmProviderRouter</code>. Configure once, use on either provider.
+    </small>
+  </details>
+
+  <details class="provider-section">
+    <summary><strong>Local model (WebGPU)</strong></summary>
+    <label>Cached models
+      <select id="cached-model-select"></select>
+    </label>
+    <div class="dialog-actions">
+      <button id="model-bundled" type="button" hidden>Load served model</button>
+      <button id="model-import" type="button">Import model file…</button>
+      <button id="model-load" type="button">Load selected</button>
+    </div>
+    <input id="model-file-input" type="file" accept=".litertlm,.task" hidden>
+    <div id="model-status" class="status-line">not loaded</div>
+  </details>
+
+  <details class="provider-section">
+    <summary><strong>Project</strong></summary>
+    <label>Template
+      <select id="template-select"></select>
+    </label>
+    <div class="dialog-actions">
+      <button id="template-apply" type="button">Scaffold</button>
+      <button id="project-build" type="button">Build &amp; render</button>
+    </div>
+    <small class="hint" id="template-note"></small>
+    <div id="project-status" class="status-line"></div>
+  </details>
+
+  <details class="provider-section">
+    <summary><strong>Diagnostics</strong></summary>
+    <div id="diagnostics" class="status-line" style="white-space:pre-wrap"></div>
+  </details>
+
+  <div class="dialog-actions"><button id="close-settings" type="button">Close</button></div>
+</dialog>
+
+<script src="../xterm.js"></script>
+<script type="module">
+import { createRuntime } from '../providers/cheerpx/runtime.js';
+import { CheerpXGuestClient } from '../providers/cheerpx/guest-client.js';
+import { CheerpXHostBridge } from '../providers/cheerpx/host-bridge.js';
+import { CheerpXTerminal } from '../providers/cheerpx/terminal.js';
+import { CheerpXPreview } from '../providers/cheerpx/preview.js';
+import { LlmProviderRouter } from '../shared/llm-provider-router.js';
+
+const field = id => document.getElementById(id);
+const statusEl = field('status');
+const llmStatusEl = field('llm-status');
+const overlay = field('boot-overlay');
+const bootMessage = field('boot-message');
+const bootPercent = field('boot-percent');
+const bootRing = field('boot-ring');
+
+const status = text => { statusEl.textContent = text; };
+let progress = 0;
+function setProgress(value, message) {
+  progress = Math.max(progress, Math.min(99, value));
+  bootRing.style.setProperty('--progress', `${progress}%`);
+  bootPercent.textContent = `${progress}%`;
+  if (message) bootMessage.textContent = message;
+}
+function failBoot(error) {
+  overlay.classList.add('error');
+  bootPercent.textContent = '!';
+  bootMessage.textContent = String(error?.message ?? error);
+  status('boot failed');
+}
+function finishBoot() {
+  setProgress(100);
+  bootPercent.textContent = '100%';
+  overlay.classList.add('done');
+  setTimeout(() => { overlay.style.display = 'none'; }, 400);
+  // Repaint once the overlay is gone, and focus so typing works without having
+  // to click the pane first. NOT wrapped in requestAnimationFrame: that is the
+  // very trap this repaint exists to escape, since a hidden tab gets no frames
+  // and the callback would simply never run.
+  repaintTerminal();
+  terminal.focus();
+}
+
+// --- theme, mirroring the v86 page ------------------------------------------
+field('toggle-theme').onclick = () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem('vm.theme', next);
+  field('dev-ide').contentWindow?.postMessage({ type: 'vmvm-theme', theme: next }, location.origin);
+};
+field('refresh-app').onclick = () => location.reload();
+
+// --- image manifest ----------------------------------------------------------
+const MANIFEST_URL = '../images/cheerpx/cx-images.json';
+let manifest = { defaultTier: 'debian-dev', tiers: {} };
+try {
+  const response = await fetch(MANIFEST_URL, { cache: 'no-cache' });
+  if (response.ok) manifest = await response.json();
+} catch { /* reported below */ }
+
+const requested = new URLSearchParams(location.search).get('tier')
+  || localStorage.getItem('vmbro.cx.imageTier') || manifest.defaultTier;
+const tier = manifest.tiers[requested] ? requested : manifest.defaultTier;
+const image = manifest.tiers[tier];
+if (image) localStorage.setItem('vmbro.cx.imageTier', tier);
+
+const tierSelect = field('image-tier');
+for (const [key, entry] of Object.entries(manifest.tiers)) {
+  const option = document.createElement('option');
+  option.value = key; option.textContent = entry.name;
+  tierSelect.appendChild(option);
+}
+tierSelect.value = tier;
+const describeTier = () => {
+  const entry = manifest.tiers[tierSelect.value];
+  field('image-description').textContent = entry
+    ? `${entry.description} (${Math.round(entry.size / 1048576)} MiB)`
+    : 'No image tiers are defined.';
+};
+describeTier();
+tierSelect.onchange = () => {
+  describeTier();
+  if (tierSelect.value !== tier) {
+    localStorage.setItem('vmbro.cx.imageTier', tierSelect.value);
+    location.search = `?tier=${encodeURIComponent(tierSelect.value)}`;
+  }
+};
+
+// --- the shared LLM stack ----------------------------------------------------
+let litert = null;
+const router = new LlmProviderRouter({
+  getLocalClient: () => {
+    if (!litert) throw new Error('No local model is loaded; open Settings > Local model');
+    return litert;
+  },
+});
+
+const providerSelect = field('provider-select');
+function refreshProviders() {
+  providerSelect.innerHTML = '';
+  const local = document.createElement('option');
+  local.value = 'local'; local.textContent = 'local (WebGPU model)';
+  providerSelect.appendChild(local);
+  for (const provider of router.providers()) {
+    const option = document.createElement('option');
+    option.value = provider.id;
+    option.textContent = `${provider.label} — ${provider.model}`;
+    providerSelect.appendChild(option);
+  }
+  providerSelect.value = router.defaults().zerostack || 'local';
+}
+refreshProviders();
+
+providerSelect.onchange = () => {
+  const id = providerSelect.value;
+  router.setDefault('zerostack', id);
+  const provider = router.providers().find(item => item.id === id);
+  if (provider) {
+    field('provider-id').value = provider.id;
+    field('provider-type').value = provider.type;
+    field('provider-url').value = provider.baseUrl;
+    field('provider-model').value = provider.model;
+  }
+  field('provider-status').textContent = `Default provider for guest AI commands: ${id}`;
+};
+field('provider-save').onclick = () => {
+  try {
+    const saved = router.saveProvider({
+      id: field('provider-id').value, label: field('provider-id').value,
+      type: field('provider-type').value, baseUrl: field('provider-url').value,
+      model: field('provider-model').value,
+    }, field('provider-key').value, { persistSecret: field('provider-persist').checked });
+    router.setDefault('zerostack', saved.id);
+    field('provider-key').value = '';
+    refreshProviders();
+    providerSelect.value = saved.id;
+    field('provider-status').textContent = `Saved "${saved.id}" and made it the default.`;
+    llmStatusEl.textContent = `Local AI model: using ${saved.id}`;
+  } catch (error) { field('provider-status').textContent = error.message; }
+};
+field('provider-delete').onclick = () => {
+  const id = providerSelect.value;
+  if (id === 'local') { field('provider-status').textContent = 'The local provider cannot be deleted.'; return; }
+  router.removeProvider(id);
+  refreshProviders();
+  field('provider-status').textContent = `Removed "${id}".`;
+};
+
+// --- local model -------------------------------------------------------------
+const modelStatus = field('model-status');
+const cachedSelect = field('cached-model-select');
+async function litertClient() {
+  if (litert) return litert;
+  const { LiteRtLmClient } = await import('../shared/litert-lm-client.js');
+  litert = new LiteRtLmClient();
+  litert.addEventListener?.('activity', event => { modelStatus.textContent = event.detail?.message ?? 'working…'; });
+  await litert.initialize({ autoLoad: false });
+  return litert;
+}
+async function refreshCachedModels() {
+  try {
+    const client = await litertClient();
+    const names = await client.cachedModelNames();
+    cachedSelect.innerHTML = '';
+    for (const name of names) {
+      const option = document.createElement('option');
+      option.value = name; option.textContent = name;
+      cachedSelect.appendChild(option);
+    }
+    modelStatus.textContent = names.length
+      ? `${names.length} model(s) cached in this browser.`
+      : 'No models cached yet — import a .litertlm file.';
+  } catch (error) { modelStatus.textContent = `Local model unavailable: ${error.message}`; }
+}
+
+const BUNDLED_MODELS = ['gemma-4-E2B-it-web.litertlm', 'gemma-4-E4B-it-web.litertlm', 'gemma-4-12B-it-web.litertlm'];
+let bundledModelUrl = null;
+(async () => {
+  for (const name of BUNDLED_MODELS) {
+    const url = new URL(`../models/${name}`, location.href).href;
+    const head = await fetch(url, { method: 'HEAD' }).catch(() => null);
+    if (head?.ok) {
+      bundledModelUrl = url;
+      const button = field('model-bundled');
+      button.textContent = `Load ${name} (${(Number(head.headers.get('content-length')) / 1073741824).toFixed(2)} GiB)`;
+      button.hidden = false;
+      break;
+    }
+  }
+})();
+field('model-bundled').onclick = async () => {
+  if (!bundledModelUrl) return;
+  try {
+    modelStatus.textContent = 'Fetching the served model…';
+    const client = await litertClient();
+    await client.loadBundledModel(bundledModelUrl);
+    const info = await client.status();
+    modelStatus.textContent = `Loaded ${info.modelName ?? 'model'}.`;
+    llmStatusEl.textContent = `Local AI model: ready — ${info.modelName ?? 'loaded'}`;
+  } catch (error) { modelStatus.textContent = `Load failed: ${error.message}`; }
+};
+field('model-import').onclick = () => field('model-file-input').click();
+field('model-file-input').onchange = async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    modelStatus.textContent = `Importing ${file.name}…`;
+    const client = await litertClient();
+    await client.importModel(file);
+    await refreshCachedModels();
+  } catch (error) { modelStatus.textContent = `Import failed: ${error.message}`; }
+};
+field('model-load').onclick = async () => {
+  const name = cachedSelect.value;
+  if (!name) { modelStatus.textContent = 'Nothing selected.'; return; }
+  try {
+    modelStatus.textContent = `Loading ${name}…`;
+    const client = await litertClient();
+    await client.loadCachedModel(name);
+    modelStatus.textContent = `Loaded ${name}.`;
+    llmStatusEl.textContent = `Local AI model: ready — ${name}`;
+  } catch (error) { modelStatus.textContent = `Load failed: ${error.message}`; }
+};
+
+const settings = field('settings-dialog');
+field('open-settings').onclick = () => { refreshCachedModels(); settings.showModal(); };
+field('close-settings').onclick = () => settings.close();
+
+// --- terminal ----------------------------------------------------------------
+const termHost = field('term');
+const terminal = new Terminal({
+  // The guest emits bare LF. A normal Linux tty translates that to CR LF on the
+  // way out (ONLCR), but CheerpX's custom console hands the byte through
+  // untouched, so without this every line after the first starts at whatever
+  // column the previous one ended on -- output looks like a staircase and each
+  // prompt appears indented under the tail of the line above it.
+  //
+  // This is why the v86 page can leave it false and still look right: its guest
+  // is behind a real tty doing the translation. Same option, different backend,
+  // opposite correct value.
+  convertEol: true,
+  fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+  fontSize: 13,
+  theme: { background: '#0d1117', foreground: '#c9d1d9' },
+});
+terminal.open(termHost);
+
+/**
+ * Fit xterm to its container and return the geometry.
+ *
+ * This must run BEFORE the CheerpX console is created: setCustomConsole takes
+ * columns and rows at construction and CheerpX exposes no way to change them
+ * afterwards, so a bad measurement pins the guest for the whole session.
+ */
+function fitTerminal() {
+  const rendered = terminal.element?.querySelector('.xterm-rows');
+  if (!rendered) return null;
+  const wasHidden = termHost.style.display === 'none';
+  if (wasHidden) termHost.style.display = '';
+  try {
+    if (!termHost.clientWidth || !termHost.clientHeight) return null;
+    const bounds = rendered.getBoundingClientRect();
+    const cellWidth = bounds.width / terminal.cols;
+    const cellHeight = bounds.height / terminal.rows;
+    if (!cellWidth || !cellHeight) return null;
+    const cols = Math.max(40, Math.floor((termHost.clientWidth - 16) / cellWidth));
+    const rows = Math.max(12, Math.floor((termHost.clientHeight - 8) / cellHeight));
+    if (cols !== terminal.cols || rows !== terminal.rows) terminal.resize(cols, rows);
+    return { cols, rows };
+  } finally { if (wasHidden) termHost.style.display = 'none'; }
+}
+// Give xterm two frames to lay out before measuring — but never *depend* on
+// them. requestAnimationFrame does not fire in a hidden tab, so awaiting it
+// unconditionally means a backgrounded or occluded tab hangs here forever at
+// 0%, before boot even starts. The timeout is the real guarantee; the frames
+// are the fast path.
+await Promise.race([
+  new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  new Promise(resolve => setTimeout(resolve, 250)),
+]);
+const geometry = fitTerminal() ?? { cols: 120, rows: 40 };
+
+/**
+ * Force xterm to repaint.
+ *
+ * Its DOM renderer flushes through requestAnimationFrame, and a hidden tab gets
+ * no frames at all -- so anything written while hidden reaches the buffer and is
+ * never painted. Booting takes upwards of a minute here, which makes switching
+ * away and back during it the normal case rather than an edge case: you come
+ * back to a blank pane in front of a perfectly live shell, prompt included.
+ * Repainting on every return to visibility is cheap and idempotent.
+ */
+function repaintTerminal() {
+  if (terminal.rows) terminal.refresh(0, terminal.rows - 1);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') repaintTerminal();
+});
+// Clicking the padding around xterm should focus it too, not just the glyphs.
+field('terminal-pane').addEventListener('mousedown', event => {
+  if (!event.target.closest('.pane-head')) terminal.focus();
+});
+
+field('copy-terminal').onclick = async () => {
+  const selection = terminal.getSelection();
+  if (!selection) { status('nothing selected in the terminal'); return; }
+  try { await navigator.clipboard.writeText(selection); status('terminal selection copied'); }
+  catch (error) { status(`copy failed: ${error.message}`); }
+};
+
+// --- boot --------------------------------------------------------------------
+const IDE_URL = new URL('./preview/', location.href).href;
+// True once syncPreview has actually put something in Cache Storage. Opening
+// IDE_URL before that lands on a 404 served by nothing, since the path does not
+// exist on the origin server.
+let previewReady = false;
+// Bumped on every render so the preview frame's URL changes and the browser
+// does not keep showing the previous document.
+let previewRevision = 0;
+// How long the background toolchain warmup took, for the diagnostics panel.
+let warmMs = null;
+
+// Loads the rendered project into the preview pane. Unlike the v86 page there
+// is no terminal-for-IDE swap: the panes coexist, so this only swaps the
+// pane's placeholder for the frame.
+function enterDevIDE() {
+  const target = new URL(IDE_URL);
+  target.searchParams.set('theme', document.documentElement.dataset.theme || 'dark');
+  // Cache-bust so a re-render is actually shown; the URL is otherwise identical
+  // and the frame would keep the document it already has.
+  target.searchParams.set('r', String(previewRevision));
+  const frame = field('dev-ide');
+  frame.src = target.href;
+  frame.hidden = false;
+  field('preview-empty').hidden = true;
+}
+/**
+ * Swap between the IDE workspace and a full-screen terminal.
+ *
+ * The button is labelled with where it goes, not with where you are: it reads
+ * "Terminal" in the workspace and "IDE" once the terminal fills the screen.
+ *
+ * xterm is deliberately NOT refitted on the way in. CheerpX fixes the console's
+ * columns and rows when it is constructed and offers no way to change them, so
+ * resizing xterm to the larger box would desynchronise the two and wrap the
+ * guest's output at the wrong column. The terminal keeps its geometry and simply
+ * has more room around it.
+ */
+function toggleTerminalFocus() {
+  const focused = field('workspace').classList.toggle('terminal-focus');
+  const button = field('toggle-ide');
+  button.querySelector('.tool-label').textContent = focused ? 'IDE' : 'Terminal';
+  button.title = focused ? 'Back to the IDE workspace' : 'Show the terminal full screen';
+  button.setAttribute('aria-label', button.title);
+  // Repaint either way: the pane is display:none in one of the two states, and
+  // xterm does not paint into something that is not being rendered.
+  repaintTerminal();
+  if (focused) terminal.focus();
+  status(focused ? 'terminal full screen' : 'IDE workspace restored');
+}
+field('toggle-ide').onclick = toggleTerminalFocus;
+// Opens the preview in its own tab, which works, and says plainly that the link
+// does not travel. /cx/preview/ is 404 on the server: it is assembled by the
+// service worker out of Cache Storage, so it resolves only in a browser that has
+// this page's worker registered. Copying it to send to someone gives them a 404,
+// which is precisely the bug this replaced -- the button was labelled "Share".
+//
+// Making it genuinely shareable means publishing the built output to the server,
+// which needs an upload endpoint and an answer to who is allowed to publish. The
+// v86 page dodges all of that by having a real dev server to proxy to.
+field('share-ide').onclick = async () => {
+  if (!previewReady) { status('nothing rendered yet — build the project first'); return; }
+  window.open(IDE_URL, '_blank', 'noopener');
+  try {
+    await navigator.clipboard.writeText(IDE_URL);
+    status('Preview opened — link copied, but it only resolves in this browser');
+  } catch {
+    status('Preview opened in a new tab — the link only resolves in this browser');
+  }
+};
+
+try {
+  if (!image) throw new Error('No CheerpX image tier is defined in images/cheerpx/cx-images.json.');
+
+  setProgress(5, `Checking ${image.name}…`);
+  const diskUrl = new URL(`../${image.url}`, location.href).href;
+  const head = await fetch(diskUrl, { method: 'HEAD' }).catch(() => null);
+  if (!head?.ok) {
+    throw new Error(
+      `The guest image is missing:\n  ${image.url}\n\n` +
+      `CheerpX images are build artifacts and are not committed. Build one with:\n\n` +
+      `  sh images/cheerpx/build-ext2.sh\n\n` +
+      `(needs Linux or WSL with mke2fs and fakeroot; no Docker required)`);
+  }
+  if (!head.headers.get('last-modified') && !head.headers.get('etag')) {
+    throw new Error(`The server serving ${image.url} sends neither Last-Modified nor ETag.\n` +
+      `CheerpX needs one of them to stream the disk, plus HTTP Range (206) support.`);
+  }
+
+  setProgress(20, `Starting VMVM [${image.name}]…`);
+  const runtime = await createRuntime({
+    diskUrl, tier,
+    // Keys the IndexedDB overlay, so publishing a new image actually reaches
+    // browsers that have already booted the old one.
+    imageVersion: image.version,
+    onProgress: ({ phase, message }) =>
+      setProgress({ engine: 30, devices: 45, boot: 60, ready: 85 }[phase] ?? progress, message),
+  });
+
+  setProgress(88, 'Attaching terminal…');
+  const console_ = new CheerpXTerminal(runtime, terminal, geometry);
+  const guest = new CheerpXGuestClient(runtime, { workspace: '/root/project' });
+  const bridge = new CheerpXHostBridge(runtime, {
+    llmResolver: (agent, route) => router.resolve(agent, route),
+  });
+  bridge.start();
+  // Typing is invisible to the bridge's poll loop -- different channel -- so
+  // without this the loop idles at 400 ms while the shell is in active use, and
+  // every command pays a ~1 s wait that is scheduling, not work.
+  console_.onActivity = () => bridge.markActive();
+
+  field('paste-terminal').onclick = async () => {
+    try { console_.write(await navigator.clipboard.readText()); }
+    catch (error) { status(`paste failed: ${error.message}`); }
+  };
+
+  // Mastra builds V86Filesystem/V86Sandbox from the guest itself, and both
+  // consume only the nine-method contract, so no CheerpX workspace class is
+  // needed. What does need overriding is everything tuned for the UART.
+  const CHEERPX_WORKSPACE_OPTIONS = {
+    filesystemOptions: { cacheTtlMs: 0, prefetchMaxBytes: 0 },
+    sandboxOptions: {
+      captureStderr: false,
+      instructions: [
+        'Commands run inside a JIT-compiled x86 Debian guest in the browser tab.',
+        'The shell is bash with GNU coreutils, so GNU flags are available.',
+        'Installed: git, jq, make, patch, grep, sed, awk, file, less, tar, gzip,',
+        'python3, qjs (QuickJS), esbuild and vmbro-httpd.',
+        'NOT installed: node, ripgrep. Use grep rather than rg.',
+        'There is no IP address, DNS, or general TCP/UDP: use the browser-backed',
+        'commands (vmfetch, vmclip, vmexport, vmgithub) instead of curl, git clone,',
+        'or ssh. These are host RPC operations, not normal networking.',
+        'Note /dev/zero is absent; use truncate or head -c to make files.',
+      ].join(' '),
+    },
+  };
+
+  const { VmAgentController } = await import('../shared/vmagent-controller.js');
+  const agentController = new VmAgentController({
+    createAgent: async options => (await import('../agent/dist/agent.js')).createVMAgent(options),
+    createMastraAgent: async options => {
+      const { createMastraVMAgent } = await import('../agent/dist/mastra-agent.js');
+      const { fullTools = true, ...rest } = options;
+      return createMastraVMAgent({ ...rest, enableVmTools: fullTools, enablePlanning: fullTools, ...CHEERPX_WORKSPACE_OPTIONS });
+    },
+    createCodeAgent: async options => {
+      const { createCodeAgentHarness } = await import('../agent/dist/mastra-code.js');
+      return createCodeAgentHarness({ ...options, ...CHEERPX_WORKSPACE_OPTIONS });
+    },
+    getLlmClient: (agent, route) => router.resolve(agent, route),
+    getGuest: () => guest,
+    approveAction: async (operation, detail) =>
+      confirm(`Allow agent operation "${operation}" in /root/project?\n\n${JSON.stringify(detail, null, 2)}`),
+    onOutput: async output => {
+      const text = String(output).replace(/\r?\n/g, '\r\n');
+      if (text.trim()) terminal.write(`\r\n${text}\r\n`);
+    },
+    onBusy: busy => status(busy ? 'agent responding — Ctrl-C to stop' : `${image.name} · ready`),
+    guestProfile:
+      'You are a concise coding agent in /root/project on 32-bit Debian Linux with bash and GNU coreutils. ' +
+      'Installed commands include the GNU userland, git, jq, make, patch, grep, sed, awk, file, less, tar, gzip, python3, qjs, esbuild, ' +
+      'and the browser-backed tools vmfetch, vmclip, vmexport, vmgithub and vmllm. ' +
+      'There is no node and no ripgrep, so use grep rather than rg. ' +
+      'There is no default route, so curl, git clone and ssh cannot reach the Internet — use vmfetch or ' +
+      'vmgithub instead. Note /dev/zero is not present; use truncate or head -c. ' +
+      'Use tools only when needed, verify changes, then answer directly.',
+  });
+  bridge.setAgentHandler((command, value, cwd, route) => agentController.handle(command, value, cwd, route));
+
+  // --- preview -----------------------------------------------------------
+  const preview = new CheerpXPreview(runtime, guest, { projectDir: '/root/project' });
+  // Dynamic routes, so /api/* answers here as it does on the v86 page. Static
+  // files still win; the handler only sees what they 404 on. It costs a qjs
+  // process per request, which is why it is not the first thing tried.
+  preview.dynamic = true;
+  if ('serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.register('./preview-sw.js', { scope: './' });
+      await navigator.serviceWorker.ready;
+    } catch (error) { console.warn('preview service worker unavailable:', error); }
+  }
+
+  /**
+   * Render the project from the guest into Cache Storage.
+   *
+   * Each file goes through `vmbro-httpd -cgi` rather than being read off the
+   * filesystem, so the bytes and Content-Type are what the server would send.
+   */
+  async function syncPreview() {
+    const cache = await caches.open('vmbro-preview');
+    for (const request of await cache.keys()) await cache.delete(request);
+
+    // Two listings: glob() feeds `find -path`, where `*` already spans `/`, so
+    // "**/*" matches only files at least one directory deep and misses
+    // dist/index.html. list() covers the top levels.
+    const listings = [];
+    for (const [method, args] of [['list', ['dist']], ['glob', ['**/*', 'dist']]]) {
+      try { listings.push(await guest[method](...args)); } catch { /* no dist yet */ }
+    }
+    const seen = new Set();
+    const files = listings.join('\n').split('\n').filter(Boolean).map(line => {
+      const [type, path] = line.split(/\\t|\t/);
+      return { type, path };
+    }).filter(entry => {
+      if (entry.type === 'directory' || !entry.path || seen.has(entry.path)) return false;
+      seen.add(entry.path); return true;
+    });
+
+    let cached = 0;
+    for (const file of files) {
+      const relative = file.path.replace(/^dist\//, '');
+      // vmbro-httpd answers /index.html with a 301 to "./", so ask for the
+      // directory and store the result under both URLs.
+      const isIndex = /(^|\/)index\.html$/.test(relative);
+      const requestPath = isIndex ? `/${relative.replace(/index\.html$/, '')}` : `/${relative}`;
+      try {
+        const response = await preview.handle({
+          method: 'GET',
+          url: new URL(requestPath, 'http://preview.vmbro.local').href,
+          headers: new Headers(),
+        });
+        if (!response.ok) continue;
+        // A nested document inside a cross-origin-isolated context must assert
+        // COEP itself or the browser silently refuses to render it.
+        const isolated = new Headers(response.headers);
+        isolated.set('cross-origin-embedder-policy', 'require-corp');
+        isolated.set('cross-origin-resource-policy', 'same-origin');
+        const stored = new Response(await response.arrayBuffer(), {
+          status: response.status, statusText: response.statusText, headers: isolated,
+        });
+        await cache.put(new URL(`./preview/${relative}`, location.href).href, stored.clone());
+        if (isIndex) {
+          await cache.put(new URL(`./preview/${relative.replace(/index\.html$/, '')}`, location.href).href, stored.clone());
+        }
+        cached += 1;
+      } catch { /* skip */ }
+    }
+    // Dynamic routes are pre-rendered, not served live. The preview service
+    // worker answers out of Cache Storage and has no way to call back into this
+    // page -- an earlier MessageChannel attempt delivered nothing -- so a route
+    // that is not in the cache before the iframe asks for it cannot be answered
+    // at all. Rendering them here is what makes the template's "Check API"
+    // button work, at the cost of being a snapshot: a handler that varies by
+    // request or by time will not.
+    if (preview.dynamic) {
+      let source = '';
+      try { source = String(await guest.read('src/server.ts')); } catch { /* no server */ }
+      const routes = [...new Set(
+        [...source.matchAll(/app\.(?:get|on)\(\s*['"`]([^'"`]+)['"`]/g)]
+          .map(match => match[1])
+          // Only literal paths can be pre-rendered. A parameterised route has no
+          // single response to snapshot, so skipping it is honest.
+          .filter(path => path.startsWith('/') && !path.includes(':') && !path.includes('*')),
+      )];
+      // Bounded on both axes. Each route costs two guest processes (a static
+      // miss, then qjs), and a route that never answers would otherwise hold up
+      // the whole render -- leaving the preview stale with no way to tell why.
+      // A missing API route is a far better outcome than a render that hangs.
+      for (const route of routes.slice(0, 8)) {
+        try {
+          const response = await Promise.race([
+            preview.handle({
+              method: 'GET',
+              url: new URL(route, 'http://preview.vmbro.local').href,
+              headers: new Headers(),
+            }),
+            new Promise(resolve => setTimeout(() => resolve(null), 25000)),
+          ]);
+          if (!response) { status(`preview: ${route} timed out, skipped`); continue; }
+          if (!response.ok) continue;
+          const isolated = new Headers(response.headers);
+          isolated.set('cross-origin-embedder-policy', 'require-corp');
+          isolated.set('cross-origin-resource-policy', 'same-origin');
+          await cache.put(
+            new URL(`./preview${route}`, location.href).href,
+            new Response(await response.arrayBuffer(), { status: response.status, headers: isolated }),
+          );
+          cached += 1;
+        } catch { /* skip this route */ }
+      }
+    }
+
+    previewReady = cached > 0;
+    previewRevision += 1;
+    return { files: files.length, cached };
+  }
+
+  // --- templates, in Settings rather than the main chrome ------------------
+  const TEMPLATES = {
+    keep: { name: 'Keep current project', note: 'Leaves /root/project untouched.', files: null },
+    static: {
+      name: 'Static page',
+      note: 'A single HTML page served straight from dist/. No build step.',
+      files: {
+        'dist/index.html':
+          '<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8">\n<title>vmbro static</title>\n' +
+          '<style>body{font:16px system-ui;margin:3rem auto;max-width:40rem;color:#222}</style>\n</head>\n' +
+          '<body>\n<h1>Hello from the CheerpX guest</h1>\n' +
+          '<p>Served by <code>vmbro-httpd -cgi</code> over the RPC bridge — no TCP involved.</p>\n</body>\n</html>\n',
+      },
+    },
+    qjs: {
+      name: 'QuickJS script',
+      note: 'A qjs script plus a static page. Run it from the terminal: qjs main.js',
+      files: {
+        'main.js': 'const rows = [1, 2, 3].map(n => n * n);\nprint(JSON.stringify({ squares: rows }));\n',
+        'dist/index.html':
+          '<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><title>qjs</title></head>\n' +
+          '<body><h1>QuickJS template</h1><p>Run <code>qjs main.js</code> in the terminal.</p></body></html>\n',
+      },
+    },
+  };
+  const templateSelect = field('template-select');
+  for (const [key, template] of Object.entries(TEMPLATES)) {
+    const option = document.createElement('option');
+    option.value = key; option.textContent = template.name;
+    templateSelect.appendChild(option);
+  }
+  const describeTemplate = () => { field('template-note').textContent = TEMPLATES[templateSelect.value]?.note ?? ''; };
+  templateSelect.onchange = describeTemplate;
+  describeTemplate();
+
+  field('template-apply').onclick = async () => {
+    const template = TEMPLATES[templateSelect.value];
+    if (!template?.files) { field('project-status').textContent = 'Nothing to write.'; return; }
+    const button = field('template-apply');
+    button.disabled = true;
+    try {
+      for (const [path, content] of Object.entries(template.files)) {
+        const directory = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+        if (directory) await guest.execute(`mkdir -p ${directory}`);
+        await guest.write(path, content);
+      }
+      // Re-render before reloading: the iframe reads from Cache Storage, so
+      // without this it serves the previous project and the scaffold looks
+      // like it silently did nothing.
+      const { cached } = await syncPreview();
+      field('project-status').textContent = `Scaffolded "${template.name}" — ${cached} file(s) rendered.`;
+      if (cached) enterDevIDE();
+      refreshTree();
+    } catch (error) {
+      field('project-status').textContent = `Template failed: ${error.message}`;
+    } finally { button.disabled = false; }
+  };
+
+  field('project-build').onclick = async () => {
+    const button = field('project-build');
+    button.disabled = true; button.textContent = 'Building…';
+    try {
+      const output = await preview.build();
+      const { files, cached } = await syncPreview();
+      field('project-status').textContent = /error/i.test(output)
+        ? `Build reported errors — see the terminal.`
+        : `Rendered ${cached}/${files} file(s).`;
+      if (cached) enterDevIDE();
+      refreshTree();
+    } catch (error) {
+      field('project-status').textContent = `Build failed: ${error.message}`;
+    } finally { button.disabled = false; button.textContent = 'Build & render'; }
+  };
+
+  // --- IDE panes ------------------------------------------------------------
+  //
+  // Everything below drives the guest through the same nine-method contract the
+  // agents use (list/glob/read/write/...), so the IDE has no privileged path
+  // into the VM and cannot drift from what the agents can see.
+
+  // The guest client is constructed with workspace '/root/project' and resolves
+  // everything against it: passing an absolute '/root/project' is rejected with
+  // "path not found", and every path it returns is already workspace-relative.
+  // So the tree speaks in relative paths throughout and never prefixes them.
+  // Reading a binary file into a <textarea> would corrupt it on save, since the
+  // round trip goes through a JS string. Images are listed but not openable.
+  const BINARY = /\.(png|jpe?g|gif|webp|ico|woff2?|ttf|otf|eot|zip|gz|xz|tar|pdf|wasm|ext2|img|so|a|o)$/i;
+  let openPath = null;
+  let openDirty = false;
+
+  const editor = field('editor');
+  const gutter = field('editor-gutter');
+  const saveButton = field('editor-save');
+
+  const renumber = () => {
+    const lines = editor.value.split('\n').length;
+    gutter.textContent = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+  };
+  // The gutter is a separate element, so it must be scrolled in step by hand.
+  editor.addEventListener('scroll', () => { gutter.scrollTop = editor.scrollTop; });
+  editor.addEventListener('input', () => {
+    renumber();
+    if (!openDirty && openPath) {
+      openDirty = true;
+      field('editor-path').textContent = `${openPath} •`;
+      saveButton.disabled = false;
+    }
+  });
+
+  async function saveOpenFile() {
+    if (!openPath) return;
+    saveButton.disabled = true;
+    try {
+      await guest.write(openPath, editor.value);
+      openDirty = false;
+      field('editor-path').textContent = openPath;
+      status(`saved ${openPath}`);
+    } catch (error) {
+      status(`save failed: ${error.message}`);
+      saveButton.disabled = false;
+    }
+  }
+  saveButton.onclick = saveOpenFile;
+  editor.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 's') { event.preventDefault(); saveOpenFile(); }
+  });
+
+  async function openFile(path, button) {
+    if (openDirty && !confirm(`Discard unsaved changes to ${openPath}?`)) return;
+    // A read crosses the RPC bridge into the guest and routinely takes several
+    // seconds. Without this the pane sits on the previous file with no sign
+    // anything happened, and the click reads as ignored.
+    field('editor-path').textContent = `${path} — reading…`;
+    try {
+      const content = await guest.read(path);
+      editor.value = typeof content === 'string' ? content : (content?.content ?? '');
+      openPath = path;
+      openDirty = false;
+      field('editor-path').textContent = path;
+      saveButton.disabled = true;
+      renumber();
+      for (const node of field('file-tree').querySelectorAll('.tree-item.is-active')) node.classList.remove('is-active');
+      button?.classList.add('is-active');
+    } catch (error) {
+      field('editor-path').textContent = openPath ?? 'no file open';
+      status(`could not open ${path}: ${error.message}`);
+    }
+  }
+
+  async function refreshTree() {
+    const host = field('file-tree');
+    host.textContent = 'reading…';
+    // Same two-listing trick syncPreview needs: glob() feeds `find -path`, where
+    // `*` already spans `/`, so "**/*" never matches top-level entries.
+    const lines = [];
+    for (const [method, args] of [['list', ['.']], ['glob', ['**/*', '.']]]) {
+      try { lines.push(await guest[method](...args)); } catch { /* tolerate */ }
+    }
+    const seen = new Set();
+    const entries = lines.join('\n').split('\n').filter(Boolean).map(line => {
+      const [type, path] = line.split(/\\t|\t/);
+      return { type, path: String(path || '').replace(/^\.\//, '') };
+    }).filter(entry => {
+      if (!entry.path || seen.has(entry.path)) return false;
+      seen.add(entry.path);
+      return true;
+    }).sort((a, b) => a.path.localeCompare(b.path));
+
+    host.textContent = '';
+    if (!entries.length) { host.textContent = 'empty project'; return; }
+    for (const entry of entries) {
+      const depth = entry.path.split('/').length - 1;
+      const name = entry.path.slice(entry.path.lastIndexOf('/') + 1);
+      if (entry.type === 'directory') {
+        const row = document.createElement('div');
+        row.className = 'tree-dir';
+        row.style.paddingLeft = `${depth * 0.75 + 0.375}rem`;
+        row.textContent = `${name}/`;
+        host.append(row);
+        continue;
+      }
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'tree-item';
+      row.style.paddingLeft = `${depth * 0.75 + 0.375}rem`;
+      row.textContent = name;
+      row.title = entry.path;
+      if (BINARY.test(entry.path)) {
+        row.disabled = true;
+        row.style.opacity = '.5';
+        row.title = `${entry.path} — binary, not editable here`;
+      } else {
+        row.onclick = () => openFile(entry.path, row);
+      }
+      host.append(row);
+    }
+  }
+  field('tree-refresh').onclick = refreshTree;
+
+  // Templates listed as a pane rather than buried in a select, and applied by
+  // the same code path the Settings dialog uses.
+  function renderTemplates() {
+    const host = field('template-list');
+    host.textContent = '';
+    for (const [key, template] of Object.entries(TEMPLATES)) {
+      if (!template.files) continue;
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'template-item';
+      item.innerHTML = '<strong></strong><span></span>';
+      item.querySelector('strong').textContent = template.name;
+      item.querySelector('span').textContent = template.note;
+      item.onclick = () => { templateSelect.value = key; describeTemplate(); field('template-apply').click(); };
+      host.append(item);
+    }
+  }
+
+  for (const [tab, shown, hidden] of [['tab-files', 'side-files', 'side-templates'],
+                                      ['tab-templates', 'side-templates', 'side-files']]) {
+    field(tab).onclick = () => {
+      field(shown).hidden = false;
+      field(hidden).hidden = true;
+      field(tab).classList.add('is-active');
+      field(tab === 'tab-files' ? 'tab-templates' : 'tab-files').classList.remove('is-active');
+    };
+  }
+
+  field('preview-build').onclick = () => field('project-build').click();
+  field('preview-reload').onclick = async () => {
+    const { cached } = await syncPreview();
+    if (cached) enterDevIDE(); else status('nothing to render — dist/ is empty');
+  };
+
+  renderTemplates();
+  refreshTree().catch(() => { field('file-tree').textContent = 'could not read the project'; });
+
+  Object.assign(globalThis, { __VMBRO__: { runtime, guest, bridge, router, terminal, preview, agentController, syncPreview, refreshTree } });
+
+  console_.startShell({ cwd: '/root/project' }).catch(error => {
+    terminal.write(`\r\n[shell exited: ${error?.message ?? error}]\r\n`);
+  });
+
+  // Pull the toolchain into the block cache while the user is reading the boot
+  // message, not while they are waiting on their first build.
+  //
+  // CheerpX demand-pages the disk over HTTP Range, and this host has ~1.2 s
+  // round-trip time, so cold blocks are the dominant cost of everything. esbuild
+  // is 10.25 MB. Measured: `esbuild --version` took 53,133 ms on first run and
+  // 867 ms on the second -- 61x, with no CPU difference between them, purely
+  // whether the blocks were already local. A cold build then lands at ~94 s
+  // against guest.execute's 120 s ceiling, which is why builds sometimes died
+  // for no visible reason.
+  //
+  // cx.run rather than guest.execute deliberately: this must not inherit that
+  // 120 s timeout, since on a cold cache the warmup itself would trip it.
+  // Failures are ignored -- a warm cache is an optimisation, never a
+  // precondition.
+  (async () => {
+    const started = Date.now();
+    try {
+      await runtime.cx.run('/bin/sh', ['-c',
+        'cat /usr/local/bin/esbuild /usr/local/bin/qjs /usr/local/bin/vmbro-httpd > /dev/null 2>&1'],
+        { env: ['PATH=/usr/local/bin:/usr/bin:/bin'], cwd: '/', uid: 0, gid: 0 });
+      warmMs = Date.now() - started;
+    } catch { /* optimisation only */ }
+  })();
+
+  finishBoot();
+  status(`${image.name} · booted in ${runtime.bootMs} ms`);
+
+  field('diagnostics').textContent = [
+    `crossOriginIsolated: ${globalThis.crossOriginIsolated}`,
+    `SharedArrayBuffer: ${typeof SharedArrayBuffer}`,
+    `WebGPU: ${navigator.gpu ? 'available' : 'absent'}`,
+    `image: ${image.url} (${image.version})`,
+    `boot: ${runtime.bootMs} ms`,
+  ].join('\n');
+
+  // Mirror the v86 dev tier: build the project, then swap the terminal for the
+  // IDE once it is ready. v86 waits for a DEVAPP-READY-OK marker from a dev
+  // server on port 3000; there is no TCP here, so readiness is simply "the
+  // project rendered".
+  setTimeout(async () => {
+    try {
+      const { cached } = await syncPreview();
+      if (cached) enterDevIDE();
+      else status(`${image.name} · no project output yet — use Settings > Project`);
+    } catch { /* leave the terminal showing */ }
+  }, 0);
+} catch (error) {
+  failBoot(error);
+}
+</script>
+</body>
+</html>

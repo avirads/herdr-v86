@@ -28,7 +28,11 @@ test("Settings provides browser-native installation UX", () => {
 test("service worker caches the shell but excludes VM and model payloads", () => {
   assert.match(worker, /cache\.addAll\(APP_SHELL\)/);
   assert.match(worker, /request\.headers\.has\("range"\)/);
-  assert.match(worker, /\\\.\(\?:img\|litertlm\|task\|zip\)/);
+  // Both disk formats: .img is the v86 tier image, .ext2 the CheerpX one.
+  // Caching either would put a 150-450 MB payload in the app-shell cache.
+  const payloadLine = worker.split('\n').find(line => line.includes('litertlm'));
+  const payloadTypes = payloadLine.match(/\(\?:([^)]*)\)/)[1].split('|');
+  assert.deepEqual(payloadTypes, ['img', 'ext2', 'litertlm', 'task', 'zip']);
   // Read the excluded prefixes out of the worker and compare them as a set,
   // rather than restating the alternation as one long regex. The previous form
   // spelled the list out a second time, so when network/browser became shared/
@@ -40,7 +44,7 @@ test("service worker caches the shell but excludes VM and model payloads", () =>
   const excluded = exclusionLine.match(/\(\?:([^)]*)\)/)[1].split('|').map(name => name.replace(/\\/g, ''));
   assert.deepEqual(
     excluded,
-    ['models', 'downloads', 'agent/dist', 'shared', 'providers', 'ide', 'preview', 'v1', 'peerjs', 'plu'],
+    ['models', 'downloads', 'agent/dist', 'shared', 'providers', 'cx', 'vendor', 'ide', 'preview', 'v1', 'peerjs', 'plu'],
   );
   assert.match(worker, /offline\.html/);
 	assert.match(worker, /agent\\\/dist/);

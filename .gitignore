@@ -33,3 +33,11 @@ build-dev.log
 # A fresh clone therefore has vm-images.json but no images. Build or fetch them.
 vm-*.img
 *.ext2
+
+# CheerpX build artifacts and optional payloads, matching the other tree.
+# The .ext2 is built by images/cheerpx/build-ext2.sh, not committed.
+images/cheerpx/*.ext2
+# 18.7 MB Tailscale blob, fetched only by TailscaleNetwork which this app never
+# constructs (the CheerpX guest has no network interface at all). Restore with
+# vendor/cheerpx/fetch.sh if Tailscale networking is ever wired up.
+vendor/cheerpx/*/tun/tailscale.wasm

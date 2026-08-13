@@ -1,0 +1,41 @@
+#!/bin/sh
+# CheerpX port of network/guest/vmexport.
+#
+# This one is NOT a transport swap. The v86 tool stages the file on a 9p share
+# at /mnt/host-transfer and sends EXPORT9P so the browser can read it back by
+# name. CheerpX has no 9p mount, but it has the IDB out-mount the host can read
+# with readFileAsBlob, which serves the same purpose — and for the same reason:
+# an 8 MiB file is ~11 MB of base64, far beyond ARG_MAX, so the bytes cannot
+# ride on the request line.
+#
+# The usage text and the 8 MiB limit are unchanged.
+set -eu
+case "${1:-}" in -h|--help) echo 'usage: vmexport FILE'; echo 'Download one guest file through the browser (maximum 8 MiB).'; exit 0;; esac
+[ "$#" -eq 1 ] && [ -f "$1" ] || { echo 'usage: vmexport FILE' >&2; exit 2; }
+size=$(wc -c < "$1")
+[ "$size" -le 8388608 ] || { echo 'vmexport: files are limited to 8 MiB' >&2; exit 1; }
+
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+OUT_DIR=${VMBRO_OUT:-/vmbro/out}
+[ -d "$OUT_DIR" ] || { echo 'vmexport: the browser transfer mount is unavailable' >&2; exit 1; }
+
+id="$$-$(awk 'BEGIN{srand();printf "%06x", rand()*16777215}')"
+safe_name=$(basename "$1" | tr -c 'A-Za-z0-9._-' '_')
+shared_name="export-${id}-${safe_name}"
+cp "$1" "$OUT_DIR/$shared_name"
+
+status=0
+vmbro-rpc EXPORT_MOUNT "$(b64 "$(basename "$1")")" "$(b64 "$shared_name")" \
+  | while IFS="$(printf '\t')" read -r prefix response_id kind value; do
+      [ "$prefix" = '__V86RPC_RESPONSE__' ] || continue
+      case "$kind" in
+        ERROR) printf 'vmexport: ' >&2; printf %s "$value" | base64 -d >&2; echo >&2; exit 1 ;;
+        END) break ;;
+      esac
+    done || status=$?
+
+# vmbro-rpc only returns once the browser has answered, so the staged copy is no
+# longer needed. The v86 tool defers this because its browser reads the 9p inode
+# asynchronously after a bare marker; here the reply IS the completion signal.
+rm -f "$OUT_DIR/$shared_name"
+exit "$status"

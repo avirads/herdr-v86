@@ -2,10 +2,13 @@
   "name": "herdr-v86",
   "version": "0.1.0",
   "private": true,
-  "description": "Linux in the browser: a 32-bit v86 guest with a page-local LLM stack, browser-bridge tooling, and agent tiers.",
+  "description": "Linux in the browser with a page-local LLM stack, across two VM providers: v86 and CheerpX.",
   "scripts": {
     "test": "node --test \"network/test/*.test.mjs\"",
     "test:agent": "npm --prefix agent test",
     "build:agent": "npm --prefix agent run build"
+  },
+  "dependencies": {
+    "@leaningtech/cheerpx": "1.3.7"
   }
 }

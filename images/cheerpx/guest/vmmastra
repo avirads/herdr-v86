@@ -1,0 +1,128 @@
+#!/bin/sh
+# CheerpX port of network/guest/mastra-vm. See the transport note near the
+# bottom; subcommands, usage text and payload shaping are unchanged.
+set -eu
+
+usage() {
+  cat >&2 <<'EOF'
+usage: vmmastra TASK...              run a task with the Mastra agent tier
+       vmmastra [--provider NAME] [--model MODEL] [--session ID] TASK...
+       vmmastra run TASK...
+       vmmastra batch TASK...        one script, one round-trip; falls back to
+                                   the tool loop if the script exits non-zero
+       vmmastra code                 enter the Mastra Code interactive tier
+       vmmastra code TASK...         run a single task in the code tier
+       vmmastra code threads         list saved code threads
+       vmmastra code reset           drop the current code thread
+       vmmastra status               model, approvals, tool profile, prompt cost
+       vmmastra tools                list the tools currently active
+       vmmastra tools lean|full      8 workspace tools, or all 19
+       vmmastra cost                 system-prompt budget for the active profile
+       vmmastra yolo on|off          approvals for mutations and shell commands
+       vmmastra reset                drop the session and rebuild on next run
+       vmmastra stop                 abort the task in flight
+
+Runs @mastra/core in the browser page against this guest. One task per
+invocation; there is no follow-up prompt. Configure a model or cloud provider
+in Settings first. Shares the YOLO setting with vmlang.
+
+The `code` subcommand enters an interactive session with persistent threads,
+slash commands (/exit, /stop, /reset, /help, /mode), and mode switching
+(code|chat|batch).
+EOF
+  exit "${1:-2}"
+}
+
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+
+operation=MASTRA
+payload=''
+code_subcommand=''
+provider=''
+model=''
+session=''
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --provider) [ "$#" -ge 2 ] || usage 2; provider=$2; shift 2 ;;
+    --model) [ "$#" -ge 2 ] || usage 2; model=$2; shift 2 ;;
+    --session) [ "$#" -ge 2 ] || usage 2; session=$2; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+
+case "${1:-}" in
+  -h|--help|help) usage 0 ;;
+  status) operation=MASTRA_STATUS; shift ;;
+  cost)   operation=MASTRA_COST;   shift ;;
+  reset)  operation=MASTRA_RESET;  shift ;;
+  stop)   operation=MASTRA_STOP;   shift ;;
+  code)
+    operation=MASTRA_CODE
+    shift
+    case "${1:-}" in
+      threads) code_subcommand='threads'; shift ;;
+      reset)   code_subcommand='reset'; shift ;;
+      '')      ;;
+      *)       code_subcommand="run:$*"
+               set -- ;;
+    esac ;;
+  tools)
+    operation=MASTRA_TOOLS
+    shift
+    case "${1:-}" in
+      '')          ;;
+      lean|full)   payload=$1; shift ;;
+      *)           usage 2 ;;
+    esac ;;
+  yolo)
+    operation=MASTRA_YOLO
+    shift
+    case "${1:-}" in on|off) payload=$1; shift ;; *) usage 2 ;; esac ;;
+  batch)  operation=MASTRA_BATCH;  shift ;;
+  run) shift ;;
+esac
+
+# Both of these carry a task string; every other subcommand is a bare verb.
+if [ "$operation" = MASTRA ] || [ "$operation" = MASTRA_BATCH ]; then
+  [ "$#" -gt 0 ] || usage 2
+  payload=$*
+  # Consume the positional parameters before the trailing check below. Without
+  # this, `vmmastra 'do a thing'` falls through to usage — the exact bug that
+  # made `vmlang "hi"` unusable from the day it shipped.
+  set --
+fi
+
+# code subcommand: the payload carries the sub-command or task string.
+if [ "$operation" = MASTRA_CODE ]; then
+  payload=$code_subcommand
+  set --
+fi
+
+# code subcommand: if no sub-command was given, read one line interactively
+# (matching the vmlang pattern for terminal vs piped input).
+if [ "$operation" = MASTRA_CODE ] && [ "$code_subcommand" = '' ]; then
+  if [ -t 0 ]; then
+    printf 'code> '
+    IFS= read -r line || exit 1
+  else
+    line=$(cat) || exit 1
+  fi
+  [ -n "$line" ] || exit 1
+  payload="run:$line"
+  set --
+fi
+
+[ "$#" -eq 0 ] || usage 2
+
+# CheerpX: printf instead of jq (Debian slim ships no jq), and vmbro-rpc
+# instead of a raw write to /dev/ttyS0. The cwd argument is kept — the code
+# tier resolves relative paths against it.
+json_escape() { printf %s "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+route=$(printf '{"provider":"%s","model":"%s","sessionId":"%s"}' \
+  "$(json_escape "$provider")" "$(json_escape "$model")" "$(json_escape "$session")")
+
+vmbro-rpc "AGENT_$operation" "$(b64 "$payload")" "$(b64 "$(pwd -P)")" "$(b64 "$route")" > /dev/null
+
+echo '[vmmastra] code tier: request sent.'

@@ -1,0 +1,83 @@
+#!/bin/sh
+# CheerpX port of network/guest/vmlang (the Deep Agents tier).
+#
+# Ported changes:
+#   - posts through vmbro-rpc instead of staging /run/vmagent-request for the
+#     vmagent-poll forwarder; CheerpX has no serial line to forward to, and the
+#     bridge is reachable directly
+#   - route JSON is built with printf, since Debian slim ships no jq
+#
+# Operations, usage text and the interactive prompt behaviour are unchanged.
+set -eu
+
+usage() {
+  cat >&2 <<'EOF'
+usage: vmlang PROMPT...
+       vmlang [--provider NAME] [--model MODEL] [--session ID] run PROMPT...
+       vmlang status
+       vmlang stop
+       vmlang reset
+       vmlang yolo on|off
+
+Run the browser-hosted Deep Agents coding agent against /root/project. After
+the first reply, enter follow-up prompts at `vmlang>`; use /exit to return to
+the guest shell. Configure a model or cloud provider in Settings first. YOLO
+is enabled by default, so mutations and shell
+commands run without confirmation. Use `vmlang yolo off` for approval prompts.
+EOF
+  exit "${1:-2}"
+}
+
+b64() { printf %s "$1" | base64 | tr -d '\n'; }
+json_escape() { printf %s "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+case "${1:-}" in -h|--help|help) usage 0;; esac
+
+provider=''
+model=''
+session=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --provider) [ "$#" -ge 2 ] || usage 2; provider=$2; shift 2 ;;
+    --model) [ "$#" -ge 2 ] || usage 2; model=$2; shift 2 ;;
+    --session) [ "$#" -ge 2 ] || usage 2; session=$2; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+
+operation=RUN
+payload=''
+case "${1:-}" in
+  status) operation=STATUS; shift ;;
+  stop) operation=STOP; shift ;;
+  reset|new) operation=RESET; shift ;;
+  yolo)
+    operation=YOLO
+    shift
+    case "${1:-}" in on|off) payload=$1; shift;; *) usage 2;; esac ;;
+  run) shift ;;
+esac
+
+if [ "$operation" = RUN ]; then
+  if [ "$#" -gt 0 ]; then
+    payload=$*
+    set --
+  elif [ -t 0 ]; then
+    printf 'vmlang> '
+    IFS= read -r payload || exit 1
+  else
+    payload=$(cat)
+  fi
+  [ -n "$payload" ] || usage 2
+fi
+[ "$#" -eq 0 ] || usage 2
+
+route=$(printf '{"provider":"%s","model":"%s","sessionId":"%s"}' \
+  "$(json_escape "$provider")" "$(json_escape "$model")" "$(json_escape "$session")")
+
+vmbro-rpc "AGENT_$operation" "$(b64 "$payload")" "" "$(b64 "$route")" > /dev/null
+
+case "$operation" in
+  RUN) echo '[vmlang] conversation started; Ctrl-C stops the current response.' ;;
+  *) echo "[vmlang] $operation requested." ;;
+esac
