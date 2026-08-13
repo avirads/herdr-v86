@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>VMVM Dev IDE</title>
+		<link rel="icon" type="image/png" href="vmvm-logo.png" />
+		<link rel="stylesheet" href="styles.css" />
+		<link rel="stylesheet" href="/xterm.css" />
+		<script>
+			// Theme sync: honor the host page's ?theme=, then the vmvm-theme postMessage.
+			const requestedTheme = new URLSearchParams(location.search).get('theme');
+			const initialTheme = ['light', 'dark'].includes(requestedTheme)
+				? requestedTheme
+				: localStorage.getItem('dev.theme') || 'dark';
+			document.documentElement.dataset.theme = initialTheme;
+			localStorage.setItem('dev.theme', initialTheme);
+			addEventListener('message', (event) => {
+				if (event.origin !== location.origin || event.data?.type !== 'vmvm-theme') return;
+				if (!['light', 'dark'].includes(event.data.theme)) return;
+				document.documentElement.dataset.theme = event.data.theme;
+				localStorage.setItem('dev.theme', event.data.theme);
+			});
+		</script>
+	</head>
+	<body>
+		<div class="ide">
+			<header class="topbar">
+				<div class="brand">
+					<img src="vmvm-logo.png" alt="" />
+					<div>
+						<p class="eyebrow">VMVM DEV IDE</p>
+						<h1 id="title">Project</h1>
+					</div>
+				</div>
+				<div class="top-actions">
+					<button id="sidebar-toggle" type="button" class="quiet icon-button" title="Toggle file sidebar" aria-label="Toggle file sidebar" aria-expanded="false">☰</button>
+					<span id="framework-badge" class="badge">loading…</span>
+					<span id="status" class="status">connecting…</span>
+					<button id="btn-build" type="button" class="quiet" title="Build the current project">Build</button>
+					<button id="btn-restart" type="button" class="quiet" title="Restart the app server">Restart</button>
+					<button id="theme" class="quiet icon-button" type="button" title="Switch theme" aria-label="Switch theme">◐</button>
+					<button id="refresh" class="quiet icon-button" type="button" title="Refresh IDE" aria-label="Refresh IDE">↻</button>
+				</div>
+			</header>
+
+			<div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
+			<div class="body">
+				<aside class="sidebar" id="sidebar">
+					<section class="panel">
+						<h2>Frameworks</h2>
+						<div id="framework-list" class="framework-list"></div>
+					</section>
+					<section class="panel panel-files">
+						<h2>Files</h2>
+						<div id="file-tree" class="file-tree"><p class="muted">Loading…</p></div>
+					</section>
+				</aside>
+
+				<main class="workspace">
+					<div class="tabs" id="tabs"></div>
+					<div id="editor-host" class="editor-host"></div>
+					<div id="editor-fallback" class="editor-fallback" hidden>
+						<textarea id="editor-textarea" spellcheck="false"></textarea>
+					</div>
+					<section id="output-pane" class="log-pane">
+						<div class="output-tabs" role="tablist" aria-label="Output views">
+							<button id="console-tab" class="output-tab" type="button" role="tab" aria-selected="false" aria-controls="log-output">Console</button>
+							<button id="terminal-tab" class="output-tab active" type="button" role="tab" aria-selected="true" aria-controls="embedded-terminal">Terminal</button>
+						</div>
+						<pre id="log-output" class="log-output" role="tabpanel" hidden>Ready.</pre>
+						<div id="embedded-terminal" class="embedded-terminal" role="tabpanel"></div>
+					</section>
+				</main>
+
+				<section class="preview">
+					<div class="preview-head">
+						<span>Preview</span>
+						<button id="preview-reload" type="button" class="quiet tiny" title="Reload preview">⟳</button>
+					</div>
+					<iframe id="preview" title="App preview"></iframe>
+				</section>
+			</div>
+		</div>
+
+		<div id="toast" class="toast" hidden></div>
+
+		<script src="/xterm.js"></script>
+		<script src="app.js"></script>
+	</body>
+</html>

@@ -6,6 +6,7 @@
 // shims/README.md), in particular the injected `setImmediate`, without which
 // every tool call fails silently.
 
+import { stepCountIs } from 'ai';
 import { Agent } from '@mastra/core/agent';
 import { Workspace, WORKSPACE_TOOLS, createWorkspaceTools } from '@mastra/core/workspace';
 import { taskWriteTool, taskUpdateTool } from '@mastra/core/tools';
@@ -13,11 +14,19 @@ import { createLiteRt } from './litert-provider.js';
 import { V86Filesystem, V86Sandbox } from './v86-workspace.js';
 import { createVmTools, createGlobTool, createGrepTool } from './vm-tools.js';
 
+// The Dev IDE's Mastra + Hono + Astro starter builds a small custom agent on
+// top of the same browser-local LiteRT provider. Export these primitives from
+// the shared bundle so the template does not need a second Mastra build.
+export { Agent, createLiteRt };
+
 // V86GuestAgentClient defaults to a 30 s per-RPC timeout and serializes every
 // call through one queue. Time out just under that so a slow command surfaces
 // as a CommandResult with exitCode 124 rather than a transport-level throw.
 const GUEST_RPC_TIMEOUT_MS = 30_000;
 const SANDBOX_TIMEOUT_MS = 25_000;
+
+// Tool-call steps allowed per run. See the note at agent.generate().
+const MAX_AGENT_STEPS = 12;
 
 export const DEFAULT_INSTRUCTIONS = [
   'You are a coding agent working in a project directory on a 32-bit Linux VM running inside a browser tab.',
@@ -236,7 +245,19 @@ export function createMastraVMAgent({
         onActivity({ batchFallback: batch.reason });
         extraTools.resetTurn?.();
       }
-      const result = await agent.generate(task);
+      // `generate()` defaults to stepCountIs(1): the model gets one turn, its
+      // tool call runs, and the loop ends before it can act on the result or
+      // say anything. That made this tier structurally incapable of agent work
+      // — it wrote a file and returned empty text, which the controller
+      // reported as "the agent returned no output", so the failure looked like
+      // the model having nothing to say rather than never being asked again.
+      //
+      // The other two tiers already bound themselves: rig at six tool turns,
+      // vmlang at LangGraph's 60-step recursion limit. This sits between them.
+      // Enough for inspect -> write -> verify -> hand off with room to recover
+      // from a mistake, low enough that a 2B model in a loop cannot spend the
+      // guest on it.
+      const result = await agent.generate(task, { stopWhen: stepCountIs(MAX_AGENT_STEPS) });
       return result.text ?? result?.response?.text ?? '';
     },
   };

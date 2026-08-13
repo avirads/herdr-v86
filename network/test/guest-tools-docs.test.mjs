@@ -10,6 +10,7 @@ const deepAgentHtml = await readFile(new URL('../../docs/deep-agent.html', impor
 const projects = [
   ['Rig', 'https://github.com/0xPlaygrounds/rig'],
   ['Zerostack', 'https://github.com/gi-dellav/zerostack'],
+  ['Cline', 'https://github.com/cline/cline'],
   ['DeepAgentsJS', 'https://github.com/langchain-ai/deepagentsjs'],
   ['Mastra', 'https://github.com/mastra-ai/mastra'],
 ];
@@ -30,6 +31,13 @@ test('responsive help contains official upstream project links', () => {
   assert.match(markdown, /\[Grafana k6\]\(https:\/\/grafana\.com\/docs\/k6\/latest\/\)/);
   assert.match(html, /href="https:\/\/grafana\.com\/docs\/k6\/latest\/"/);
   assert.match(html, /k6 run --vus 5 --duration 30s/);
+});
+
+test('responsive help includes the k6obs OpenObserve guide', () => {
+  assert.match(markdown, /## `k6obs` — stream k6 results to OpenObserve/);
+  assert.match(html, /id="k6obs-stream-k6-results-to-openobserve"/);
+  assert.match(html, /k6obs --oo-url https:\/\/openobserve\.example\.com/);
+  assert.match(html, /Prometheus remote-write output goes straight to OpenObserve/);
 });
 
 test('Deep Agents guide has a responsive generated page', () => {

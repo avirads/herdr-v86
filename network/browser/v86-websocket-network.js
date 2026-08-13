@@ -21,6 +21,7 @@ export class V86WebSocketNetwork {
     this.closed = false;
     this.reconnectTimer = 0;
     this.onGuestFrame = frame => this.send(frame);
+	this.connected = new Promise(resolve => { this.resolveConnected = resolve; });
   }
 
   start() {
@@ -35,7 +36,12 @@ export class V86WebSocketNetwork {
     const socket = this.protocol ? new WebSocket(this.url, this.protocol) : new WebSocket(this.url);
     socket.binaryType = 'arraybuffer';
     this.socket = socket;
-    socket.onopen = () => { this.onStatus('connected'); this.flush(); };
+    socket.onopen = () => {
+      this.onStatus('connected');
+      this.resolveConnected?.(this);
+      this.resolveConnected = null;
+      this.flush();
+    };
     socket.onmessage = event => {
       if (event.data instanceof ArrayBuffer && event.data.byteLength >= 14) {
         this.emulator.bus.send('net0-receive', new Uint8Array(event.data));
@@ -50,6 +56,21 @@ export class V86WebSocketNetwork {
         this.reconnectTimer = setTimeout(() => this.connect(), this.reconnectMs);
       }
     };
+  }
+
+  async waitUntilConnected(timeoutMs = 30000) {
+    if (this.socket?.readyState === WebSocket.OPEN) return this;
+    let timer;
+    try {
+      return await Promise.race([
+        this.connected,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('network gateway connection timed out')), timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   send(value) {

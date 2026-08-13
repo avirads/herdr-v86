@@ -561,3 +561,34 @@ test('cacheTtlMs: 0 disables caching entirely', async () => {
   await filesystem.readFile('/a.txt', { encoding: 'utf8' });
   assert.ok(filesystem.guest.calls.length > afterStat, 'no caching when disabled');
 });
+
+// --- workspace-prefix collapsing -------------------------------------------
+
+test('the workspace root and its real path name the same file', () => {
+  // The model is told it works in /root/project and writes that prefix in
+  // full. Uncollapsed it became the guest-relative "root/project/greet.js" —
+  // a second project tree inside the first — so the agent could not see the
+  // file it had just written, ran `mkdir -p root/project` and wrote it again.
+  assert.equal(toGuestPath('/root/project/greet.js', '/root/project'), 'greet.js');
+  assert.equal(toGuestPath('/greet.js', '/root/project'), 'greet.js');
+  assert.equal(toGuestPath('greet.js', '/root/project'), 'greet.js');
+  assert.equal(toGuestPath('/root/project', '/root/project'), '.');
+  assert.equal(
+    toGuestPath('/root/project/context_handoff/envelope.json', '/root/project'),
+    'context_handoff/envelope.json',
+  );
+});
+
+test('collapsing does not weaken traversal refusal', () => {
+  assert.throws(() => toGuestPath('/root/project/../escape.js', '/root/project'), /cannot contain \.\./);
+  assert.throws(() => toGuestPath('../escape.js', '/root/project'), /cannot contain \.\./);
+});
+
+test('a sibling sharing the workspace name as a prefix is not collapsed', () => {
+  assert.equal(toGuestPath('/root/projectile/x.js', '/root/project'), 'root/projectile/x.js');
+});
+
+test('behaviour is unchanged when no workspace is supplied', () => {
+  assert.equal(toGuestPath('/root/project/greet.js'), 'root/project/greet.js');
+  assert.equal(toGuestPath('README.md'), 'README.md');
+});

@@ -33,7 +33,7 @@ test('Settings More info links to the LiteRT-LM article in a new tab', () => {
 
 test('VM boot opens the shell directly without a setup wizard', () => {
   assert.doesNotMatch(html, /id="setup-overlay"|id="setup-step-/);
-  const finishBoot = html.slice(html.indexOf('function finishBoot()'), html.indexOf('function failBoot('));
+  const finishBoot = html.slice(html.indexOf('function finishBoot('), html.indexOf('function failBoot('));
   assert.match(finishBoot, /bootReady = true/);
   assert.match(finishBoot, /shellReady = true/);
   assert.match(finishBoot, /term"\)\.style\.visibility = "visible"/);

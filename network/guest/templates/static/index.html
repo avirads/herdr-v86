@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Static site — vmbro</title>
+		<link rel="stylesheet" href="styles.css" />
+	</head>
+	<body>
+		<main>
+			<h1>It runs in the browser</h1>
+			<p>
+				This page is being served by a BusyBox HTTP handler inside a 32-bit Alpine Linux guest,
+				emulated in this tab. Edit any file and save — the preview reloads.
+			</p>
+			<button id="ping" type="button">Say hello</button>
+			<output id="out" aria-live="polite"></output>
+		</main>
+		<script src="app.js" type="module"></script>
+	</body>
+</html>

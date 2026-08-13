@@ -111,7 +111,10 @@ one-byte Range cache probe because browsers do not reliably expose cached
 partial responses through <code>only-if-cached</code>.
 The v86 <code>download-progress</code> event is emitted for cached XHR reads too, so disk
 progress is labeled from the selected VM source rather than from that event's
-name.</p>
+name.
+Compatibility mode keeps the same range-backed disk and changes only guest ATA
+access to PIO. It does not preload the complete image, because browsers may
+abort that large request and leave startup waiting without VM output.</p>
 <p>The production portal is <code>https://fapstaff.com/</code>. Its navigation-only
 <code>service-worker.js</code> revalidates the small app shell on refresh while deliberately
 ignoring VM image and Range requests, preserving the local disk cache.</p>
@@ -203,10 +206,68 @@ Use k6 for JavaScript HTTP/API performance and load tests:</p>
 <pre><code class="language-sh">k6 new load-test.js
 k6 run --vus 5 --duration 30s load-test.js
 </code></pre>
+<h2 id="k6obs-stream-k6-results-to-openobserve"><code>k6obs</code> — stream k6 results to OpenObserve</h2>
+<p><code>k6obs</code> wraps <code>k6 run</code> and ships the metrics out <strong>while the test runs</strong> and
+again when it finishes. Anything it does not recognise is passed straight
+through to k6, so an existing command works unchanged by swapping the binary:</p>
+<pre><code class="language-sh">k6obs --oo-url https://openobserve.example.com \
+      --oo-user you@example.com --oo-pass secret \
+      --interval 10 --tag env=ci \
+      run --vus 5 --duration 30s load-test.js
+</code></pre>
+<p>Every option also reads from the environment (<code>K6_OO_URL</code>, <code>K6_OO_USER</code>,
+<code>K6_OO_PASS</code>, <code>K6_OO_TOKEN</code>, <code>K6_OO_STREAM</code>, <code>K6_OBS_INTERVAL</code>,
+<code>K6_OBS_MODE</code>, <code>K6_OBS_TAGS</code>), so a pipeline can configure it once. Use
+<code>--dry-run</code> to print the payloads instead of sending them.</p>
+<h3 id="what-it-sends">What it sends</h3>
+<p>k6's JSON output is one line per metric sample per virtual user — thousands of
+lines a second. <code>k6obs</code> collapses each interval into <strong>one flat record per
+metric</strong> (<code>count</code>, <code>sum</code>, <code>min</code>, <code>max</code>, <code>avg</code>), which is what makes the volume
+independent of load. A final rollup and k6's own summary (with its exit code)
+follow at the end. Records are tagged with a <code>run_id</code> so one test is queryable
+as a unit, plus whatever <code>--tag K=V</code> pairs you add.</p>
+<p>Records are posted as a JSON array to
+<code>{--oo-url}/api/{org}/{stream}/_json</code>. Because that body is plain
+JSON-over-HTTP, the same payload can go to a second sink with <code>--bi-url</code> —
+useful for a Microsoft Fabric <strong>Eventstream custom endpoint</strong>, which is the
+supported path into Power BI now that Power BI's own streaming datasets are
+being retired. Each record carries both <code>_timestamp</code> (what OpenObserve indexes
+on) and <code>timestamp</code>, because BI tools dislike a leading underscore.</p>
+<h3 id="modes-and-transport">Modes and transport</h3>
+<table>
+<thead>
+<tr>
+<th><code>--mode</code></th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rollup</code> (default)</td>
+<td><code>k6obs</code> aggregates and posts the JSON above. Works with or without the network gateway, and is the only mode that can also feed <code>--bi-url</code>.</td>
+</tr>
+<tr>
+<td><code>native</code></td>
+<td>k6's own Prometheus remote-write output goes straight to OpenObserve. Lower overhead and finer resolution, but <strong>requires the network gateway</strong> and does not feed <code>--bi-url</code>.</td>
+</tr>
+<tr>
+<td><code>both</code></td>
+<td><code>native</code> for OpenObserve, <code>rollup</code> for <code>--bi-url</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Transport is chosen automatically: <code>curl</code> when the WebSocket ethernet gateway
+is attached, otherwise <a href="#vmfetch--browser-backed-http-client"><code>vmfetch</code></a> via
+the browser. The <code>vmfetch</code> path inherits its limits — <strong>HTTPS only, and the
+OpenObserve endpoint must send CORS headers</strong> permitting <code>Authorization</code>,
+since the request originates from the page. Without the gateway, <code>--mode native</code> is unavailable and falls back to <code>rollup</code> with a warning.</p>
+<p>Ingestion failures never fail the test: they are reported on stderr and the k6
+run continues, so telemetry problems cannot corrupt a performance result.</p>
 <h2 id="vaptr-authorized-web-vapt-orchestration"><code>vaptr</code> — authorized web VAPT orchestration</h2>
 <p>The cumulative <strong>VAPT — native scanner</strong> VMVM image adds the static 32-bit
 <a href="https://github.com/avirads/vmvapt"><code>vaptr</code></a> orchestrator. No external tools are
-bundled — every stage runs in-process through vaptr's built-in <code>native</code> backends:</p>
+bundled — every stage runs in-process through vaptr's built-in <code>native</code>
+backends:</p>
 <pre><code class="language-text">fingerprint  crawl  content discovery  parameter discovery  vulnerability checks
 </code></pre>
 <p>Because there are no heavyweight helper binaries (httpx, katana, nuclei, ffuf,
@@ -264,7 +325,7 @@ origin via CORS. The command returns raw JSON. Credentials cross the trusted
 hosting page; use short-lived, narrow-scope keys. Never save a VM snapshot while
 a key remains in the environment or shell history.</p>
 <h2 id="cloud-llms-openai-claude-gemini-and-gateways">Cloud LLMs: OpenAI, Claude, Gemini, and gateways</h2>
-<p>Rig, Zerostack, vmlang, and vmmastra use the model loaded under
+<p>Rig, Zerostack, vmlang, vmmastra, and Cline use the model loaded under
 <strong>Settings → AI Model</strong> by default. This Local WebGPU path remains direct and
 does not pass through the cloud router. Add OpenAI, Anthropic, Gemini, or an
 OpenAI-compatible endpoint under <strong>Settings → Cloud AI providers</strong>, then either
@@ -272,6 +333,7 @@ choose a per-agent default there or override one invocation:</p>
 <pre><code class="language-sh">rig --provider work-openai --model gpt-4.1-mini 'Review this project'
 vmlang --provider claude --session review-a run 'Review this project'
 vmmastra --provider gemini --session build-a 'Implement and test the change'
+cline --provider work-openai --session review-a 'Review and repair the project'
 zerostack --provider local-gateway --model provider/model-id
 </code></pre>
 <p><code>--provider</code>, <code>--model</code>, and <code>--session</code> must precede the task or subcommand.
@@ -491,6 +553,11 @@ read the canonical capability reference at
 <td>Interactive code/chat/batch modes with saved browser-side threads</td>
 </tr>
 <tr>
+<td><code>cline</code></td>
+<td><a href="https://github.com/cline/cline">Cline</a> browser-compatible SDK runtime</td>
+<td>Fresh task runs with explicit <code>continue</code>, project tools and shared approvals without Node in the guest</td>
+</tr>
+<tr>
 <td><code>zerostack</code></td>
 <td><a href="https://github.com/gi-dellav/zerostack">Zerostack</a></td>
 <td>Native i686 coding-agent operation through the browser LLM adapter</td>
@@ -503,7 +570,7 @@ they are not unmodified upstream command-line distributions.</p>
 <ul>
 <li>Project file inspection and editing rooted at the invocation directory.</li>
 <li>BusyBox utilities plus <code>jq</code>, <code>rg</code>, <code>git</code>, <code>curl</code>, <code>tar</code>, <code>gzip</code>, <code>qjs</code>,
-<code>vmjs</code>, <code>shfmt</code>, <code>ctags</code>, <code>make</code>, <code>patch</code>, and Grafana <code>k6</code>.</li>
+<code>vmjs</code>, <code>shfmt</code>, <code>ctags</code>, <code>make</code>, <code>patch</code>, Grafana <code>k6</code>, and <code>k6obs</code>.</li>
 <li><code>vmproject import/export</code> and the matching Settings controls for moving a
 project into or out of the VM.</li>
 <li><code>vmfetch</code>, <code>vmgithub</code>, <code>vmclip</code>, and <code>vmexport</code> when ordinary guest networking
@@ -513,8 +580,38 @@ tools and the extension is connected.</li>
 <li>Approval controls for mutations and shell execution; YOLO mode bypasses those
 prompts for the current agent session.</li>
 <li>Persistent browser-side sessions for <code>vmlang</code>, <code>vmmastra</code>, and
-<code>vmmastra code</code>, with reset/stop commands for recovery.</li>
+<code>vmmastra code</code>; Cline starts plain tasks fresh and preserves context only
+for explicit <code>cline continue</code>, with reset/stop commands for recovery.</li>
 </ul>
+<h2 id="cline-browser-hosted-cline-sdk-agent"><code>cline</code> — browser-hosted Cline SDK agent</h2>
+<p><code>cline</code> runs the official Apache-2.0
+<a href="https://github.com/cline/cline">Cline</a> browser-compatible agent runtime. The
+32-bit guest contains only the launcher: the agent, model and credentials stay
+in the browser, while approved file and shell tools cross the existing VM
+bridge. This avoids adding Node.js or an unsupported x64/ARM64 Cline binary to
+the image.</p>
+<pre><code class="language-sh">cline 'Inspect this project, repair failures, and run its tests'
+cline --provider work-openai --model gpt-5 'Review the current changes'
+cline --session feature-a 'Implement the feature'
+cline continue --session feature-a 'Now add regression tests'
+cline status
+cline yolo off
+cline stop
+cline reset
+</code></pre>
+<p>The working directory is the directory from which <code>cline</code> is invoked. Each
+plain <code>cline 'TASK'</code> starts with a fresh conversation so local models do not
+accumulate stale tool history. Use <code>cline continue 'TASK'</code> immediately after a
+run when the follow-up needs its context; <code>cline reset</code> discards it. Read, list
+and search operations are automatic.
+Writes and shell commands follow the shared agent YOLO setting and require a
+browser confirmation when YOLO is off. Cline is installed in AI Tools, Dev,
+Performance, VAPT and Star images.</p>
+<p>Cline treats a matching <code>write_file</code> followed by <code>read_file</code> as verified
+completion and prints a bounded preview of the read-back content, even if a
+small local model fails to emit its final <code>finish_task</code> handshake. Agent tasks
+run asynchronously in the terminal; wait for the final summary or
+<code>[cline] error:</code> before submitting another agent task.</p>
 <p>Agents must verify executable code before reporting success. JavaScript is
 tested with both <code>qjs</code> and <code>vmjs</code>, including elapsed time. POSIX shell scripts
 are formatted with <code>shfmt</code>, checked with <code>sh -n</code>, and executed with
@@ -560,7 +657,8 @@ started.</p>
 <p><code>zerostack</code> runs the native Zerostack 1.5.0 agent inside the 32-bit guest while
 using the configured page-local WebGPU model through the browser bridge.</p>
 <pre><code class="language-sh">cd /root/project
-zerostack -p 'Summarize this project'
+zerostack 'Summarize this project'       # VMVM shorthand
+zerostack -p 'Summarize this project'    # native Zerostack form
 zerostack --version
 </code></pre>
 <p>While it runs, the launcher temporarily reserves the private RPC serial port

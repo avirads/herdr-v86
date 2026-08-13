@@ -30,15 +30,21 @@ test('v86 disk progress describes the selected source rather than the event name
     /vmImageSource === "local cache" \? "Loading cached VMVM" : "Downloading VMVM"/,
   );
   assert.match(html, /`\$\{action\} \[\$\{vmImageDisplaySource\}\]…`/);
-  assert.match(html, /Downloading VMVM \[\$\{vmImageDisplaySource\}\]…/);
+  assert.doesNotMatch(html, /else \{\s*setBootProgress\([^\n]+Downloading VMVM/);
   assert.doesNotMatch(html, /Downloading \$\{e\.file_name\}/);
+});
+
+test('a failed download cannot be disguised by a late progress event', () => {
+  assert.match(html, /function failBoot\(message\) \{[\s\S]*?bootFailed = true;[\s\S]*?classList\.add\("error"\)/);
+  assert.match(html, /add_listener\("download-progress", \(e\) => \{\s*if \(bootFailed\) return;/);
 });
 
 test('the selected cumulative image comes from the manifest and has its own cache key', () => {
   assert.match(html, /fetch\("\.\/vm-images\.json", \{ cache: "no-cache" \}\)/);
   assert.match(html, /localStorage\.getItem\("vm\.imageTier"\)/);
   assert.match(html, /const diskCacheKey = `vm\.diskVersion\.\$\{vmImageTier\}`/);
-  assert.match(html, /hda: \{ url: diskURL, async: !compatibilityBoot, size: DISK_SIZE \}/);
+  assert.match(html, /hda: \{ url: diskURL, async: true, size: DISK_SIZE \}/);
+  assert.match(html, /compatibility boot \[\$\{vmImageDisplaySource\}\] — range-backed disk with ATA PIO/);
 });
 
 test('the interactive VM shell starts in the project directory', () => {
@@ -48,9 +54,16 @@ test('the interactive VM shell starts in the project directory', () => {
   );
 });
 
+test('the local AI model waits until VMVM reaches its shell', () => {
+  assert.match(html, /shellReady = true;\s*window\.dispatchEvent\(new Event\("vmvm-shell-ready"\)\)/);
+  assert.match(html, /new Promise\(resolve => window\.addEventListener\("vmvm-shell-ready", resolve, \{ once: true \}\)\)/);
+  assert.match(html, /vmBootReady\.then\(\(\) => \{\s*llmStatus\("loading LiteRT-LM runtime"\)/);
+});
+
 test('the app shell revalidates without intercepting VM disk ranges', () => {
   assert.match(html, /serviceWorker\.register\("\.\/service-worker\.js", \{ updateViaCache: "none" \}\)/);
-  assert.match(serviceWorker, /event\.request\.mode !== "navigate"/);
+  assert.match(serviceWorker, /request\.mode !== "navigate"/);
+  assert.match(serviceWorker, /request\.headers\.has\("range"\)/);
   assert.match(serviceWorker, /fetch\(source, \{ cache: "no-cache" \}\)/);
   assert.doesNotMatch(serviceWorker, /vm-network-ext4/);
   assert.match(serviceWorker, /"guest-tools", "deep-agent"/);

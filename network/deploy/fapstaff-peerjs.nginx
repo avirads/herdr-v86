@@ -15,10 +15,24 @@ server {
     root /var/www/herdr-v86/current;
     index index.html;
 
+    # Emit relative redirects. nginx builds absolute ones from its own listen
+    # scheme, which is correct here but wrong the moment this sits behind a
+    # proxy that terminates TLS upstream: every redirect comes back as http://
+    # and an https page blocks it as mixed content. /peerjs -> /peerjs/ broke
+    # exactly that way. Harmless with TLS terminated locally, so it belongs in
+    # both configurations rather than only the proxied one.
+    absolute_redirect off;
+    port_in_redirect off;
+
     ssl_certificate /etc/letsencrypt/live/fapstaff.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/fapstaff.com/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location = /app.webmanifest {
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache";
+    }
 
     location = /ide {
         return 301 /ide/;
@@ -28,6 +42,23 @@ server {
     # VMVM tab open because that page owns the emulator and its network tunnel.
     location /ide/ {
         proxy_pass http://10.77.0.15:3000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+        add_header Cache-Control "no-store";
+    }
+
+    # The scaffolded app server inside the Dev VM runs on its own port; the IDE
+    # shell embeds it as the live preview iframe at /preview/.
+    location = /preview {
+        return 301 /preview/;
+    }
+
+    location /preview/ {
+        proxy_pass http://10.77.0.15:3100/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -50,8 +81,8 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header Origin $http_origin;
-        proxy_read_timeout 75s;
-        proxy_send_timeout 75s;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
         proxy_buffering off;
     }
 

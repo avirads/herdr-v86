@@ -14,6 +14,11 @@ clipboard, file-transfer, GitHub, or AI operations.
 - Pushing source changes to GitHub does not authorize a GitHub Pages
   deployment. Deploy website changes only to fapstaff.com unless the user
   explicitly changes this policy.
+- Before every push or release, run
+  `bash network/guest/verify-runtime-inventory.sh` against the built images and
+  keep `docs/runtime-inventory.md` synchronized in the same commit. Treat the
+  image files—not documentation or build scripts—as the source of truth for
+  installed guest packages and executables.
 
 ## AutoBro release policy
 
@@ -99,7 +104,7 @@ clipboard, file-transfer, GitHub, or AI operations.
 ## Quick capability check
 
 ```sh
-command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmlang rig vmmastra tmux
+command -v vmfetch vmclip vmexport vmgithub vmai vmllm vmlang rig vmmastra cline tmux
 ip route
 vmfetch --help
 ```

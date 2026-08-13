@@ -56,19 +56,19 @@ try {
   const host = await load('?role=agent', 6000);
   const barebones = await load('?role=agent&tier=barebones', 6000);
   const guest = await load('?role=human', 2500);
-  const vmDisk = path => /vm-(?:barebones|essentials|ai-tools|dev|performance|vapt)-i386-ext4\.img/i.test(path);
+  const vmDisk = path => /vm-(?:barebones|essentials|ai-tools|dev|performance|vapt|star)-i386-ext4\.img/i.test(path);
   const expensive = path => vmDisk(path) || /\.litertlm$/i.test(path);
   const result = {
     undecidedRequests: undecided,
     hostRequestedDisk: host.some(vmDisk),
-    defaultRequestedAiTools: host.some(path => /vm-ai-tools-i386-ext4\.img/i.test(path)),
+    defaultRequestedBarebones: host.some(path => /vm-barebones-i386-ext4\.img/i.test(path)),
     selectedRequestedBarebones: barebones.some(path => /vm-barebones-i386-ext4\.img/i.test(path)),
     guestOpenedRemote: guest.includes('/remote.html'),
     undecidedLoadedHost: undecided.some(expensive),
     guestLoadedHost: guest.some(expensive),
   };
   console.log(JSON.stringify(result, null, 2));
-  if (result.undecidedLoadedHost || !result.hostRequestedDisk || !result.defaultRequestedAiTools ||
+  if (result.undecidedLoadedHost || !result.hostRequestedDisk || !result.defaultRequestedBarebones ||
       !result.selectedRequestedBarebones || !result.guestOpenedRemote || result.guestLoadedHost) process.exitCode = 1;
 } finally {
   server.close();

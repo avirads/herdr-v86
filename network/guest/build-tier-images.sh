@@ -15,8 +15,10 @@ DOMAIN_SKILLS_PACKAGE="${DOMAIN_SKILLS_PACKAGE:-$PROJECT_DIR/skills/guidewire-po
 ESBUILD_BINARY="${ESBUILD_BINARY:-$PROJECT_DIR/network/guest/bin/esbuild}"
 VMBRO_HTTPD_BINARY="${VMBRO_HTTPD_BINARY:-$PROJECT_DIR/network/guest/bin/vmbro-httpd}"
 DEV_TEMPLATE="${DEV_TEMPLATE:-$PROJECT_DIR/network/guest/dev-template}"
+DEV_TEMPLATES="${DEV_TEMPLATES:-$PROJECT_DIR/network/guest/templates}"
+DEV_IDE="${DEV_IDE:-$PROJECT_DIR/network/guest/dev-ide}"
 
-TIERS=(barebones essentials ai-tools dev performance vapt)
+TIERS=(barebones essentials ai-tools dev performance vapt star)
 
 tier_number() {
   case "$1" in
@@ -26,6 +28,7 @@ tier_number() {
     dev) echo 4 ;;
     performance) echo 4 ;;
     vapt) echo 5 ;;
+    star) echo 6 ;;
     *) echo "unknown tier: $1" >&2; exit 2 ;;
   esac
 }
@@ -38,6 +41,7 @@ tier_bytes() {
     dev) echo 99614720 ;;
     performance) echo 96468992 ;;
     vapt) echo 103809024 ;;
+    star) echo 134217728 ;;
   esac
 }
 
@@ -50,8 +54,9 @@ cleanup() {
   mountpoint -q "$MOUNT_DIR/sys" && umount "$MOUNT_DIR/sys" || true
   mountpoint -q "$MOUNT_DIR/proc" && umount "$MOUNT_DIR/proc" || true
   if mountpoint -q "$MOUNT_DIR"; then
-    umount "$MOUNT_DIR" 2>/dev/null || umount -l "$MOUNT_DIR" || true
+    umount "$MOUNT_DIR" 2>/dev/null || { sync; umount -l "$MOUNT_DIR"; }
   fi
+  sync
 }
 trap cleanup EXIT
 
@@ -114,6 +119,7 @@ install_ai_tools() {
   install -D -m 0755 "$PROJECT_DIR/network/guest/rig-vm" "$MOUNT_DIR/usr/local/bin/rig"
   install -D -m 0755 "$PROJECT_DIR/network/guest/zerostack-vm" "$MOUNT_DIR/usr/local/bin/zerostack"
   install -D -m 0755 "$PROJECT_DIR/network/guest/mastra-vm" "$MOUNT_DIR/usr/local/bin/vmmastra"
+  install -D -m 0755 "$PROJECT_DIR/network/guest/cline-vm" "$MOUNT_DIR/usr/local/bin/cline"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmjs" "$MOUNT_DIR/usr/local/bin/vmjs"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmbench" "$MOUNT_DIR/usr/local/bin/vmbench"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vm-openai-proxy" "$MOUNT_DIR/usr/local/libexec/vm-openai-proxy"
@@ -137,14 +143,39 @@ install_dev() {
   require_file "$ESBUILD_BINARY"
   require_file "$VMBRO_HTTPD_BINARY"
   [[ -d "$DEV_TEMPLATE" ]] || { echo "required directory not found: $DEV_TEMPLATE" >&2; exit 1; }
+  [[ -d "$DEV_TEMPLATES" ]] || { echo "required directory not found: $DEV_TEMPLATES" >&2; exit 1; }
+  [[ -d "$DEV_IDE" ]] || { echo "required directory not found: $DEV_IDE" >&2; exit 1; }
   install -D -m 0755 "$ESBUILD_BINARY" "$MOUNT_DIR/usr/local/bin/esbuild"
   install -D -m 0755 "$VMBRO_HTTPD_BINARY" "$MOUNT_DIR/usr/local/bin/vmbro-httpd"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmbro-dev" "$MOUNT_DIR/usr/local/bin/vmbro-dev"
-  install -d "$MOUNT_DIR/opt/vmbro/templates/mastra-hono-astro"
-  cp -a "$DEV_TEMPLATE/." "$MOUNT_DIR/opt/vmbro/templates/mastra-hono-astro/"
+  # All framework templates ship into /opt/vmbro/templates/<id>. The Dev IDE
+  # supervisor scaffolds from these on first boot; the mastra starter is also
+  # pre-baked into /root/project so the image is immediately useful.
+  install -d "$MOUNT_DIR/opt/vmbro/templates"
+  for template in "$DEV_TEMPLATES"/*; do
+    [[ -d "$template" ]] || continue
+    install -d "$MOUNT_DIR/opt/vmbro/templates/$(basename "$template")"
+    cp -a "$template/." "$MOUNT_DIR/opt/vmbro/templates/$(basename "$template")/"
+  done
+  # The browsercode-style IDE shell (sidebar + Monaco + preview) is static.
+  install -d "$MOUNT_DIR/opt/vmbro/ide"
+  cp -a "$DEV_IDE/." "$MOUNT_DIR/opt/vmbro/ide/"
   rm -rf "$MOUNT_DIR/root/project"
   install -d "$MOUNT_DIR/root/project"
   cp -a "$DEV_TEMPLATE/." "$MOUNT_DIR/root/project/"
+  # Pre-seed the framework marker so the supervisor does not re-scaffold on first boot.
+  install -d "$MOUNT_DIR/root/project/.vmbro"
+  printf 'mastra-hono-astro\n' > "$MOUNT_DIR/root/project/.vmbro/framework"
+  # Pre-build the starter inside the chroot (native speed) and stamp it, so the
+  # emulated guest skips the esbuild/Astro run on first boot and its preview is
+  # ready immediately instead of after minutes of emulated compilation.
+  chroot "$MOUNT_DIR" /bin/sh -ec '
+    cd /root/project
+    mkdir -p dist .vmbro
+    esbuild src/server.ts --bundle --format=esm --platform=neutral --target=es2020 --outfile=dist/server.js
+    cp src/pages/index.astro dist/index.html
+    printf "mastra-hono-astro\n" > .vmbro/build-stamp
+  '
 }
 
 install_vapt() {
@@ -182,31 +213,40 @@ verify_tier() {
     chroot "$MOUNT_DIR" /bin/sh -ec '
       command -v tmux herdr git rg shfmt ctags make patch
       command -v zerostack rig vmfetch vmclip vmexport vmproject vmgithub
-      command -v vmai vmllm vmlang vmmastra vmjs vmbench
+      command -v vmai vmllm vmlang vmmastra cline vmjs vmbench
       test -x /usr/local/libexec/rig-agent
       test -f /usr/local/share/vm-skills/guidewire-policycenter-1.0.0.zip
     '
   else
     chroot "$MOUNT_DIR" /bin/sh -ec '! command -v herdr; ! command -v rig; ! command -v git'
   fi
-  if [[ "$tier" == dev ]]; then
+  if [[ "$tier" == dev || "$tier" == star ]]; then
     chroot "$MOUNT_DIR" /bin/sh -ec '
       command -v esbuild vmbro-httpd vmbro-dev
       test -f /root/project/src/pages/index.astro
       test -f /root/project/src/server.ts
       test -f /root/project/dist/index.html
+      test -f /root/project/dist/server.js
+      test -f /root/project/.vmbro/framework
+      test -f /root/project/.vmbro/build-stamp
+      test -d /opt/vmbro/ide
+      test -f /opt/vmbro/ide/index.html
+      test -f /opt/vmbro/ide/app.js
+      for t in static quickjs chi astro-hono mastra-hono-astro esm typescript; do
+        test -d /opt/vmbro/templates/$t || exit 1
+      done
       test -f /opt/vmbro/templates/mastra-hono-astro/README.md
       esbuild --version
     '
   else
     chroot "$MOUNT_DIR" /bin/sh -ec '! command -v vmbro-dev'
   fi
-  if [[ "$tier" == performance || "$tier" == vapt ]]; then
+  if [[ "$tier" == performance || "$tier" == vapt || "$tier" == star ]]; then
     chroot "$MOUNT_DIR" /usr/local/bin/k6 version
   else
     chroot "$MOUNT_DIR" /bin/sh -ec '! command -v k6'
   fi
-  if [[ "$tier" == vapt ]]; then
+  if [[ "$tier" == vapt || "$tier" == star ]]; then
     chroot "$MOUNT_DIR" /bin/sh -ec '
       command -v vaptr >/dev/null
       for tool in httpx katana urlfinder ffuf interactsh-client hakrawler gospider nuclei; do
@@ -232,12 +272,25 @@ build_tier() {
   bootstrap_image "$image" "$bytes"
   (( number >= 2 )) && install_essentials
   (( number >= 3 )) && install_ai_tools
-  [[ "$tier" == dev ]] && install_dev
-  [[ "$tier" == performance || "$tier" == vapt ]] && install_performance
-  [[ "$tier" == vapt ]] && install_vapt
+  [[ "$tier" == dev || "$tier" == star ]] && install_dev
+  [[ "$tier" == performance || "$tier" == vapt || "$tier" == star ]] && install_performance
+  [[ "$tier" == vapt || "$tier" == star ]] && install_vapt
   write_tier_metadata "$tier" "$number"
   verify_tier "$tier" "$number"
   cleanup
+  # Make sure the loop device is truly detached and all dirty buffers are on
+  # disk before e2fsck reads the image; otherwise e2fsck sees a half-flushed
+  # filesystem, recovers the journal and moves the tree to /lost+found.
+  for attempt in 1 2 3 4 5; do
+    mountpoint -q "$MOUNT_DIR" || break
+    sleep 1
+    umount "$MOUNT_DIR" 2>/dev/null || true
+    sync
+  done
+  if mountpoint -q "$MOUNT_DIR"; then
+    echo "warning: $MOUNT_DIR still mounted before e2fsck" >&2
+  fi
+  sync
   e2fsck -fy "$image"
   echo "Built $image"
 }
