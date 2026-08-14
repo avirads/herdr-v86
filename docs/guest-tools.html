@@ -102,7 +102,7 @@ automatically.</p>
 <p>The main page revalidates the selected tier's versioned VM image URL at boot.
 If the hosted image is not newer, the browser loads the existing local
 HTTP-cache entry. Image URLs, sizes, versions, and checksums live in
-<code>vm-images.json</code>; update the selected image's version and checksum whenever it
+<code>images/v86/vm-images.json</code>; update the selected image's version and checksum whenever it
 changes. After an image boots successfully, the page records that version
 locally under a tier-specific cache key.
 Every long-lived startup message then includes <code>[local cache]</code> for that same
@@ -324,17 +324,23 @@ unset OPENAI_API_KEY
 origin via CORS. The command returns raw JSON. Credentials cross the trusted
 hosting page; use short-lived, narrow-scope keys. Never save a VM snapshot while
 a key remains in the environment or shell history.</p>
-<h2 id="cloud-llms-openai-claude-gemini-and-gateways">Cloud LLMs: OpenAI, Claude, Gemini, and gateways</h2>
+<h2 id="cloud-llms-openai-claude-gemini-github-copilot-and-gateways">Cloud LLMs: OpenAI, Claude, Gemini, GitHub Copilot, and gateways</h2>
 <p>Rig, Zerostack, vmlang, and vmmastra use the model loaded under
 <strong>Settings → AI Model</strong> by default. This Local WebGPU path remains direct and
-does not pass through the cloud router. Add OpenAI, Anthropic, Gemini, or an
-OpenAI-compatible endpoint under <strong>Settings → Cloud AI providers</strong>, then either
-choose a per-agent default there or override one invocation:</p>
+does not pass through the cloud router. Add OpenAI, Anthropic, Gemini, GitHub
+Copilot, or an OpenAI-compatible endpoint under <strong>Settings → Cloud AI
+providers</strong>, then either choose a per-agent default there or override one
+invocation:</p>
 <pre><code class="language-sh">rig --provider work-openai --model gpt-4.1-mini 'Review this project'
 vmlang --provider claude --session review-a run 'Review this project'
 vmmastra --provider gemini --session build-a 'Implement and test the change'
 zerostack --provider local-gateway --model provider/model-id
 </code></pre>
+<p>GitHub Copilot is configured like the others but takes a <strong>GitHub OAuth token
+with Copilot enabled</strong>, not a provider API key. The page exchanges it for a
+short-lived Copilot token per session and caches that until shortly before it
+expires, so the wrong kind of credential fails at the exchange rather than at
+save time.</p>
 <p><code>--provider</code>, <code>--model</code>, and <code>--session</code> must precede the task or subcommand.
 A named session is pinned to its first provider/model selection, preventing a
 later request from silently moving its conversation to another service.
