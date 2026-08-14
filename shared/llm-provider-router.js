@@ -115,6 +115,67 @@ class CloudLlmClient {
     });
   }
 
+  /**
+   * Stream an OpenAI-compatible completion, calling onChunk with each text
+   * delta. Mirrors the page-local client's chatStream so callers can treat
+   * every provider the same way.
+   *
+   * Anthropic, Gemini and Copilot are not streamed here: they run the normal
+   * request and emit the finished text as one chunk. That is honest rather than
+   * clever -- the caller still works, it just does not get progressive output
+   * for those three.
+   *
+   * Copilot must be in that list rather than falling through to the generic
+   * OpenAI path below, which would send this.apiKey as the bearer token. For
+   * Copilot that value is the GitHub OAuth token, not the short-lived token the
+   * API accepts, and the request would be rejected without ever reaching the
+   * exchange in copilotToken().
+   */
+  async chatStream(body = {}, onChunk) {
+    if (this.config.type === "anthropic" || this.config.type === "gemini" || this.config.type === "copilot") {
+      const completion = await this.chat(body);
+      const text = completion?.choices?.[0]?.message?.content ?? "";
+      if (text) await onChunk?.(text);
+      return completion;
+    }
+    const base = normalizedBaseUrl(this.config.baseUrl);
+    const response = await this.fetchImpl(`${base}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}`, accept: "text/event-stream" },
+      body: JSON.stringify({ ...body, model: this.modelName, stream: true }),
+    });
+    if (!response.ok || !response.body) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`${this.config.label || this.config.id} HTTP ${response.status}: ${text.slice(0, 300) || response.statusText}`);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let content = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // SSE events are separated by a blank line, and one read can carry a
+      // partial event -- keep the remainder for the next pass.
+      let split;
+      while ((split = buffer.indexOf("\n\n")) >= 0) {
+        const event = buffer.slice(0, split);
+        buffer = buffer.slice(split + 2);
+        for (const line of event.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === "[DONE]") continue;
+          try {
+            const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+            if (delta) { content += delta; await onChunk?.(delta); }
+          } catch { /* a partial or non-JSON frame is not fatal */ }
+        }
+      }
+    }
+    return { choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }] };
+  }
+
   async openai(body) {
     const base = normalizedBaseUrl(this.config.baseUrl);
     const request = {
