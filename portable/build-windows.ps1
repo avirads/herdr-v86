@@ -57,12 +57,18 @@ Copy-Item (Join-Path $wintunExtract "wintun\LICENSE.txt") (Join-Path $stage "gat
 $appFiles = @(
     "index.html", "remote.html", "README.md", "llms.txt", "xterm.js", "xterm.css",
     "libv86-network.js", "v86-network.wasm", "seabios.bin", "vgabios.bin",
-    "bzImage-network", "vm-images.json",
-    "vm-barebones-i386-ext4.img", "vm-essentials-i386-ext4.img",
-    "vm-ai-tools-i386-ext4.img", "vm-performance-i386-ext4.img"
+    "bzImage-network", "images/v86/vm-images.json",
+    "images/v86/vm-barebones-i386-ext4.img", "images/v86/vm-essentials-i386-ext4.img",
+    "images/v86/vm-ai-tools-i386-ext4.img", "images/v86/vm-performance-i386-ext4.img"
 )
-foreach ($relative in $appFiles) { Copy-Item (Join-Path $repository $relative) (Join-Path $stage "app\$relative") }
-foreach ($directory in @("agent\dist", "network\browser", "llm\vendor", "vendor\moonshine", "docs")) {
+foreach ($relative in $appFiles) {
+    $target = Join-Path $stage "app\$relative"
+    # Some app files now live in subdirectories (images/v86/...), which
+    # Copy-Item will not create on its own.
+    New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+    Copy-Item (Join-Path $repository $relative) $target
+}
+foreach ($directory in @("agent\dist", "providers", "shared", "llm\vendor", "vendor\moonshine", "docs")) {
     $destination = Join-Path $stage ("app\" + $directory)
     New-Item -ItemType Directory -Force -Path (Split-Path $destination) | Out-Null
     Copy-Item (Join-Path $repository $directory) $destination -Recurse

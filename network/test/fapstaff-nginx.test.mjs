@@ -55,3 +55,50 @@ test('QR loading bypasses stale MIME cache entries and has a visible fallback', 
   assert.match(html, /const qrReady = await renderRemoteQr/);
   assert.match(html, /QR code unavailable\. Copy the pairing key/);
 });
+
+// --- CheerpX provider routes ------------------------------------------------
+
+test('the CheerpX route is cross-origin isolated', () => {
+  // CheerpX needs SharedArrayBuffer; without these two headers /cx/ cannot boot.
+  assert.match(config, /location \/cx\/ \{/);
+  assert.match(config, /Cross-Origin-Opener-Policy "same-origin"/);
+  assert.match(config, /Cross-Origin-Embedder-Policy "require-corp"/);
+});
+
+test('isolation stays scoped to /cx/ and off the v86 page', () => {
+  // COEP on "/" would break the PeerJS remote chat, the Moonshine voice model
+  // and the AutoBro bridge, none of which send CORP headers.
+  const root = config.slice(config.lastIndexOf('location / {'));
+  assert.doesNotMatch(root, /Cross-Origin-Embedder-Policy/);
+});
+
+test('the preview service worker may claim a scope above its own directory', () => {
+  assert.match(config, /location = \/cx\/preview-sw\.js \{/);
+  assert.match(config, /Service-Worker-Allowed "\/cx\/"/);
+});
+
+test('CheerpX disk images are served for Range streaming', () => {
+  // HttpBytesDevice refuses to start without Last-Modified or ETag, both of
+  // which nginx emits for static files, and streams the image over 206s.
+  assert.match(config, /location \/images\/cheerpx\/ \{/);
+  assert.match(config, /default_type application\/octet-stream;/);
+  assert.match(config, /max-age=31536000, immutable/);
+});
+
+test('HTTP/2 is enabled on the fapstaff origin', () => {
+  // CheerpX issues hundreds of small Range requests for its disk. On HTTP/1.1
+  // they serialise behind ~6 connections, each paying a fresh TCP+TLS
+  // handshake, which made /cx/ unusable on this host until h2 was turned on.
+  assert.match(config, /http2 on;/);
+  const tls = config.slice(config.indexOf('listen 443 ssl;'));
+  assert.match(tls.slice(0, 600), /http2 on;/, 'http2 must be inside the TLS server block');
+});
+
+test('the ethernet tunnel keeps the long timeout a persistent socket needs', () => {
+  // vmbro carries 75s here, which is right for /peerjs/ signalling and wrong
+  // for this: the guest holds one WebSocket open for the life of the VM, so a
+  // 75s read timeout drops the network every 75 seconds.
+  const tunnel = config.slice(config.indexOf('location = /v1/ethernet {'));
+  assert.match(tunnel.slice(0, 500), /proxy_read_timeout 3600s;/);
+  assert.match(tunnel.slice(0, 500), /proxy_send_timeout 3600s;/);
+});

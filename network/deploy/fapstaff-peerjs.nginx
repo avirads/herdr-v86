@@ -11,6 +11,7 @@ server {
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
+    http2 on;
     server_name fapstaff.com;
     root /var/www/herdr-v86/current;
     index index.html;
@@ -134,6 +135,71 @@ server {
 
     location ~ \.mjs$ {
         default_type application/javascript;
+        try_files $uri =404;
+    }
+
+    # CheerpX provider. CheerpX needs SharedArrayBuffer, so this route must be
+    # cross-origin isolated — and the isolation is scoped HERE rather than
+    # applied server-wide on purpose: COEP require-corp on "/" would break the
+    # v86 page's PeerJS remote chat, the Moonshine voice model, and the AutoBro
+    # extension bridge, none of which send CORP headers.
+    location /cx/ {
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri $uri/ =404;
+    }
+
+    # The preview service worker controls /cx/preview/, so it must be allowed a
+    # scope above its own directory.
+    location = /cx/preview-sw.js {
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Embedder-Policy "require-corp" always;
+        add_header Service-Worker-Allowed "/cx/" always;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    # The vendored CheerpX engine. Immutable per version -- the version is in
+    # the path -- so it may be cached hard. Do not "simplify" this by pointing
+    # /cx/ back at cxrtnc.leaningtech.com: serving the engine from our own
+    # origin is what lets the page work without that CDN.
+    location /vendor/cheerpx/ {
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # Application JavaScript, as opposed to the versioned vendor tree above.
+    # Without an explicit policy nginx sends neither Cache-Control nor Expires,
+    # so browsers fall back to heuristic caching and keep serving a stale copy
+    # after a deploy -- which is exactly how a vendored-engine deploy appeared
+    # to have no effect while the page went on loading the old CDN import.
+    # no-cache means revalidate, not "do not store": the ETag still turns the
+    # follow-up request into a 304.
+    location ~ ^/(providers|shared|llm)/ {
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    # v86 disk images. Immutable per version -- index.html appends ?v=<version>
+    # and a new build always gets a new version -- so they can be cached hard.
+    # Without this they carried no Cache-Control at all and a CDN in front would
+    # have to guess, which for a 208 MB file means guessing wrong is expensive.
+    location /images/v86/ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        default_type application/octet-stream;
+        try_files $uri =404;
+    }
+
+    # CheerpX disk images. HttpBytesDevice streams them over HTTP Range and
+    # refuses to initialise unless the response carries Last-Modified or ETag;
+    # nginx emits both for static files, so this block only needs to not get in
+    # the way. They are immutable per version, hence the long max-age.
+    location /images/cheerpx/ {
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        default_type application/octet-stream;
         try_files $uri =404;
     }
 
