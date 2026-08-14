@@ -1,4 +1,8 @@
 agent/node_modules/
+# Root npm install (CheerpX runtime). Needed here since the root
+# package-lock.json arrived with the vmbro port -- an npm install at the root
+# now produces a node_modules/ that agent/node_modules/ does not cover.
+node_modules/
 portable/dist/
 portable/vm-launcher.exe
 network/v86net-gateway-userspace-test.exe
@@ -33,6 +37,12 @@ build-dev.log
 # A fresh clone therefore has vm-images.json but no images. Build or fetch them.
 images/v86/*.img
 *.ext2
+
+# The rescued star image is committed compressed, because the raw 128 MiB file
+# exceeds GitHub's 100 MB hard limit. Decompress with:
+#   gunzip -k rescued-from-production/images/vm-star-i386-ext4.img.gz
+# and the result must not be committed back.
+rescued-from-production/images/*.img
 
 # CheerpX build artifacts and optional payloads, matching the other tree.
 # The .ext2 is built by images/cheerpx/build-ext2.sh, not committed.
