@@ -1,8 +1,38 @@
 # AGENTS.md
 
-This repository ships a 32-bit Alpine Linux guest running in v86. Coding agents
-working in the guest should read `docs/guest-tools.md` before attempting network,
-clipboard, file-transfer, GitHub, or AI operations.
+This repository ships a 32-bit Alpine Linux guest running in v86, and is being
+extended with a second VM provider, CheerpX. Coding agents working in the guest
+should read `docs/guest-tools.md` before attempting network, clipboard,
+file-transfer, GitHub, or AI operations.
+
+## Repository layout
+
+The tree is organised around the VM-provider seam:
+
+- `providers/v86/` — v86 guest client, host bridge, and network adapters.
+- `providers/cheerpx/` — the CheerpX provider (not implemented yet).
+- `providers/provider-registry.js` — plain-data manifest of providers and their
+  capabilities. Describes a provider without importing its runtime.
+- `shared/` — provider-neutral modules: the LLM provider router, LiteRT client,
+  WebRTC remote peer, agent controller, AutoBro client, WebGPU client.
+- `images/v86/` — v86 disk images and `vm-images.json`.
+- `images/cheerpx/` — CheerpX ext2 images and `cx-images.json` (not built yet).
+- `agent/` — the agent tiers. Consumes the guest-client contract, not a
+  specific provider.
+
+Rules that follow from this layout:
+
+1. Anything a second provider would also need belongs in `shared/`, not under
+   `providers/v86/`.
+2. The guest client contract is `list`, `read`, `write`, `delete`, `glob`,
+   `grep`, `execute`, `test`, `setWorkspace`. Do not change its shape without
+   updating every provider — `agent/` depends on it exclusively.
+3. There is one LLM provider router (`shared/llm-provider-router.js`). Do not
+   add a second router, provider list, or secret store for a new provider.
+4. The root `package.json` deliberately omits `"type": "module"`. Setting it
+   would reinterpret every untyped `.js` in the tree as ESM. Use `.mjs` for new
+   Node-side scripts.
+5. `IMPLEMENTATION-PLAN.md` is the working brief for the CheerpX integration.
 
 ## Deployment policy
 
