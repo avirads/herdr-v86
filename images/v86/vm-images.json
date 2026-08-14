@@ -20,7 +20,7 @@
     },
     "ai-tools": {
       "name": "AI Tools",
-      "description": "Essentials plus terminal tools, coding agents, browser tools and AI frameworks, including Shelley on the page-local WebGPU model.",
+      "description": "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.",
       "url": "images/v86/vm-ai-tools-i386-ext4.img",
       "size": 159383552,
       "version": "2026.08.13.3",
