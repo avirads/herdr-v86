@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CheerpX guest tools — vmllm, vmclip, vmfetch, vmexport</title>
+<style>
+  body { margin: 0; padding: 18px; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #f0f6fc; }
+  p.lede { margin: 0 0 14px; color: #8b949e; max-width: 92ch; }
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .pass { color: #3fb950; } .fail { color: #f85149; }
+  code { font: 12px ui-monospace, Consolas, monospace; color: #79c0ff; white-space: pre-wrap; }
+  #status { margin: 12px 0; padding: 10px 12px; border: 1px solid #30363d; border-radius: 7px; max-width: 1100px; }
+</style>
+</head>
+<body>
+<h1>CheerpX guest tools — <code>vmllm</code>, <code>vmclip</code>, <code>vmfetch</code>, <code>vmexport</code></h1>
+<p class="lede">
+  Runs the ported tools inside a real guest, against the real host bridge. LLM traffic goes
+  through the shared <code>LlmProviderRouter</code> with a stubbed <code>fetchImpl</code>, and
+  clipboard/download side effects are stubbed at the browser boundary so the run stays headless.
+</p>
+<div id="status">booting…</div>
+<table>
+  <thead><tr><th style="width:30%">Check</th><th style="width:9%">Result</th><th>Detail</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script type="module">
+import { createRuntime } from '../../providers/cheerpx/runtime.js';
+import { CheerpXGuestClient } from '../../providers/cheerpx/guest-client.js';
+import { CheerpXHostBridge } from '../../providers/cheerpx/host-bridge.js';
+import { LlmProviderRouter } from '../../shared/llm-provider-router.js';
+
+const params = new URLSearchParams(location.search);
+const DISK = params.get('disk') || '/images/cheerpx/vmbro-debian-i386.ext2';
+
+const rows = document.getElementById('rows');
+const statusEl = document.getElementById('status');
+const results = [];
+const state = { results, done: false, phase: 'boot' };
+globalThis.__CXTOOLS__ = state;
+
+const setStatus = t => { statusEl.textContent = t; state.phase = t; };
+function record(name, verdict, detail) {
+  results.push({ name, verdict, detail: String(detail ?? '') });
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${name}</td><td class="${verdict}">${verdict.toUpperCase()}</td><td><code></code></td>`;
+  tr.querySelector('code').textContent = String(detail ?? '').slice(0, 400);
+  rows.appendChild(tr);
+}
+async function check(name, fn) {
+  try { record(name, 'pass', await fn()); return true; }
+  catch (error) { record(name, 'fail', error?.message ?? error); return false; }
+}
+
+const strip = raw => raw.replace(/^__V86AGENT_EXIT__(\d+)\n/, '');
+const exitOf = raw => Number(raw.match(/^__V86AGENT_EXIT__(\d+)/)?.[1] ?? -1);
+
+try {
+  setStatus('booting CheerpX…');
+  const runtime = await createRuntime({ diskUrl: DISK, tier: 'tools-e2e', onProgress: p => setStatus(p.message) });
+  const guest = new CheerpXGuestClient(runtime, { workspace: '/root/project' });
+  record('createRuntime', 'pass', `booted in ${runtime.bootMs} ms`);
+
+  // --- stub the browser side effects the tools trigger ----------------------
+  let clipboardValue = 'clipboard-seed';
+  navigator.clipboard ??= {};
+  navigator.clipboard.readText = async () => clipboardValue;
+  navigator.clipboard.writeText = async value => { clipboardValue = value; };
+
+  const downloads = [];
+  const realCreateElement = document.createElement.bind(document);
+  document.createElement = tag => {
+    const element = realCreateElement(tag);
+    if (tag === 'a') element.click = () => downloads.push({ name: element.download, href: element.href });
+    return element;
+  };
+
+  const router = new LlmProviderRouter({
+    getLocalClient: () => { throw new Error('local model not loaded'); },
+    fetchImpl: async () => ({
+      ok: true, status: 200,
+      text: async () => JSON.stringify({
+        id: 'e2e', model: 'gpt-test',
+        choices: [{ message: { role: 'assistant', content: 'answer-from-router' } }],
+      }),
+    }),
+  });
+  router.saveProvider({
+    id: 'tools-e2e', label: 'Tools', type: 'openai',
+    baseUrl: 'https://api.example.com/v1', model: 'gpt-test',
+  }, 'sk-tools');
+  router.setDefault('zerostack', 'tools-e2e');
+
+  const bridge = new CheerpXHostBridge(runtime, {
+    llmResolver: (agent, route) => router.resolve(agent, route),
+    fetchImpl: async url => ({
+      status: 200, statusText: 'OK', url,
+      headers: new Map([['content-type', 'text/plain']]),
+      arrayBuffer: async () => new TextEncoder().encode('fetched-body-ok').buffer,
+    }),
+  });
+  bridge.start();
+
+  // --- the tools ------------------------------------------------------------
+
+  await check('all seven tools are installed and executable', async () => {
+    const raw = await guest.execute(
+      'for t in vmai vmbro-rpc vmclip vmexport vmfetch vmgithub vmllm; do ' +
+      'command -v "$t" >/dev/null || { echo "missing $t"; exit 1; }; done; echo all-present');
+    if (!strip(raw).includes('all-present')) throw new Error(strip(raw));
+    return 'vmai vmbro-rpc vmclip vmexport vmfetch vmgithub vmllm';
+  });
+
+  await check('vmllm chat routes through the shared LlmProviderRouter', async () => {
+    const raw = await guest.execute('vmllm hello there');
+    const output = strip(raw).trim();
+    if (output !== 'answer-from-router') throw new Error(JSON.stringify(strip(raw)));
+    return output;
+  });
+
+  await check('vmllm reports a provider error on stderr and exits non-zero', async () => {
+    const raw = await guest.execute('VMLLM_MODEL=x vmllm status 2>&1; echo "rc=$?"');
+    const output = strip(raw);
+    // The default provider is a cloud one, so status is answered by the router.
+    if (!/rc=/.test(output)) throw new Error(output);
+    return output.trim().split('\n').slice(-2).join(' | ');
+  });
+
+  await check('vmclip read returns the browser clipboard', async () => {
+    const raw = await guest.execute('vmclip read');
+    if (!strip(raw).includes('clipboard-seed')) throw new Error(JSON.stringify(strip(raw)));
+    return strip(raw).trim();
+  });
+
+  await check('vmclip write updates the browser clipboard', async () => {
+    const raw = await guest.execute('printf %s from-the-guest | vmclip write');
+    if (exitOf(raw) !== 0) throw new Error(strip(raw));
+    // Give the bridge a moment to apply it.
+    await new Promise(resolve => setTimeout(resolve, 200));
+    if (clipboardValue !== 'from-the-guest') throw new Error(`clipboard is ${JSON.stringify(clipboardValue)}`);
+    return `clipboard now ${JSON.stringify(clipboardValue)}`;
+  });
+
+  await check('vmfetch saves a response body to a file', async () => {
+    const raw = await guest.execute('vmfetch -o out.txt https://example.com/thing 2>/dev/null; cat out.txt');
+    const output = strip(raw);
+    if (!output.includes('fetched-body-ok')) throw new Error(JSON.stringify(output));
+    return output.replace(/\s+/g, ' ').trim();
+  });
+
+  await check('vmfetch -o - streams to stdout', async () => {
+    const raw = await guest.execute('vmfetch -o - https://example.com/thing 2>/dev/null');
+    if (!strip(raw).includes('fetched-body-ok')) throw new Error(JSON.stringify(strip(raw)));
+    return strip(raw).trim();
+  });
+
+  await check('vmfetch refuses plain HTTP with the documented message', async () => {
+    const raw = await guest.execute('vmfetch -o - http://example.com/thing 2>&1; echo "rc=$?"');
+    const output = strip(raw);
+    if (!/HTTPS/.test(output)) throw new Error(output);
+    if (!/rc=1/.test(output)) throw new Error(`expected exit 1, got: ${output}`);
+    return output.replace(/\s+/g, ' ').trim();
+  });
+
+  await check('vmgithub delegates to vmfetch unchanged', async () => {
+    const raw = await guest.execute('vmgithub repo octocat/Hello-World 2>/dev/null');
+    if (!strip(raw).includes('fetched-body-ok')) throw new Error(JSON.stringify(strip(raw)));
+    return 'wrapper reached the bridge through vmfetch';
+  });
+
+  await check('what the devs mount actually provides', async () => {
+    const raw = await guest.execute('ls /dev 2>&1 | tr "\\n" " "');
+    return strip(raw).trim() || '(empty)';
+  });
+
+  await check('vmexport downloads through the out-mount and cleans up', async () => {
+    const raw = await guest.execute(
+      'printf %s exported-content > report.txt && vmexport report.txt 2>&1; echo "rc=$?"; ' +
+      // Count only vmexport's own staging. The out-mount also carries the guest
+      // client's per-call .out/.err files and the RPC queue, so a bare `ls | wc -l`
+      // measures unrelated traffic.
+      'ls /vmbro/out | grep -c "^export-" || true');
+    const output = strip(raw);
+    if (!/rc=0/.test(output)) throw new Error(output);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    if (!downloads.some(d => d.name === 'report.txt')) {
+      throw new Error(`no download named report.txt; saw ${JSON.stringify(downloads.map(d => d.name))}`);
+    }
+    const staged = Number(output.trim().split('\n').pop());
+    if (staged > 0) throw new Error(`staged copies left behind: ${output}`);
+    return `downloaded report.txt; ${staged} staged copies remain`;
+  });
+
+  await check('vmexport enforces the 8 MiB limit', async () => {
+    // truncate, not `dd if=/dev/zero`: CheerpX's devs mount may not provide
+    // /dev/zero, and a silently failing dd leaves no file to test with.
+    const raw = await guest.execute(
+      'truncate -s 9M big.bin 2>&1 || head -c 9437184 /dev/zero > big.bin 2>&1; ' +
+      'ls -l big.bin 2>&1 | awk "{print \\$5}"; vmexport big.bin 2>&1; echo "rc=$?"');
+    const output = strip(raw);
+    if (!/limited to 8 MiB/.test(output)) throw new Error(output);
+    return output.replace(/\s+/g, ' ').trim();
+  });
+
+  bridge.stop();
+  state.done = true;
+  const failed = results.filter(r => r.verdict === 'fail');
+  state.failed = failed.length;
+  setStatus(failed.length
+    ? `${failed.length} FAILED: ${failed.map(f => f.name).join('; ')}`
+    : `ALL PASSED (${results.length} checks)`);
+} catch (error) {
+  record('fatal', 'fail', error?.stack ?? error?.message ?? error);
+  state.done = true;
+  state.failed = (state.failed ?? 0) + 1;
+  setStatus('FATAL: ' + (error?.message ?? error));
+}
+</script>
+</body>
+</html>

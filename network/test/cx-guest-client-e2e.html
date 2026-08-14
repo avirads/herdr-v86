@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CheerpX guest client — contract against a real guest</title>
+<style>
+  body { margin: 0; padding: 18px; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #f0f6fc; }
+  p.lede { margin: 0 0 14px; color: #8b949e; max-width: 92ch; }
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .pass { color: #3fb950; } .fail { color: #f85149; }
+  code { font: 12px ui-monospace, Consolas, monospace; color: #79c0ff; white-space: pre-wrap; }
+  #status { margin: 12px 0; padding: 10px 12px; border: 1px solid #30363d; border-radius: 7px; max-width: 1100px; }
+</style>
+</head>
+<body>
+<h1>CheerpX guest client — contract against a real guest</h1>
+<p class="lede">
+  Exercises the real <code>CheerpXGuestClient</code> against a real booted Debian guest.
+  The unit suite (<code>guest-contract.test.mjs</code>) checks the commands it emits;
+  this checks that the guest actually answers in the shape <code>agent/</code> parses.
+  Serve cross-origin-isolated via <code>cx-isolation-runner.mjs</code>.
+</p>
+<div id="status">booting…</div>
+<table>
+  <thead><tr><th style="width:30%">Check</th><th style="width:9%">Result</th><th>Detail</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script type="module">
+import { createRuntime } from '../../providers/cheerpx/runtime.js';
+import { CheerpXGuestClient } from '../../providers/cheerpx/guest-client.js';
+
+const params = new URLSearchParams(location.search);
+const DISK = params.get('disk') || '/images/cheerpx/vmbro-debian-i386.ext2';
+
+const rows = document.getElementById('rows');
+const statusEl = document.getElementById('status');
+const results = [];
+const state = { results, done: false, phase: 'boot' };
+globalThis.__CXGC__ = state;
+
+const setStatus = t => { statusEl.textContent = t; state.phase = t; };
+function record(name, verdict, detail) {
+  results.push({ name, verdict, detail: String(detail ?? '') });
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${name}</td><td class="${verdict}">${verdict.toUpperCase()}</td><td><code></code></td>`;
+  tr.querySelector('code').textContent = String(detail ?? '').slice(0, 400);
+  rows.appendChild(tr);
+}
+async function check(name, fn) {
+  try { record(name, 'pass', await fn()); return true; }
+  catch (error) { record(name, 'fail', error?.message ?? error); return false; }
+}
+
+try {
+  setStatus('booting CheerpX…');
+  const runtime = await createRuntime({ diskUrl: DISK, tier: 'contract-e2e', onProgress: p => setStatus(p.message) });
+  record('createRuntime', 'pass', `booted in ${runtime.bootMs} ms`);
+
+  // The image ships /root/project; the client treats it as the workspace root.
+  const guest = new CheerpXGuestClient(runtime, { workspace: '/root/project' });
+
+  await check('write() returns the upstream "written <path>" shape', async () => {
+    const result = await guest.write('hello.txt', 'vmbro contract check\n');
+    if (!/^written hello\.txt/m.test(result)) throw new Error(`unexpected: ${JSON.stringify(result)}`);
+    return result.trim();
+  });
+
+  await check('read() round-trips the content written', async () => {
+    const text = await guest.read('hello.txt');
+    if (text !== 'vmbro contract check\n') throw new Error(`got ${JSON.stringify(text)}`);
+    return JSON.stringify(text);
+  });
+
+  // Copied from agent/src/v86-workspace.js. `stat -c` does NOT interpret
+  // backslash escapes — only `--printf` does — so BOTH BusyBox and GNU coreutils
+  // emit the two characters backslash-t rather than a tab. The parser therefore
+  // accepts either form, and so must this test.
+  const FIELD_SEPARATOR = /\\t|\t/;
+  const fields = line => line.split(FIELD_SEPARATOR);
+
+  await check('list() emits the upstream "type<sep>path<sep>size" shape', async () => {
+    await guest.execute('mkdir -p sub && echo nested > sub/inner.txt');
+    const raw = await guest.list('.');
+    const lines = raw.split('\n').filter(Boolean);
+    if (!lines.length) throw new Error('list returned nothing');
+    for (const line of lines) {
+      if (!FIELD_SEPARATOR.test(line)) throw new Error(`no field separator in: ${JSON.stringify(line)}`);
+      if (fields(line).length < 3) throw new Error(`expected 3 fields in: ${JSON.stringify(line)}`);
+    }
+    // parseFileEntries keys off the word "directory" from stat's %F.
+    const kinds = new Set(lines.map(l => fields(l)[0]));
+    if (!kinds.has('directory')) throw new Error(`no "directory" entry; kinds: ${[...kinds].join('|')}`);
+    const paths = lines.map(l => fields(l)[1]);
+    if (paths.some(p => p.startsWith('/'))) throw new Error(`paths must be workspace-relative: ${paths.find(p => p.startsWith('/'))}`);
+    return `${lines.length} entries, kinds: ${[...kinds].join(', ')}`;
+  });
+
+  await check('list() reaches two levels deep, matching vmagent-rpc', async () => {
+    const paths = (await guest.list('.')).split('\n').filter(Boolean).map(l => fields(l)[1]);
+    if (!paths.includes('sub/inner.txt')) throw new Error(`depth-2 entry missing; got: ${paths.join(', ')}`);
+    return 'sub/inner.txt present';
+  });
+
+  await check('glob() matches by path and returns list() shape', async () => {
+    const raw = await guest.glob('**/*.txt', '.');
+    const paths = raw.split('\n').filter(Boolean).map(l => fields(l)[1]);
+    if (!paths.includes('sub/inner.txt')) throw new Error(`got: ${paths.join(', ') || '(empty)'}`);
+    return paths.join(', ');
+  });
+
+  await check('grep() emits "path:line:text", workspace-relative', async () => {
+    const raw = await guest.grep('nested', '.');
+    const line = raw.split('\n').filter(Boolean)[0];
+    if (!line) throw new Error('grep found nothing');
+    const match = line.match(/^(.+?):(\d+):(.*)$/);
+    if (!match) throw new Error(`unparseable: ${JSON.stringify(line)}`);
+    if (match[1].startsWith('/')) throw new Error(`path not workspace-relative: ${match[1]}`);
+    return line;
+  });
+
+  await check('execute() frames stdout behind the exit marker', async () => {
+    const raw = await guest.execute('echo marker-ok; uname -m');
+    const match = raw.match(/^__V86AGENT_EXIT__(\d+)\n([\s\S]*)$/);
+    if (!match) throw new Error(`unframed: ${JSON.stringify(raw.slice(0, 80))}`);
+    if (match[1] !== '0') throw new Error(`expected exit 0, got ${match[1]}`);
+    if (!match[2].includes('marker-ok')) throw new Error(`missing stdout: ${JSON.stringify(match[2])}`);
+    return JSON.stringify(raw);
+  });
+
+  await check('execute() reports a non-zero exit without throwing', async () => {
+    const raw = await guest.execute('exit 42');
+    if (!/^__V86AGENT_EXIT__42\n/.test(raw)) throw new Error(`got ${JSON.stringify(raw)}`);
+    return raw.trim();
+  });
+
+  await check('execute() combines stderr into stdout (2>&1), as V86Sandbox needs', async () => {
+    const raw = await guest.execute('echo to-stdout; echo to-stderr >&2');
+    if (!raw.includes('to-stderr')) throw new Error(`stderr missing: ${JSON.stringify(raw)}`);
+    return JSON.stringify(raw);
+  });
+
+  await check('execute() runs with the workspace as cwd', async () => {
+    const raw = await guest.execute('pwd');
+    if (!raw.includes('/root/project')) throw new Error(raw);
+    return raw.split('\n')[1];
+  });
+
+  await check('path traversal is refused by the guest', async () => {
+    let threw = null;
+    try { await guest.read('../../etc/passwd'); } catch (error) { threw = error.message; }
+    if (!threw) throw new Error('traversal was NOT refused');
+    if (!/escapes workspace|path not found/.test(threw)) throw new Error(`unexpected message: ${threw}`);
+    return threw;
+  });
+
+  await check('delete() removes a regular file and refuses a directory', async () => {
+    const removed = await guest.delete('hello.txt');
+    if (!/deleted/.test(removed)) throw new Error(removed);
+    let threw = null;
+    try { await guest.delete('sub'); } catch (error) { threw = error.message; }
+    if (!threw) throw new Error('deleting a directory should be refused, matching upstream');
+    return `${removed.trim()}; directory refused: ${threw}`;
+  });
+
+  await check('concurrent operations do not cross-wire their results', async () => {
+    await Promise.all([1, 2, 3, 4, 5].map(n => guest.write(`c${n}.txt`, `payload-${n}\n`)));
+    const reads = await Promise.all([1, 2, 3, 4, 5].map(n => guest.read(`c${n}.txt`)));
+    reads.forEach((text, index) => {
+      if (text !== `payload-${index + 1}\n`) {
+        throw new Error(`slot ${index + 1} got ${JSON.stringify(text)} — results crossed`);
+      }
+    });
+    return '5 parallel write+read pairs each returned their own payload';
+  });
+
+  await check('setWorkspace() redirects subsequent operations', async () => {
+    await guest.execute('mkdir -p /tmp/alt && echo elsewhere > /tmp/alt/there.txt');
+    guest.setWorkspace('/tmp/alt');
+    const text = await guest.read('there.txt');
+    guest.setWorkspace('/root/project');
+    if (text.trim() !== 'elsewhere') throw new Error(JSON.stringify(text));
+    return 'workspace switched and restored';
+  });
+
+  state.done = true;
+  const failed = results.filter(r => r.verdict === 'fail');
+  state.failed = failed.length;
+  setStatus(failed.length
+    ? `${failed.length} FAILED: ${failed.map(f => f.name).join('; ')}`
+    : `ALL PASSED (${results.length} checks)`);
+} catch (error) {
+  record('fatal', 'fail', error?.stack ?? error?.message ?? error);
+  state.done = true;
+  state.failed = (state.failed ?? 0) + 1;
+  setStatus('FATAL: ' + (error?.message ?? error));
+}
+</script>
+</body>
+</html>

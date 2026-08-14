@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CheerpX host bridge — guest vm* round trip</title>
+<style>
+  body { margin: 0; padding: 18px; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #f0f6fc; }
+  p.lede { margin: 0 0 14px; color: #8b949e; max-width: 92ch; }
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .pass { color: #3fb950; } .fail { color: #f85149; }
+  code { font: 12px ui-monospace, Consolas, monospace; color: #79c0ff; white-space: pre-wrap; }
+  #status { margin: 12px 0; padding: 10px 12px; border: 1px solid #30363d; border-radius: 7px; max-width: 1100px; }
+</style>
+</head>
+<body>
+<h1>CheerpX host bridge — guest <code>vm*</code> round trip</h1>
+<p class="lede">
+  Drives the real host bridge from inside a real guest via <code>vmbro-rpc</code>, with LLM
+  traffic routed through the <em>shared</em> <code>LlmProviderRouter</code> — the same module
+  the v86 page uses. The router's <code>fetchImpl</code> is stubbed so a cloud provider can be
+  exercised without a key or network.
+</p>
+<div id="status">booting…</div>
+<table>
+  <thead><tr><th style="width:32%">Check</th><th style="width:9%">Result</th><th>Detail</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script type="module">
+import { createRuntime } from '../../providers/cheerpx/runtime.js';
+import { CheerpXGuestClient } from '../../providers/cheerpx/guest-client.js';
+import { CheerpXHostBridge } from '../../providers/cheerpx/host-bridge.js';
+import { LlmProviderRouter } from '../../shared/llm-provider-router.js';
+
+const params = new URLSearchParams(location.search);
+const DISK = params.get('disk') || '/images/cheerpx/vmbro-debian-i386.ext2';
+
+const rows = document.getElementById('rows');
+const statusEl = document.getElementById('status');
+const results = [];
+const state = { results, done: false, phase: 'boot' };
+globalThis.__CXHB__ = state;
+
+const setStatus = t => { statusEl.textContent = t; state.phase = t; };
+function record(name, verdict, detail) {
+  results.push({ name, verdict, detail: String(detail ?? '') });
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${name}</td><td class="${verdict}">${verdict.toUpperCase()}</td><td><code></code></td>`;
+  tr.querySelector('code').textContent = String(detail ?? '').slice(0, 400);
+  rows.appendChild(tr);
+}
+async function check(name, fn) {
+  try { record(name, 'pass', await fn()); return true; }
+  catch (error) { record(name, 'fail', error?.message ?? error); return false; }
+}
+
+const b64 = value => btoa(String.fromCharCode(...new TextEncoder().encode(String(value))));
+const unb64 = value => new TextDecoder().decode(Uint8Array.from(atob(value), c => c.charCodeAt(0)));
+
+/** Parse the framing the guest tools consume. */
+function parseFrames(text) {
+  return text.split('\n').filter(Boolean).map(line => {
+    const [prefix, id, kind, ...rest] = line.split('\t');
+    return { prefix, id, kind, value: rest.join('\t') };
+  });
+}
+const payloadOf = frames => frames.filter(f => f.kind === 'DATA').map(f => unb64(f.value)).join('');
+
+try {
+  setStatus('booting CheerpX…');
+  const runtime = await createRuntime({ diskUrl: DISK, tier: 'bridge-e2e', onProgress: p => setStatus(p.message) });
+  const guest = new CheerpXGuestClient(runtime, { workspace: '/root/project' });
+  record('createRuntime', 'pass', `booted in ${runtime.bootMs} ms`);
+
+  // The shared router, configured exactly as the v86 page configures it. Only
+  // fetchImpl is stubbed, so provider selection, secret handling and request
+  // shaping are the real code paths.
+  const upstream = [];
+  const router = new LlmProviderRouter({
+    getLocalClient: () => { throw new Error('local model not loaded'); },
+    fetchImpl: async (url, init) => {
+      upstream.push({ url, init });
+      return {
+        ok: true, status: 200,
+        text: async () => JSON.stringify({
+          id: 'e2e', model: 'gpt-test',
+          choices: [{ message: { role: 'assistant', content: 'routed-through-shared-router' } }],
+        }),
+      };
+    },
+  });
+  router.saveProvider({
+    id: 'e2e-provider', label: 'E2E', type: 'openai',
+    baseUrl: 'https://api.example.com/v1', model: 'gpt-test',
+  }, 'sk-e2e');
+
+  const bridge = new CheerpXHostBridge(runtime, {
+    llmResolver: (agent, route) => router.resolve(agent, route),
+  });
+  bridge.start();
+  record('bridge started', 'pass', 'polling the guest queue');
+
+  await check('guest reaches the host: vmbro-rpc LLM_STATUS', async () => {
+    const raw = await guest.execute(`vmbro-rpc LLM_STATUS`);
+    const body = raw.replace(/^__V86AGENT_EXIT__\d+\n/, '');
+    const frames = parseFrames(body);
+    if (!frames.length) throw new Error(`no frames: ${JSON.stringify(body.slice(0, 200))}`);
+    if (frames[0].prefix !== '__V86RPC_RESPONSE__') throw new Error(`bad framing: ${frames[0].prefix}`);
+    return body.trim().split('\n')[0];
+  });
+
+  await check('LLM_CHAT is served by the shared router, not a local reimplementation', async () => {
+    const body = b64(JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }));
+    const route = b64(JSON.stringify({ provider: 'e2e-provider' }));
+    const raw = await guest.execute(`vmbro-rpc LLM_CHAT ${body} ${route}`);
+    const frames = parseFrames(raw.replace(/^__V86AGENT_EXIT__\d+\n/, ''));
+    const answer = payloadOf(frames);
+    if (answer !== 'routed-through-shared-router') throw new Error(`got ${JSON.stringify(answer)}`);
+    if (upstream.length !== 1) throw new Error(`expected 1 upstream call, saw ${upstream.length}`);
+    if (!/api\.example\.com\/v1\/chat\/completions/.test(upstream[0].url)) throw new Error(upstream[0].url);
+    if (upstream[0].init.headers.authorization !== 'Bearer sk-e2e') throw new Error('API key not applied by the router');
+    return `${answer} (router called ${upstream[0].url})`;
+  });
+
+  await check('an unknown provider surfaces the router\'s own error to the guest', async () => {
+    const body = b64(JSON.stringify({ messages: [] }));
+    const route = b64(JSON.stringify({ provider: 'does-not-exist' }));
+    const raw = await guest.execute(`vmbro-rpc LLM_CHAT ${body} ${route}`);
+    const frames = parseFrames(raw.replace(/^__V86AGENT_EXIT__\d+\n/, ''));
+    const last = frames.at(-1);
+    if (last?.kind !== 'ERROR') throw new Error(`expected ERROR, got ${last?.kind}`);
+    const message = unb64(last.value);
+    if (!/is not configured/.test(message)) throw new Error(message);
+    return message;
+  });
+
+  await check('vmfetch guard: plain HTTP is refused inside the guest', async () => {
+    const raw = await guest.execute(`vmbro-rpc FETCH ${b64('GET')} ${b64('http://example.com')}`);
+    const frames = parseFrames(raw.replace(/^__V86AGENT_EXIT__\d+\n/, ''));
+    const last = frames.at(-1);
+    if (last?.kind !== 'ERROR') throw new Error(`expected ERROR, got ${last?.kind}`);
+    return unb64(last.value);
+  });
+
+  await check('concurrent guest RPCs each get their own reply', async () => {
+    const calls = await Promise.all([1, 2, 3].map(async n => {
+      const body = b64(JSON.stringify({ messages: [{ role: 'user', content: `q${n}` }] }));
+      const route = b64(JSON.stringify({ provider: 'e2e-provider' }));
+      const raw = await guest.execute(`vmbro-rpc LLM_CHAT ${body} ${route}`);
+      return payloadOf(parseFrames(raw.replace(/^__V86AGENT_EXIT__\d+\n/, '')));
+    }));
+    if (calls.some(c => c !== 'routed-through-shared-router')) {
+      throw new Error(`replies crossed or were empty: ${JSON.stringify(calls)}`);
+    }
+    return `${calls.length} concurrent RPCs each resolved`;
+  });
+
+  await check('a response file is cleaned up after the guest reads it', async () => {
+    const raw = await guest.execute('ls /vmbro/in | head -5; echo "--"; ls /vmbro/in | wc -l');
+    const output = raw.replace(/^__V86AGENT_EXIT__\d+\n/, '');
+    const count = Number(output.trim().split('\n').pop());
+    if (Number.isNaN(count)) throw new Error(output);
+    if (count > 1) throw new Error(`response files are accumulating: ${output}`);
+    return `in-mount holds ${count} file(s)`;
+  });
+
+  bridge.stop();
+  state.done = true;
+  const failed = results.filter(r => r.verdict === 'fail');
+  state.failed = failed.length;
+  setStatus(failed.length
+    ? `${failed.length} FAILED: ${failed.map(f => f.name).join('; ')}`
+    : `ALL PASSED (${results.length} checks)`);
+} catch (error) {
+  record('fatal', 'fail', error?.stack ?? error?.message ?? error);
+  state.done = true;
+  state.failed = (state.failed ?? 0) + 1;
+  setStatus('FATAL: ' + (error?.message ?? error));
+}
+</script>
+</body>
+</html>
