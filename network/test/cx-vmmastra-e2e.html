@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CheerpX agents — vmmastra (Mastra workspace) against a real guest</title>
+<style>
+  body { margin: 0; padding: 18px; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #f0f6fc; }
+  p.lede { margin: 0 0 14px; color: #8b949e; max-width: 92ch; }
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .pass { color: #3fb950; } .fail { color: #f85149; } .skip { color: #d29922; }
+  code { font: 12px ui-monospace, Consolas, monospace; color: #79c0ff; white-space: pre-wrap; }
+  #status { margin: 12px 0; padding: 10px 12px; border: 1px solid #30363d; border-radius: 7px; max-width: 1100px; }
+</style>
+</head>
+<body>
+<h1>CheerpX agents — <code>vmmastra</code> (Mastra workspace) against a real guest</h1>
+<p class="lede">
+  <code>createMastraVMAgent</code> builds <code>V86Filesystem</code>/<code>V86Sandbox</code> from the
+  guest internally, and both consume only the nine-method contract — so no CheerpX workspace class
+  is needed. What does need overriding is everything tuned for the UART: the round-trip cache and
+  the instructions describing BusyBox and a slow emulated CPU.
+</p>
+<div id="status">booting…</div>
+<table>
+  <thead><tr><th style="width:32%">Check</th><th style="width:9%">Result</th><th>Detail</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script type="module">
+import { createRuntime } from '../../providers/cheerpx/runtime.js';
+import { CheerpXGuestClient } from '../../providers/cheerpx/guest-client.js';
+import { CheerpXHostBridge } from '../../providers/cheerpx/host-bridge.js';
+import { LlmProviderRouter } from '../../shared/llm-provider-router.js';
+import { VmAgentController } from '../../shared/vmagent-controller.js';
+
+const params = new URLSearchParams(location.search);
+const DISK = params.get('disk') || '/images/cheerpx/vmbro-debian-i386.ext2';
+
+const rows = document.getElementById('rows');
+const statusEl = document.getElementById('status');
+const results = [];
+const state = { results, done: false, phase: 'boot' };
+globalThis.__CXMASTRA__ = state;
+
+const setStatus = t => { statusEl.textContent = t; state.phase = t; };
+function record(name, verdict, detail) {
+  results.push({ name, verdict, detail: String(detail ?? '') });
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${name}</td><td class="${verdict}">${verdict.toUpperCase()}</td><td><code></code></td>`;
+  tr.querySelector('code').textContent = String(detail ?? '').slice(0, 500);
+  rows.appendChild(tr);
+}
+async function check(name, fn) {
+  try { record(name, 'pass', await fn()); return true; }
+  catch (error) { record(name, 'fail', error?.message ?? error); return false; }
+}
+const strip = raw => raw.replace(/^__V86AGENT_EXIT__\d+\n/, '');
+const settle = ms => new Promise(resolve => setTimeout(resolve, ms));
+const waitFor = async (predicate, ms = 60000) => {
+  const started = Date.now();
+  while (Date.now() - started < ms) { if (predicate()) return Date.now() - started; await settle(250); }
+  throw new Error(`timed out after ${ms} ms`);
+};
+
+const CHEERPX_INSTRUCTIONS = [
+  'Commands run inside a JIT-compiled x86 Debian guest in the browser tab.',
+  'The shell is bash with GNU coreutils, so GNU flags are available.',
+  'Note /dev/zero is absent; use truncate or head -c to make files.',
+].join(' ');
+
+try {
+  setStatus('booting CheerpX…');
+  const runtime = await createRuntime({ diskUrl: DISK, tier: 'mastra-e2e', onProgress: p => setStatus(p.message) });
+  const guest = new CheerpXGuestClient(runtime, { workspace: '/root/project' });
+  record('createRuntime', 'pass', `booted in ${runtime.bootMs} ms`);
+
+  const outputs = [];
+  const router = new LlmProviderRouter({
+    getLocalClient: () => { throw new Error('local model not loaded'); },
+    fetchImpl: async () => ({
+      ok: true, status: 200,
+      text: async () => JSON.stringify({
+        id: 'm', model: 'stub',
+        choices: [{ message: { role: 'assistant', content: JSON.stringify({ final: 'Mastra finished.' }) } }],
+      }),
+    }),
+  });
+  router.saveProvider({
+    id: 'mastra-e2e', label: 'Mastra', type: 'openai',
+    baseUrl: 'https://api.example.com/v1', model: 'stub',
+  }, 'sk-mastra');
+  router.setDefault('vmmastra', 'mastra-e2e');
+
+  // --- build the harness directly ------------------------------------------
+  setStatus('loading the Mastra bundle (9.3 MB)…');
+  const { createMastraVMAgent, DEFAULT_INSTRUCTIONS } = await import('../../agent/dist/mastra-agent.js');
+  const harness = createMastraVMAgent({
+    guest,
+    llmClient: router.resolve('vmmastra', {}),
+    approveAction: async () => true,
+    yolo: true,
+    filesystemOptions: { cacheTtlMs: 0, prefetchMaxBytes: 0 },
+    sandboxOptions: { captureStderr: false, instructions: CHEERPX_INSTRUCTIONS },
+  });
+  record('createMastraVMAgent', 'pass', 'harness built from the CheerpX guest client');
+
+  const { workspace } = harness;
+  await workspace.init();
+
+  // --- the workspace against a real guest -----------------------------------
+
+  await check('MastraFilesystem: write + read round-trip', async () => {
+    await workspace.filesystem.writeFile('/mastra-proof.txt', 'mastra-was-here\n');
+    const buffer = await workspace.filesystem.readFile('/mastra-proof.txt', { encoding: 'utf8' });
+    const text = typeof buffer === 'string' ? buffer : new TextDecoder().decode(buffer);
+    if (!/mastra-was-here/.test(text)) throw new Error(JSON.stringify(text));
+    const onGuest = await guest.read('mastra-proof.txt');
+    if (onGuest !== 'mastra-was-here\n') throw new Error(`guest disagrees: ${JSON.stringify(onGuest)}`);
+    return JSON.stringify(text);
+  });
+
+  await check('MastraFilesystem: stat reports type, size and mtime', async () => {
+    const info = await workspace.filesystem.stat('/mastra-proof.txt');
+    if (info.type !== 'file') throw new Error(JSON.stringify(info));
+    if (info.size !== 16) throw new Error(`size wrong: ${JSON.stringify(info)}`);
+    if (!(info.modifiedAt instanceof Date) || Number.isNaN(info.modifiedAt.getTime())) {
+      throw new Error(`mtime unusable: ${JSON.stringify(info)}`);
+    }
+    return `${info.type}, ${info.size} bytes, mtime ${info.modifiedAt.toISOString()}`;
+  });
+
+  await check('MastraFilesystem: readdir parses the guest listing', async () => {
+    const entries = await workspace.filesystem.readdir('/');
+    const proof = entries.find(entry => entry.name === 'mastra-proof.txt');
+    if (!proof) throw new Error(JSON.stringify(entries.slice(0, 5)));
+    // Same FIELD_SEPARATOR hazard as the Deep Agents backend: a real-tab-only
+    // split leaves name/type/size undefined and readdir returns junk.
+    if (proof.type !== 'file' || proof.size !== 16) throw new Error(`parsed wrong: ${JSON.stringify(proof)}`);
+    return `${entries.length} entries; ${JSON.stringify(proof)}`;
+  });
+
+  await check('MastraFilesystem: exists, mkdir and delete', async () => {
+    await workspace.filesystem.mkdir('/mastra-dir', { recursive: true });
+    if (!await workspace.filesystem.exists('/mastra-dir')) throw new Error('mkdir did not take');
+    await workspace.filesystem.deleteFile('/mastra-proof.txt');
+    if (await workspace.filesystem.exists('/mastra-proof.txt')) throw new Error('delete did not take');
+    return 'mkdir and delete both reached the guest';
+  });
+
+  await check('MastraSandbox: executeCommand returns stdout and exit code', async () => {
+    await workspace.sandbox.start();
+    const zero = await workspace.sandbox.executeCommand('echo mastra-shell-ok');
+    if (!/mastra-shell-ok/.test(zero.stdout) || zero.exitCode !== 0) throw new Error(JSON.stringify(zero));
+    const failing = await workspace.sandbox.executeCommand('exit 5');
+    if (failing.exitCode !== 5) throw new Error(`exit code lost: ${JSON.stringify(failing)}`);
+    return `${JSON.stringify(zero.stdout.trim())} exit=${zero.exitCode}; failure exit=${failing.exitCode}`;
+  });
+
+  // --- the overrides that actually needed doing ------------------------------
+
+  await check('sandbox instructions describe Debian, not BusyBox', async () => {
+    const instructions = workspace.sandbox.getInstructions();
+    if (/BusyBox/.test(instructions)) throw new Error(`still describes BusyBox: ${instructions.slice(0, 160)}`);
+    if (!/Debian/.test(instructions)) throw new Error(`does not describe the real guest: ${instructions.slice(0, 160)}`);
+    return instructions.slice(0, 200);
+  });
+
+  await check('the v86 default instructions are still intact for that provider', async () => {
+    // Same module, other provider: the default must be untouched.
+    const { V86_SANDBOX_INSTRUCTIONS } = await import('../../agent/dist/mastra-agent.js')
+      .then(module => module).catch(() => ({}));
+    // Not exported from the bundle; assert against a fresh sandbox instead.
+    const fallback = createMastraVMAgent({
+      guest, llmClient: router.resolve('vmmastra', {}), approveAction: async () => true,
+    }).workspace.sandbox.getInstructions();
+    if (!/BusyBox sh/.test(fallback)) throw new Error(`the default drifted: ${fallback.slice(0, 160)}`);
+    void V86_SANDBOX_INSTRUCTIONS;
+    return `default still: ${fallback.slice(0, 120)}…`;
+  });
+
+  await check('the round-trip cache is off, so a guest-side edit is seen at once', async () => {
+    await workspace.filesystem.writeFile('/cache-probe.txt', 'first\n');
+    await workspace.filesystem.stat('/cache-probe.txt');          // would populate a cache
+    await guest.execute('printf %s second-value > cache-probe.txt'); // changed behind Mastra's back
+    const buffer = await workspace.filesystem.readFile('/cache-probe.txt', { encoding: 'utf8' });
+    const text = typeof buffer === 'string' ? buffer : new TextDecoder().decode(buffer);
+    if (!/second-value/.test(text)) {
+      throw new Error(`stale content served from cache: ${JSON.stringify(text)}`);
+    }
+    return 'fresh read after an external edit';
+  });
+
+  await check('the tool set and prompt budget are reportable', async () => {
+    const tools = await harness.listTools();
+    const cost = await harness.systemPromptCost();
+    if (!tools.length) throw new Error('no tools');
+    return `${tools.length} tools (~${cost.approxTokens} tokens): ${tools.slice(0, 8).join(', ')}…`;
+  });
+
+  await check('DEFAULT_INSTRUCTIONS is exported and non-empty', async () => {
+    if (!DEFAULT_INSTRUCTIONS?.length) throw new Error('missing');
+    return `${String(DEFAULT_INSTRUCTIONS).length} chars`;
+  });
+
+  // --- the guest command ----------------------------------------------------
+
+  const controller = new VmAgentController({
+    createAgent: async () => { throw new Error('vmlang not exercised here'); },
+    createMastraAgent: async options => createMastraVMAgent({
+      ...options,
+      filesystemOptions: { cacheTtlMs: 0, prefetchMaxBytes: 0 },
+      sandboxOptions: { captureStderr: false, instructions: CHEERPX_INSTRUCTIONS },
+    }),
+    getLlmClient: (agent, route) => router.resolve(agent, route),
+    getGuest: () => guest,
+    approveAction: async () => true,
+    onOutput: async output => { outputs.push(String(output)); },
+    onBusy: () => {},
+  });
+  const bridge = new CheerpXHostBridge(runtime, {
+    llmResolver: (agent, route) => router.resolve(agent, route),
+  });
+  bridge.setAgentHandler((command, value, cwd, route) => controller.handle(command, value, cwd, route));
+  bridge.start();
+  await bridge.ready;
+
+  await check('vmmastra is installed and posts without blocking', async () => {
+    const started = Date.now();
+    const raw = await guest.execute('vmmastra status');
+    const elapsed = Date.now() - started;
+    if (elapsed > 30000) throw new Error(`took ${elapsed} ms — it blocked on the RPC`);
+    return `${strip(raw).trim() || '(no stdout)'} (${elapsed} ms)`;
+  });
+
+  await check('vmmastra status is answered by the controller', async () => {
+    await waitFor(() => outputs.some(line => /\[vmmastra\]/.test(line)), 60000);
+    return outputs.find(line => /\[vmmastra\]/.test(line)).trim().slice(0, 220);
+  });
+
+  await check('vmmastra tools lean|full switches the profile', async () => {
+    const before = outputs.length;
+    await guest.execute('vmmastra tools lean');
+    await waitFor(() => outputs.length > before, 60000);
+    return outputs.at(-1).trim().slice(0, 220);
+  });
+
+  bridge.stop();
+  state.done = true;
+  const failed = results.filter(r => r.verdict === 'fail');
+  state.failed = failed.length;
+  state.outputs = outputs;
+  setStatus(failed.length
+    ? `${failed.length} FAILED: ${failed.map(f => f.name).join('; ')}`
+    : `ALL PASSED (${results.length} checks)`);
+} catch (error) {
+  record('fatal', 'fail', error?.stack ?? error?.message ?? error);
+  state.done = true;
+  state.failed = (state.failed ?? 0) + 1;
+  setStatus('FATAL: ' + (error?.message ?? error));
+}
+</script>
+</body>
+</html>

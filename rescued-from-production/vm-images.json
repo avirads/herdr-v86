@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "defaultTier": "barebones",
+  "tiers": {
+    "barebones": {
+      "name": "Barebones",
+      "description": "Minimal Alpine i386 and BusyBox shell.",
+      "url": "vm-barebones-i386-ext4.img",
+      "size": 67108864,
+      "version": "2026.07.29.1",
+      "sha256": "9480274b976bb8220569ac72b592cc45839168bbab153cdfbde3af6eed7e7ab9"
+    },
+    "essentials": {
+      "name": "Essentials",
+      "description": "Barebones plus networking, browser transport, curl, jq and QuickJS.",
+      "url": "vm-essentials-i386-ext4.img",
+      "size": 83886080,
+      "version": "2026.07.29.1",
+      "sha256": "aa53f5b6baec1285af66fa959c5b0847f8f3d0e152673b33b3fe275c496274f2"
+    },
+    "ai-tools": {
+      "name": "AI Tools",
+      "description": "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.",
+      "url": "vm-ai-tools-i386-ext4.img",
+      "size": 92274688,
+      "version": "2026.07.29.3",
+      "sha256": "e91d6fc024944a13bbecf703f634b6eb7c71b31f5e18765ab3a9183492646e7d"
+    },
+    "dev": {
+      "name": "Dev",
+      "description": "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.",
+      "url": "vm-dev-i386-ext4.img",
+      "size": 99614720,
+      "version": "2026.08.03.9",
+      "sha256": "20dd2e814ed5ed5405eba3ad3530e0aa6a85b93b69d6c9d23820e929e0b5df70"
+    },
+    "performance": {
+      "name": "Performance testing",
+      "description": "AI Tools plus Grafana k6 and k6obs OpenObserve streaming.",
+      "url": "vm-performance-i386-ext4.img",
+      "size": 96468992,
+      "version": "2026.08.01.1",
+      "sha256": "20aa07fea3b48180651df1c847971cc709bb0174b10160123b5178cd2ed9b02d"
+    },
+    "vapt": {
+      "name": "VAPT — native scanner",
+      "description": "AI Tools plus Grafana k6 and Vaptr, the self-contained native scanner. k6obs and external tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.",
+      "url": "vm-vapt-i386-ext4.img",
+      "size": 103809024,
+      "version": "2026.07.30.1",
+      "sha256": "3ef8d537e6500566e143c50193bd71bb2ca0529d747b82e6357d6249cfee23f9"
+    },
+    "star": {
+      "name": "Star",
+      "description": "All guest features in one image: AI Tools, Dev IDE and seven templates, Grafana k6 with k6obs, and the self-contained Vaptr scanner.",
+      "url": "vm-star-i386-ext4.img",
+      "size": 134217728,
+      "version": "2026.08.03.9",
+      "sha256": "d8a5f4f675c9fd2f800a40bde9bd3cac954bbd00512d0f406ff294a64e49e51e"
+    }
+  }
+}

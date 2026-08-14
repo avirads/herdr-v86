@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CheerpX agents — vmlang (Deep Agents) against a real guest</title>
+<style>
+  body { margin: 0; padding: 18px; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #f0f6fc; }
+  p.lede { margin: 0 0 14px; color: #8b949e; max-width: 92ch; }
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .pass { color: #3fb950; } .fail { color: #f85149; } .skip { color: #d29922; }
+  code { font: 12px ui-monospace, Consolas, monospace; color: #79c0ff; white-space: pre-wrap; }
+  #status { margin: 12px 0; padding: 10px 12px; border: 1px solid #30363d; border-radius: 7px; max-width: 1100px; }
+</style>
+</head>
+<body>
+<h1>CheerpX agents — <code>vmlang</code> (Deep Agents) against a real guest</h1>
+<p class="lede">
+  The plan predicted <code>V86DeepAgentsBackend</code> would need no changes because it consumes
+  only the nine-method guest contract. This checks that against a real guest, with the model
+  stubbed at the router so the harness is deterministic. The stub reports which tools Deep
+  Agents actually offers rather than assuming their names.
+</p>
+<div id="status">booting…</div>
+<table>
+  <thead><tr><th style="width:32%">Check</th><th style="width:9%">Result</th><th>Detail</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script type="module">
+import { createRuntime } from '../../providers/cheerpx/runtime.js';
+import { CheerpXGuestClient } from '../../providers/cheerpx/guest-client.js';
+import { CheerpXHostBridge } from '../../providers/cheerpx/host-bridge.js';
+import { LlmProviderRouter } from '../../shared/llm-provider-router.js';
+import { VmAgentController } from '../../shared/vmagent-controller.js';
+
+const params = new URLSearchParams(location.search);
+const DISK = params.get('disk') || '/images/cheerpx/vmbro-debian-i386.ext2';
+
+const rows = document.getElementById('rows');
+const statusEl = document.getElementById('status');
+const results = [];
+const state = { results, done: false, phase: 'boot' };
+globalThis.__CXVMLANG__ = state;
+
+const setStatus = t => { statusEl.textContent = t; state.phase = t; };
+function record(name, verdict, detail) {
+  results.push({ name, verdict, detail: String(detail ?? '') });
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${name}</td><td class="${verdict}">${verdict.toUpperCase()}</td><td><code></code></td>`;
+  tr.querySelector('code').textContent = String(detail ?? '').slice(0, 500);
+  rows.appendChild(tr);
+}
+async function check(name, fn) {
+  try { record(name, 'pass', await fn()); return true; }
+  catch (error) { record(name, 'fail', error?.message ?? error); return false; }
+}
+const strip = raw => raw.replace(/^__V86AGENT_EXIT__\d+\n/, '');
+const settle = ms => new Promise(resolve => setTimeout(resolve, ms));
+const waitFor = async (predicate, ms = 60000) => {
+  const started = Date.now();
+  while (Date.now() - started < ms) { if (predicate()) return Date.now() - started; await settle(250); }
+  throw new Error(`timed out after ${ms} ms`);
+};
+
+try {
+  setStatus('booting CheerpX…');
+  const runtime = await createRuntime({ diskUrl: DISK, tier: 'vmlang-e2e', onProgress: p => setStatus(p.message) });
+  const guest = new CheerpXGuestClient(runtime, { workspace: '/root/project' });
+  record('createRuntime', 'pass', `booted in ${runtime.bootMs} ms`);
+
+  // --- deterministic model, with introspection ------------------------------
+  const calls = [];
+  const offeredTools = new Set();
+  let writeAttempted = false;
+
+  /**
+   * Deep Agents does NOT send an OpenAI `tools` array.
+   *
+   * WebGpuToolChatModel targets a small on-device model with no native
+   * function calling, so litert-provider inlines the catalog into the system
+   * prompt ("Available tools: [...]") and asks for one JSON object back. Any
+   * stub that inspects body.tools sees nothing and the agent silently answers
+   * without ever calling a tool — which is exactly what happened first time.
+   */
+  const catalogFrom = body => {
+    const system = body.messages?.find(message => message.role === 'system')?.content ?? '';
+    const marker = system.lastIndexOf('Available tools: ');
+    if (marker < 0) return [];
+    const json = system.slice(marker + 'Available tools: '.length);
+    // The catalog is followed by an optional forced-choice sentence.
+    const end = json.lastIndexOf(']');
+    try { return JSON.parse(json.slice(0, end + 1)); } catch { return []; }
+  };
+
+  const router = new LlmProviderRouter({
+    getLocalClient: () => { throw new Error('local model not loaded'); },
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      calls.push(body);
+      const catalog = catalogFrom(body);
+      for (const tool of catalog) offeredTools.add(tool.name);
+
+      // Drive one real filesystem effect through whichever write tool the
+      // catalog actually advertises, using its own parameter names.
+      const writeTool = catalog.find(tool => /^write_file$/.test(tool.name))
+        ?? catalog.find(tool => /^write/.test(tool.name ?? ''));
+      let message;
+      if (writeTool && !writeAttempted) {
+        writeAttempted = true;
+        const properties = writeTool.parameters?.properties ?? {};
+        const pathKey = ['file_path', 'path', 'filePath'].find(key => key in properties) ?? 'file_path';
+        const args = { [pathKey]: '/deep-proof.txt', content: 'deep-agents-were-here' };
+        // Native tool_calls is an explicitly supported arrival shape
+        // (parseCompletion path 1), so the stub does not have to emulate the
+        // prompt protocol's JSON-object reply.
+        message = {
+          role: 'assistant', content: '',
+          tool_calls: [{
+            id: 'call-w', type: 'function',
+            function: { name: writeTool.name, arguments: JSON.stringify(args) },
+          }],
+        };
+      } else {
+        message = { role: 'assistant', content: JSON.stringify({ final: 'Deep Agents finished the task.' }) };
+      }
+      return {
+        ok: true, status: 200,
+        text: async () => JSON.stringify({ id: 'v', model: 'stub', choices: [{ message }] }),
+      };
+    },
+  });
+  router.saveProvider({
+    id: 'vmlang-e2e', label: 'VmLang', type: 'openai',
+    baseUrl: 'https://api.example.com/v1', model: 'stub',
+  }, 'sk-vmlang');
+  router.setDefault('vmlang', 'vmlang-e2e');
+
+  const outputs = [];
+  const activity = [];
+  let agentImportError = null;
+
+  const controller = new VmAgentController({
+    createAgent: async options => {
+      try {
+        const { createVMAgent } = await import('../../agent/dist/agent.js');
+        return createVMAgent(options);
+      } catch (error) { agentImportError = error; throw error; }
+    },
+    getLlmClient: (agent, route) => router.resolve(agent, route),
+    getGuest: () => guest,
+    approveAction: async () => true,
+    onOutput: async output => { outputs.push(String(output)); },
+    onActivity: event => { activity.push(event); },
+    onBusy: () => {},
+    guestProfile: 'Debian guest for the vmlang e2e.',
+  });
+
+  const bridge = new CheerpXHostBridge(runtime, {
+    llmResolver: (agent, route) => router.resolve(agent, route),
+  });
+  bridge.setAgentHandler((command, value, cwd, route) => controller.handle(command, value, cwd, route));
+  bridge.start();
+  await bridge.ready;
+
+  // --- the actual portability claim ----------------------------------------
+  // The plan predicted V86DeepAgentsBackend needs no changes because it
+  // consumes only the nine-method contract. It is a standalone module with no
+  // imports, so it can be exercised directly against the CheerpX guest client —
+  // a far more precise assertion than watching a stubbed graph.
+
+  const { V86DeepAgentsBackend } = await import('../../agent/src/guest-backend.js');
+  const backend = new V86DeepAgentsBackend(guest, { approve: async () => true });
+
+  // Every backend method resolves to an object and folds failures into
+  // { error } rather than throwing, so assertions check the payload.
+  const ok = (label, result) => {
+    if (result?.error) throw new Error(`${label}: ${result.error}`);
+    return result;
+  };
+
+  await check('DeepAgents backend: write + read round-trip', async () => {
+    ok('write', await backend.write('/backend-proof.txt', 'backend-was-here\n'));
+    const read = ok('read', await backend.read('/backend-proof.txt'));
+    if (!/backend-was-here/.test(read.content)) throw new Error(JSON.stringify(read));
+    const onGuest = await guest.read('backend-proof.txt');
+    if (onGuest !== 'backend-was-here\n') throw new Error(`guest disagrees: ${JSON.stringify(onGuest)}`);
+    return `content ${JSON.stringify(read.content)}, mimeType ${read.mimeType}`;
+  });
+
+  await check('DeepAgents backend: ls parses the guest listing', async () => {
+    const { files } = ok('ls', await backend.ls('/'));
+    const proof = files.find(entry => /backend-proof\.txt$/.test(entry.path ?? ''));
+    if (!proof) throw new Error(`no backend-proof.txt in ${JSON.stringify(files.slice(0, 5))}`);
+    // The FIELD_SEPARATOR hazard: splitting on a real tab only would leave every
+    // field after the first undefined, so ls would return pathless entries with
+    // is_dir undefined. Both fields being right is the real assertion here.
+    if (proof.is_dir !== false || proof.size !== 17) throw new Error(`parsed wrong: ${JSON.stringify(proof)}`);
+    return `${files.length} entries; ${JSON.stringify(proof)}`;
+  });
+
+  await check('DeepAgents backend: grep finds the match with a line number', async () => {
+    const { matches } = ok('grep', await backend.grep('backend-was-here', '/'));
+    const hit = matches.find(match => /backend-proof\.txt$/.test(match.path));
+    if (!hit) throw new Error(JSON.stringify(matches).slice(0, 200));
+    if (hit.line !== 1) throw new Error(`line number wrong: ${JSON.stringify(hit)}`);
+    return JSON.stringify(hit);
+  });
+
+  await check('DeepAgents backend: glob matches nested paths', async () => {
+    await guest.execute('mkdir -p nested && printf %s x > nested/inner.txt');
+    const nested = ok('glob **', await backend.glob('**/*.txt', '/'));
+    const flat = ok('glob *', await backend.glob('*.txt', '/'));
+    // `**/*.txt` is passed to `find -path`, where `*` already spans `/`, so it
+    // requires at least one directory level. A top-level file needs `*.txt`.
+    // That is upstream find semantics, identical on the v86 guest.
+    if (!JSON.stringify(nested.files).includes('nested/inner.txt')) {
+      throw new Error(`** did not match a nested file: ${JSON.stringify(nested.files)}`);
+    }
+    if (!JSON.stringify(flat.files).includes('backend-proof.txt')) {
+      throw new Error(`* did not match a top-level file: ${JSON.stringify(flat.files)}`);
+    }
+    return `** -> ${nested.files.length}, * -> ${flat.files.length}`;
+  });
+
+  await check('DeepAgents backend: edit_file replaces in place', async () => {
+    const result = ok('edit', await backend.edit('/backend-proof.txt', 'backend-was-here', 'backend-edited'));
+    const text = await guest.read('backend-proof.txt');
+    if (!/backend-edited/.test(text)) throw new Error(JSON.stringify(text));
+    return `${JSON.stringify(text)} (${result.occurrences} occurrence)`;
+  });
+
+  await check('DeepAgents backend: execute reports output and exit code', async () => {
+    const zero = await backend.execute('echo backend-shell-ok');
+    if (!/backend-shell-ok/.test(zero.output) || zero.exitCode !== 0) throw new Error(JSON.stringify(zero));
+    const failing = await backend.execute('exit 3');
+    if (failing.exitCode !== 3) throw new Error(`exit code lost: ${JSON.stringify(failing)}`);
+    return `${JSON.stringify(zero.output.trim())} exit=${zero.exitCode}; failure exit=${failing.exitCode}`;
+  });
+
+  await check('DeepAgents backend: delete removes the file', async () => {
+    ok('delete', await backend.delete('/backend-proof.txt'));
+    const gone = await guest.read('backend-proof.txt').then(() => false).catch(() => true);
+    if (!gone) throw new Error('the file survived deletion');
+    return 'deleted';
+  });
+
+  await check('DeepAgents backend: traversal is refused as an error payload', async () => {
+    const result = await backend.read('/../../etc/passwd');
+    if (!result.error) throw new Error(`traversal was NOT refused: ${JSON.stringify(result).slice(0, 200)}`);
+    if (!/\.\./.test(result.error)) throw new Error(`refused for the wrong reason: ${result.error}`);
+    return result.error;
+  });
+
+  // --- checks ---------------------------------------------------------------
+
+  await check('vmlang is installed and posts without blocking', async () => {
+    const started = Date.now();
+    const raw = await guest.execute('vmlang status');
+    const elapsed = Date.now() - started;
+    const output = strip(raw);
+    if (!/STATUS requested/.test(output)) throw new Error(JSON.stringify(output));
+    if (elapsed > 30000) throw new Error(`took ${elapsed} ms — it blocked on the RPC`);
+    return `${output.trim()} (${elapsed} ms)`;
+  });
+
+  await check('vmlang status is answered by the controller', async () => {
+    await waitFor(() => outputs.some(line => /\[vmlang\]/.test(line)), 30000);
+    return outputs.find(line => /\[vmlang\]/.test(line)).trim();
+  });
+
+  await check('vmlang yolo off routes through and is acknowledged', async () => {
+    const before = outputs.length;
+    await guest.execute('vmlang yolo off');
+    await waitFor(() => outputs.slice(before).some(line => /YOLO off/i.test(line)), 30000);
+    await guest.execute('vmlang yolo on');
+    return outputs.slice(before).find(line => /YOLO/i.test(line)).trim();
+  });
+
+  await check('vmlang run starts the Deep Agents harness', async () => {
+    const raw = await guest.execute('vmlang run "create a proof file"');
+    if (!/conversation started/.test(strip(raw))) throw new Error(strip(raw));
+    await waitFor(() => calls.length > 0 || agentImportError, 90000);
+    if (agentImportError) throw new Error(`agent bundle failed to load: ${agentImportError.message}`);
+    return `harness reached the model (${calls.length} call(s))`;
+  });
+
+  await check('Deep Agents advertised its tool set through the prompt protocol', async () => {
+    if (!offeredTools.size) {
+      throw new Error('no "Available tools:" catalog appeared in the system prompt');
+    }
+    return [...offeredTools].sort().join(', ');
+  });
+
+  await check('tools travel in the prompt, not as an OpenAI tools array', async () => {
+    // Worth pinning: a cloud provider would support native function calling,
+    // but this tier does not use it, so anyone reading the wire sees no tools.
+    const withArray = calls.filter(body => Array.isArray(body.tools) && body.tools.length);
+    if (withArray.length) throw new Error(`${withArray.length} call(s) sent a tools array`);
+    return `${calls.length} call(s), none carrying a tools array`;
+  });
+
+  await check('the run terminated cleanly rather than hanging or throwing', async () => {
+    await waitFor(() => outputs.some(line => /finished|Error:|no output/.test(line)), 120000);
+    const final = outputs.at(-1) ?? '';
+    if (/Error:/.test(final)) throw new Error(final.slice(0, 300));
+    return final.trim().slice(0, 200);
+  });
+
+  record('graph completed a tool round-trip under the stub', 'skip',
+    'Not asserted. The stub answers with native tool_calls, which parseCompletion accepts, ' +
+    'but the deepagents graph ends after one turn instead of looping back — so a filesystem ' +
+    'effect cannot be driven this way. The backend checks above cover the provider claim; ' +
+    'the full graph needs a real model that follows the prompt protocol.');
+
+  await check('tool activity was reported', async () => {
+    if (!activity.length) throw new Error('no onActivity events were emitted');
+    return `${activity.length} event(s); first: ${JSON.stringify(activity[0]).slice(0, 160)}`;
+  });
+
+  // Diagnostics for when a run halts silently: the harness swallows tool
+  // failures into "the agent returned no output", which says nothing about why.
+  state.diagnostics = {
+    modelCalls: calls.length,
+    lastSystemPromptTail: (calls.at(-1)?.messages?.find(m => m.role === 'system')?.content ?? '').slice(-400),
+    lastMessages: (calls.at(-1)?.messages ?? []).map(m => ({ role: m.role, content: String(m.content).slice(0, 200) })),
+    outputs,
+    activity,
+  };
+
+  bridge.stop();
+  state.done = true;
+  const failed = results.filter(r => r.verdict === 'fail');
+  state.failed = failed.length;
+  setStatus(failed.length
+    ? `${failed.length} FAILED: ${failed.map(f => f.name).join('; ')}`
+    : `ALL PASSED (${results.length} checks)`);
+} catch (error) {
+  record('fatal', 'fail', error?.stack ?? error?.message ?? error);
+  state.done = true;
+  state.failed = (state.failed ?? 0) + 1;
+  setStatus('FATAL: ' + (error?.message ?? error));
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>S-4 — cross-origin isolation vs the LiteRT stack</title>
+<style>
+  body { margin: 0; padding: 18px; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #f0f6fc; }
+  p.lede { margin: 0 0 16px; color: #8b949e; }
+  table { border-collapse: collapse; width: 100%; max-width: 1000px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .pass { color: #3fb950; } .fail { color: #f85149; } .warn { color: #d29922; }
+  code { font: 12px ui-monospace, Consolas, monospace; color: #79c0ff; }
+  #summary { margin: 16px 0 0; padding: 12px; border: 1px solid #30363d; border-radius: 7px; max-width: 1000px; }
+</style>
+</head>
+<body>
+<h1>S-4 — does cross-origin isolation break the LiteRT stack?</h1>
+<p class="lede">
+  Serve this page at <code>/network/test/…</code> (plain) and at <code>/cx/network/test/…</code>
+  (COOP + COEP) and compare. Everything the CheerpX page needs must pass in the isolated column.
+</p>
+<table>
+  <thead><tr><th style="width:26%">Check</th><th style="width:12%">Result</th><th>Detail</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<div id="summary">running…</div>
+
+<script type="module">
+const rows = document.getElementById('rows');
+const results = [];
+
+function record(name, state, detail) {
+  results.push({ name, state, detail });
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${name}</td><td class="${state}">${state.toUpperCase()}</td><td><code></code></td>`;
+  tr.querySelector('code').textContent = String(detail ?? '');
+  rows.appendChild(tr);
+}
+
+async function check(name, fn, { required = true } = {}) {
+  try {
+    const detail = await fn();
+    record(name, 'pass', detail);
+    return true;
+  } catch (error) {
+    record(name, required ? 'fail' : 'warn', error?.message ?? error);
+    return false;
+  }
+}
+
+// --- environment ------------------------------------------------------------
+record('crossOriginIsolated', globalThis.crossOriginIsolated ? 'pass' : 'warn',
+  String(globalThis.crossOriginIsolated));
+record('SharedArrayBuffer', typeof SharedArrayBuffer !== 'undefined' ? 'pass' : 'warn',
+  typeof SharedArrayBuffer);
+record('WebGPU adapter API', 'pass', navigator.gpu ? 'navigator.gpu present' : 'navigator.gpu ABSENT');
+
+// --- same-origin subresources (should be unaffected by COEP) ----------------
+await check('same-origin module import (LiteRT client)', async () => {
+  const module = await import('../../shared/litert-lm-client.js');
+  if (!module.LiteRtLmClient) throw new Error('LiteRtLmClient missing from module');
+  return 'LiteRtLmClient, StreamingTextFilter, completionWithToolCall';
+});
+
+await check('same-origin LiteRT runtime entry', async () => {
+  const module = await import('../../llm/vendor/litert-lm/dist/index.js');
+  return `exports: ${Object.keys(module).length}`;
+});
+
+await check('same-origin LiteRT wasm asset fetch', async () => {
+  const base = new URL('../../llm/vendor/litert-lm/wasm/', import.meta.url);
+  const response = await fetch(new URL('litertlm_wasm_internal.js', base));
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return `HTTP ${response.status}, ${response.headers.get('content-length') ?? '?'} bytes`;
+});
+
+// --- OPFS (where imported models live) --------------------------------------
+await check('OPFS root directory', async () => {
+  const root = await navigator.storage.getDirectory();
+  return root.constructor.name;
+});
+
+await check('OPFS model directory (create + list)', async () => {
+  const root = await navigator.storage.getDirectory();
+  const dir = await root.getDirectoryHandle('vm-litert-models', { create: true });
+  const names = [];
+  for await (const name of dir.keys()) names.push(name);
+  return names.length ? names.join(', ') : '(empty, directory usable)';
+});
+
+await check('OPFS write + read back', async () => {
+  const root = await navigator.storage.getDirectory();
+  const dir = await root.getDirectoryHandle('vm-litert-models', { create: true });
+  const handle = await dir.getFileHandle('s4-probe.bin', { create: true });
+  const writable = await handle.createWritable();
+  await writable.write(new Uint8Array([1, 2, 3, 4]));
+  await writable.close();
+  const size = (await handle.getFile()).size;
+  await dir.removeEntry('s4-probe.bin');
+  return `wrote and read ${size} bytes`;
+});
+
+// --- the newly-discovered cross-origin dependency ---------------------------
+// The npm package is a shim that dynamically imports Leaning's CDN at runtime,
+// so CheerpX is a CROSS-ORIGIN module import. This is the check that actually
+// decides require-corp vs credentialless.
+await check('CheerpX CDN reachable', async () => {
+  const response = await fetch('../../vendor/cheerpx/1.3.7/cx.esm.js');
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  // Do NOT read cross-origin-resource-policy here and conclude anything from
+  // it. The CDN does send it (verified with curl), but its
+  // Access-Control-Expose-Headers lists only content-length and content-range,
+  // so CORP is invisible to script and always reads as null. The import check
+  // below is the real evidence: under COEP it cannot succeed without CORP.
+  return `HTTP ${response.status}, ${response.headers.get('content-length') ?? '?'} bytes`;
+});
+
+await check('CheerpX cross-origin module import', async () => {
+  const module = await import('../../vendor/cheerpx/1.3.7/cx.esm.js');
+  const names = Object.keys(module).sort();
+  if (!names.includes('Linux')) throw new Error(`no Linux export; got ${names.join(', ')}`);
+  return names.join(', ');
+});
+
+// --- summary ----------------------------------------------------------------
+const failed = results.filter(r => r.state === 'fail');
+const warned = results.filter(r => r.state === 'warn');
+const summary = document.getElementById('summary');
+summary.innerHTML =
+  `<strong class="${failed.length ? 'fail' : 'pass'}">` +
+  `${failed.length ? `${failed.length} FAILED` : 'ALL REQUIRED CHECKS PASSED'}</strong> — ` +
+  `${results.length} checks, ${warned.length} warnings.` +
+  (failed.length ? `<br>Failed: ${failed.map(f => f.name).join('; ')}` : '');
+globalThis.__S4__ = { results, failed: failed.length, warned: warned.length,
+  crossOriginIsolated: globalThis.crossOriginIsolated };
+</script>
+</body>
+</html>

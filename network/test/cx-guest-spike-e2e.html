@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>S-1 / S-2 — CheerpX run() concurrency and host↔guest file transfer</title>
+<style>
+  body { margin: 0; padding: 18px; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #f0f6fc; }
+  p.lede { margin: 0 0 14px; color: #8b949e; max-width: 90ch; }
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .pass { color: #3fb950; } .fail { color: #f85149; } .warn { color: #d29922; } .info { color: #58a6ff; }
+  code, pre { font: 12px ui-monospace, Consolas, monospace; color: #79c0ff; }
+  pre { background: #010409; border: 1px solid #21262d; border-radius: 6px; padding: 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; }
+  #status { margin: 12px 0; padding: 10px 12px; border: 1px solid #30363d; border-radius: 7px; max-width: 1100px; }
+</style>
+</head>
+<body>
+<h1>S-1 / S-2 — CheerpX <code>run()</code> concurrency and host↔guest file transfer</h1>
+<p class="lede">
+  Boots a public Debian ext2 (WebVM's disk) purely to answer two questions the guest-client
+  design depends on: can <code>cx.run()</code> be called while an interactive shell is live,
+  and can JavaScript read a file the guest just wrote. Must be served
+  cross-origin-isolated — see <code>cx-isolation-runner.mjs</code>.
+</p>
+<div id="status">booting…</div>
+<table>
+  <thead><tr><th style="width:28%">Check</th><th style="width:10%">Result</th><th>Detail</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<h2 style="font-size:13px;color:#8b949e;margin:18px 0 6px;">Console capture (all VTs)</h2>
+<pre id="console">(waiting)</pre>
+
+<script type="module">
+// Defaults target WebVM's public disk so the spike runs with no local build.
+// Point it at our own image once built:
+//   ?disk=/images/cheerpx/vmbro-debian-i386.ext2&in=/vmbro/in&out=/vmbro/out&uid=0&gid=0&home=/root&cwd=/root/project
+const params = new URLSearchParams(location.search);
+const DISK = params.get('disk') || 'wss://disks.webvm.io/debian_buster_large_permis_fixed_01-06-2026.ext2';
+const UID = Number(params.get('uid') ?? 1000);
+const GID = Number(params.get('gid') ?? 1000);
+const HOME = params.get('home') || '/home/user';
+const CWD = params.get('cwd') || HOME;
+
+const rows = document.getElementById('rows');
+const statusEl = document.getElementById('status');
+const consoleEl = document.getElementById('console');
+const results = [];
+const state = { results, done: false, phase: 'boot' };
+globalThis.__S12__ = state;
+
+const setStatus = text => { statusEl.textContent = text; state.phase = text; };
+
+function record(name, verdict, detail) {
+  results.push({ name, verdict, detail: String(detail ?? '') });
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${name}</td><td class="${verdict}">${verdict.toUpperCase()}</td><td><code></code></td>`;
+  tr.querySelector('code').textContent = String(detail ?? '');
+  rows.appendChild(tr);
+}
+
+async function check(name, fn) {
+  try { record(name, 'pass', await fn()); return true; }
+  catch (error) { record(name, 'fail', error?.message ?? error); return false; }
+}
+
+// --- console plumbing -------------------------------------------------------
+const decoder = new TextDecoder();
+let consoleText = '';
+const vtsSeen = new Set();
+function onConsole(buffer, vt) {
+  vtsSeen.add(vt);
+  consoleText += decoder.decode(buffer, { stream: true });
+  if (consoleText.length > 40000) consoleText = consoleText.slice(-40000);
+  consoleEl.textContent = consoleText;
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+const waitFor = (predicate, timeoutMs, label) => new Promise((resolve, reject) => {
+  const started = Date.now();
+  const timer = setInterval(() => {
+    if (predicate()) { clearInterval(timer); resolve(Date.now() - started); }
+    else if (Date.now() - started > timeoutMs) { clearInterval(timer); reject(new Error(`timeout waiting for ${label}`)); }
+  }, 150);
+});
+
+try {
+  if (!globalThis.crossOriginIsolated) throw new Error('page is not cross-origin isolated');
+
+  setStatus('importing CheerpX…');
+  const CheerpX = await import('../../vendor/cheerpx/1.3.7/cx.esm.js');
+  record('CheerpX import', 'pass', Object.keys(CheerpX).length + ' exports');
+
+  setStatus('creating devices…');
+  // wss:// is Leaning's streaming disk protocol (CloudDevice); anything else is
+  // a plain HTTP(S) range-served file (HttpBytesDevice), which is how our own
+  // built images are consumed.
+  const block = DISK.startsWith('wss://') || DISK.startsWith('ws://')
+    ? await CheerpX.CloudDevice.create(DISK)
+    : await CheerpX.HttpBytesDevice.create(new URL(DISK, location.href).href);
+  record('block device', 'pass', `${DISK.startsWith('ws') ? 'CloudDevice' : 'HttpBytesDevice'} ${DISK}`);
+  const idbRoot = await CheerpX.IDBDevice.create('vmbro-spike-root');
+  const overlay = await CheerpX.OverlayDevice.create(block, idbRoot);
+  const dataIn  = await CheerpX.DataDevice.create();
+  const idbOut  = await CheerpX.IDBDevice.create('vmbro-spike-out');
+  record('devices created', 'pass', 'CloudDevice + Overlay(IDB) + DataDevice + IDBDevice');
+
+  setStatus('booting Linux…');
+  const bootStarted = Date.now();
+  // Mount paths must have an EXISTING parent directory in the base image:
+  // "/vmbro/in" fails on stock Debian with "Parent directory does not exist".
+  // /mnt exists, so the spike hangs its mounts there. The real image will
+  // pre-create /vmbro in the Dockerfile instead.
+  const IN = params.get('in') || '/mnt/vmbro-in';
+  const OUT = params.get('out') || '/mnt/vmbro-out';
+  // Linux.create does not reliably reject on a bad mount — the failure arrives
+  // as an uncaught rejection and the await never settles. Race it.
+  const cx = await Promise.race([
+    CheerpX.Linux.create({
+      mounts: [
+        { type: 'ext2', path: '/',   dev: overlay },
+        { type: 'dir',  path: IN,    dev: dataIn  },
+        { type: 'dir',  path: OUT,   dev: idbOut  },
+        { type: 'devs', path: '/dev'  },
+        { type: 'proc', path: '/proc' },
+      ],
+    }),
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error('Linux.create did not settle within 180s — check console for mount errors')), 180000)),
+  ]);
+  record('Linux.create', 'pass', `${Date.now() - bootStarted} ms; mounts at ${IN} and ${OUT}`);
+
+  globalThis.__CX__ = cx; // ad-hoc probing from the devtools/automation console
+  const send = cx.setCustomConsole(onConsole, 120, 40);
+  record('setCustomConsole', 'pass', typeof send === 'function' ? 'returned send(keyCode)' : String(typeof send));
+
+  // ---------------------------------------------------------------------
+  // S-1: is run() usable while an interactive shell is live?
+  // ---------------------------------------------------------------------
+  setStatus('S-1: starting interactive shell…');
+  const shellEnv = [`HOME=${HOME}`, `USER=${UID === 0 ? 'root' : 'user'}`, 'TERM=xterm-256color', 'LANG=C.UTF-8'];
+  let shellSettled = null;
+  const shell = cx.run('/bin/bash', ['--login'], { env: shellEnv, cwd: CWD, uid: UID, gid: GID })
+    .then(r => { shellSettled = `resolved status ${r?.status}`; return r; })
+    .catch(e => { shellSettled = `rejected: ${e?.message ?? e}`; });
+
+  await check('interactive shell produces output', async () => {
+    const ms = await waitFor(() => consoleText.length > 0, 90000, 'shell output');
+    return `first output after ${ms} ms; VTs seen: ${[...vtsSeen].join(',') || 'none'}`;
+  });
+
+  const concurrentOk = await check('S-1 concurrent run() while shell is live', async () => {
+    if (shellSettled) throw new Error(`shell already exited (${shellSettled}) — not a concurrency test`);
+    const started = Date.now();
+    const result = await cx.run('/bin/echo', ['vmbro-concurrent-ok'], { env: shellEnv, cwd: CWD, uid: UID, gid: GID });
+    return `status ${result?.status} in ${Date.now() - started} ms (shell still live: ${!shellSettled})`;
+  });
+
+  await check('S-1 second concurrent run() returns a real exit code', async () => {
+    const result = await cx.run('/bin/sh', ['-c', 'exit 42'], { env: shellEnv, cwd: CWD, uid: UID, gid: GID });
+    if (result?.status !== 42) throw new Error(`expected status 42, got ${result?.status}`);
+    return 'exit code propagates verbatim (42)';
+  });
+
+  await check('S-1 parallel run() calls both complete', async () => {
+    const started = Date.now();
+    const [a, b] = await Promise.all([
+      cx.run('/bin/sh', ['-c', 'sleep 1; exit 7'], { env: shellEnv, cwd: CWD, uid: UID, gid: GID }),
+      cx.run('/bin/sh', ['-c', 'sleep 1; exit 9'], { env: shellEnv, cwd: CWD, uid: UID, gid: GID }),
+    ]);
+    return `statuses ${a?.status}/${b?.status} in ${Date.now() - started} ms`;
+  });
+
+  // Concurrency that is merely *safe* and concurrency that is *parallel* imply
+  // different guidance: if run() is internally serialised, issuing commands in
+  // parallel buys nothing and agents must keep batching. Measure, don't assume.
+  await check('S-1 parallel vs serial timing (is it real parallelism?)', async () => {
+    const opts = { env: shellEnv, cwd: CWD, uid: UID, gid: GID };
+    const sleep = n => cx.run('/bin/sh', ['-c', `sleep ${n}`], opts);
+
+    const t0 = Date.now();
+    await sleep(2);
+    const solo = Date.now() - t0;
+
+    const t1 = Date.now();
+    await Promise.all([sleep(2), sleep(2), sleep(2)]);
+    const trio = Date.now() - t1;
+
+    const ratio = trio / solo;
+    state.parallelism = { soloMs: solo, trioMs: trio, ratio: Number(ratio.toFixed(2)) };
+    const verdict = ratio < 1.6 ? 'TRUE PARALLELISM'
+      : ratio > 2.4 ? 'SERIALISED'
+      : 'PARTIAL/UNCLEAR';
+    return `1x sleep2=${solo}ms, 3x parallel sleep2=${trio}ms, ratio=${ratio.toFixed(2)} => ${verdict}`;
+  });
+
+  // ---------------------------------------------------------------------
+  // S-2: host <-> guest file transfer
+  // ---------------------------------------------------------------------
+  setStatus('S-2: host↔guest file transfer…');
+
+  await check('S-2 host→guest via DataDevice.writeFile', async () => {
+    await dataIn.writeFile('/probe.txt', 'vmbro-host-to-guest');
+    const result = await cx.run('/bin/sh', ['-c', `grep -q vmbro-host-to-guest ${IN}/probe.txt`], {
+      env: shellEnv, cwd: CWD, uid: UID, gid: GID,
+    });
+    if (result?.status !== 0) throw new Error(`guest could not read it (status ${result?.status})`);
+    return 'guest read the host-written file';
+  });
+
+  await check('S-2 guest→host via IDBDevice.readFileAsBlob', async () => {
+    const payload = 'vmbro-guest-to-host-' + 'x'.repeat(500);
+    const write = await cx.run('/bin/sh', ['-c', `printf '%s' '${payload}' > ${OUT}/probe.out`], {
+      env: shellEnv, cwd: CWD, uid: UID, gid: GID,
+    });
+    if (write?.status !== 0) throw new Error(`guest write failed (status ${write?.status})`);
+    // Path is device-relative, not guest-absolute; try both to learn which.
+    let blob, used;
+    for (const candidate of ['/probe.out', `${OUT}/probe.out`]) {
+      try { blob = await idbOut.readFileAsBlob(candidate); used = candidate; break; } catch { /* try next */ }
+    }
+    if (!blob) throw new Error('readFileAsBlob rejected both device-relative and guest-absolute paths');
+    const text = await blob.text();
+    if (text !== payload) throw new Error(`content mismatch: ${text.length} bytes vs ${payload.length}`);
+    return `read ${blob.size} bytes intact using path "${used}"`;
+  });
+
+  await check('S-2 stdout capture via redirect + readFileAsBlob', async () => {
+    const result = await cx.run('/bin/sh', ['-c', 'uname -m; echo done > /dev/null'], {
+      env: shellEnv, cwd: CWD, uid: UID, gid: GID,
+    });
+    void result;
+    const run = await cx.run('/bin/sh', ['-c', `{ uname -m; } >${OUT}/cmd.out 2>${OUT}/cmd.err`], {
+      env: shellEnv, cwd: CWD, uid: UID, gid: GID,
+    });
+    const out = (await (await idbOut.readFileAsBlob('/cmd.out')).text()).trim();
+    return `exit ${run?.status}, stdout="${out}" — this is the execute() primitive`;
+  });
+
+  state.done = true;
+  const failed = results.filter(r => r.verdict === 'fail');
+  setStatus(failed.length
+    ? `${failed.length} FAILED: ${failed.map(f => f.name).join('; ')}`
+    : `ALL PASSED (${results.length} checks). S-1 concurrent=${concurrentOk}`);
+  state.failed = failed.length;
+} catch (error) {
+  record('fatal', 'fail', error?.stack ?? error?.message ?? error);
+  state.done = true;
+  state.failed = (state.failed ?? 0) + 1;
+  setStatus('FATAL: ' + (error?.message ?? error));
+}
+</script>
+</body>
+</html>

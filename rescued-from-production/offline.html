@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#161b22">
+  <title>VMVM is offline</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; color: #c9d1d9; background: #0d1117; }
+    main { width: min(420px, calc(100% - 40px)); text-align: center; }
+    img { width: 88px; height: 88px; }
+    h1 { color: #f0f6fc; }
+    p { line-height: 1.5; color: #8b949e; }
+    button { min-height: 48px; padding: 0 20px; color: #f0f6fc; background: #1f6feb; border: 0; border-radius: 7px; font-weight: 650; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/assets/vmvm-icon-192.png" alt="VMVM">
+    <h1>VMVM is offline</h1>
+    <p>Reconnect to load uncached VM images and network facilities. A previously cached VM may be available after the app shell reconnects.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>

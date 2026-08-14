@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CheerpX agents — rig against a real guest</title>
+<style>
+  body { margin: 0; padding: 18px; background: #0d1117; color: #c9d1d9; font: 14px system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #f0f6fc; }
+  p.lede { margin: 0 0 14px; color: #8b949e; max-width: 92ch; }
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .pass { color: #3fb950; } .fail { color: #f85149; }
+  code { font: 12px ui-monospace, Consolas, monospace; color: #79c0ff; white-space: pre-wrap; }
+  #status { margin: 12px 0; padding: 10px 12px; border: 1px solid #30363d; border-radius: 7px; max-width: 1100px; }
+</style>
+</head>
+<body>
+<h1>CheerpX agents — <code>rig</code> against a real guest</h1>
+<p class="lede">
+  The whole point of building the guest client to the v86 contract: <code>VmAgentController</code>
+  is the shared module, imported unchanged. The model is stubbed at the router's
+  <code>fetchImpl</code> so the tool-calling loop is deterministic — everything between the
+  guest command and the filesystem effect is real.
+</p>
+<div id="status">booting…</div>
+<table>
+  <thead><tr><th style="width:32%">Check</th><th style="width:9%">Result</th><th>Detail</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script type="module">
+import { createRuntime } from '../../providers/cheerpx/runtime.js';
+import { CheerpXGuestClient } from '../../providers/cheerpx/guest-client.js';
+import { CheerpXHostBridge } from '../../providers/cheerpx/host-bridge.js';
+import { LlmProviderRouter } from '../../shared/llm-provider-router.js';
+import { VmAgentController, V86_GUEST_PROFILE } from '../../shared/vmagent-controller.js';
+
+const params = new URLSearchParams(location.search);
+const DISK = params.get('disk') || '/images/cheerpx/vmbro-debian-i386.ext2';
+
+const rows = document.getElementById('rows');
+const statusEl = document.getElementById('status');
+const results = [];
+const state = { results, done: false, phase: 'boot' };
+globalThis.__CXAGENT__ = state;
+
+const setStatus = t => { statusEl.textContent = t; state.phase = t; };
+function record(name, verdict, detail) {
+  results.push({ name, verdict, detail: String(detail ?? '') });
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${name}</td><td class="${verdict}">${verdict.toUpperCase()}</td><td><code></code></td>`;
+  tr.querySelector('code').textContent = String(detail ?? '').slice(0, 400);
+  rows.appendChild(tr);
+}
+async function check(name, fn) {
+  try { record(name, 'pass', await fn()); return true; }
+  catch (error) { record(name, 'fail', error?.message ?? error); return false; }
+}
+const strip = raw => raw.replace(/^__V86AGENT_EXIT__\d+\n/, '');
+const settle = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+try {
+  setStatus('booting CheerpX…');
+  const runtime = await createRuntime({ diskUrl: DISK, tier: 'agent-e2e', onProgress: p => setStatus(p.message) });
+  const guest = new CheerpXGuestClient(runtime, { workspace: '/root/project' });
+  record('createRuntime', 'pass', `booted in ${runtime.bootMs} ms`);
+
+  // --- deterministic model --------------------------------------------------
+  // Scripted turns: first a shell tool call, then a plain answer. The tool call
+  // has to actually reach the guest for the file to exist afterwards.
+  const prompts = [];
+  let turn = 0;
+  const router = new LlmProviderRouter({
+    getLocalClient: () => { throw new Error('local model not loaded'); },
+    fetchImpl: async (url, init) => {
+      prompts.push(JSON.parse(init.body));
+      turn += 1;
+      const message = turn === 1
+        ? {
+            role: 'assistant', content: '',
+            tool_calls: [{
+              id: 'call-1', type: 'function',
+              function: { name: 'shell', arguments: JSON.stringify({ command: 'printf %s agent-was-here > proof.txt' }) },
+            }],
+          }
+        : { role: 'assistant', content: 'Wrote proof.txt.' };
+      return {
+        ok: true, status: 200,
+        text: async () => JSON.stringify({ id: 't', model: 'stub', choices: [{ message }] }),
+      };
+    },
+  });
+  router.saveProvider({
+    id: 'agent-e2e', label: 'Agent', type: 'openai',
+    baseUrl: 'https://api.example.com/v1', model: 'stub',
+  }, 'sk-agent');
+  router.setDefault('rig', 'agent-e2e');
+
+  const outputs = [];
+  const DEBIAN_PROFILE =
+    'You are a concise coding agent in /root/project on 32-bit Debian Linux with bash and GNU coreutils. ' +
+    'There is no default route; use vmfetch instead of curl. /dev/zero is not present.';
+
+  const controller = new VmAgentController({
+    createAgent: async () => { throw new Error('vmlang not exercised here'); },
+    getLlmClient: (agent, route) => router.resolve(agent, route),
+    getGuest: () => guest,
+    approveAction: async () => true,
+    onOutput: async output => { outputs.push(String(output)); },
+    onBusy: () => {},
+    guestProfile: DEBIAN_PROFILE,
+  });
+
+  const bridge = new CheerpXHostBridge(runtime, {
+    llmResolver: (agent, route) => router.resolve(agent, route),
+  });
+  bridge.setAgentHandler((command, value, cwd, route) => controller.handle(command, value, cwd, route));
+  bridge.start();
+  await bridge.ready;
+  record('controller wired', 'pass', 'shared VmAgentController imported unchanged');
+
+  // --- checks ---------------------------------------------------------------
+
+  await check('rig is installed and returns immediately (fire-and-forget)', async () => {
+    const started = Date.now();
+    const raw = await guest.execute('rig "write a proof file"');
+    const elapsed = Date.now() - started;
+    const output = strip(raw);
+    if (!/submitted to the browser agent/.test(output)) throw new Error(JSON.stringify(output));
+    if (elapsed > 30000) throw new Error(`took ${elapsed} ms — it looks like it blocked on the RPC`);
+    return `${output.trim()} (${elapsed} ms)`;
+  });
+
+  await check('the agent ran its tool call against the real guest filesystem', async () => {
+    for (let attempt = 0; attempt < 40 && turn < 2; attempt += 1) await settle(250);
+    if (turn < 2) throw new Error(`the model was called ${turn} time(s); the loop did not complete`);
+    const proof = await guest.read('proof.txt').catch(() => null);
+    if (proof !== 'agent-was-here') throw new Error(`proof.txt is ${JSON.stringify(proof)}`);
+    return 'proof.txt written by the agent through guest.execute()';
+  });
+
+  await check('the model saw the injected Debian profile, not the Alpine one', async () => {
+    const system = prompts[0]?.messages?.find(message => message.role === 'system')?.content ?? '';
+    if (/Alpine|BusyBox/.test(system)) throw new Error(`system prompt still describes Alpine: ${system.slice(0, 120)}`);
+    if (!/Debian/.test(system)) throw new Error(`system prompt does not describe the real guest: ${system.slice(0, 120)}`);
+    return system.slice(0, 120) + '…';
+  });
+
+  await check('the v86 default profile is unchanged for the other provider', async () => {
+    if (!/Alpine Linux with BusyBox sh/.test(V86_GUEST_PROFILE)) {
+      throw new Error('the v86 default profile has drifted');
+    }
+    return 'V86_GUEST_PROFILE still describes the Alpine guest';
+  });
+
+  await check('the tool result was fed back to the model', async () => {
+    const second = prompts[1];
+    if (!second) throw new Error('there was no second model call');
+    const toolMessage = second.messages.find(message => message.role === 'tool');
+    if (!toolMessage) throw new Error('no tool result message was sent back');
+    if (!/__V86AGENT_EXIT__0/.test(String(toolMessage.content))) {
+      throw new Error(`tool result lost its exit framing: ${JSON.stringify(String(toolMessage.content).slice(0, 80))}`);
+    }
+    return `tool result carried back: ${JSON.stringify(String(toolMessage.content).slice(0, 60))}`;
+  });
+
+  await check('the final answer reached the terminal callback', async () => {
+    const joined = outputs.join('\n');
+    if (!/Wrote proof\.txt/.test(joined)) throw new Error(JSON.stringify(joined.slice(0, 200)));
+    return joined.trim().split('\n').slice(-1)[0];
+  });
+
+  await check('rig --codeact reaches the controller as a distinct command', async () => {
+    const before = turn;
+    const raw = await guest.execute('rig --codeact "one-shot task"');
+    if (!/submitted/.test(strip(raw))) throw new Error(strip(raw));
+    for (let attempt = 0; attempt < 20 && turn === before; attempt += 1) await settle(250);
+    if (turn === before) throw new Error('codeact never reached the model');
+    return `model called again (turn ${turn})`;
+  });
+
+  bridge.stop();
+  state.done = true;
+  const failed = results.filter(r => r.verdict === 'fail');
+  state.failed = failed.length;
+  setStatus(failed.length
+    ? `${failed.length} FAILED: ${failed.map(f => f.name).join('; ')}`
+    : `ALL PASSED (${results.length} checks)`);
+} catch (error) {
+  record('fatal', 'fail', error?.stack ?? error?.message ?? error);
+  state.done = true;
+  state.failed = (state.failed ?? 0) + 1;
+  setStatus('FATAL: ' + (error?.message ?? error));
+}
+</script>
+</body>
+</html>
