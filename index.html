@@ -15,7 +15,8 @@
 <link rel="stylesheet" href="xterm.css">
 <script>
   document.documentElement.dataset.theme =
-    localStorage.getItem("vm.theme") || "dark";
+    localStorage.getItem("vm.theme") ||
+    (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
 </script>
 <style>
   :root { color-scheme: dark; }
@@ -669,6 +670,11 @@ function finishBoot(showTerminal = true) {
     bootReady = true;
     shellReady = true;
     window.dispatchEvent(new Event("vmvm-shell-ready"));
+    // Booted successfully, so any fault held over from a previous session is
+    // stale by definition. After the dispatch, not before: boot-source.test.mjs
+    // pins shellReady and the event as adjacent so the LiteRT runtime provably
+    // waits for the shell, and this is local UI cleanup that no listener reads.
+    clearStaleRuntimeFault();
     bootOverlay.classList.add("done");
     if (showTerminal) {
       term.clear();
@@ -839,10 +845,37 @@ document.getElementById("restart-compatibility").onclick = () => {
 document.getElementById("dismiss-runtime-warning").onclick = () => {
   runtimeWarning.hidden = true;
   lastRuntimeFault = null;
+  showingPreviousFault = false;
   localStorage.removeItem(RUNTIME_FAULT_KEY);
   status(shellReady ? "Shell ready" : "Starting VMVM…");
 };
-if (lastRuntimeFault) showRuntimeFault(lastRuntimeFault, true);
+// True while the banner is showing a fault carried over from an earlier
+// session rather than one that happened just now. See clearStaleRuntimeFault.
+let showingPreviousFault = false;
+if (lastRuntimeFault) { showRuntimeFault(lastRuntimeFault, true); showingPreviousFault = true; }
+
+/**
+ * Forget a carried-over fault once the VM boots successfully.
+ *
+ * The record is written to localStorage so a fault survives the reload it
+ * usually triggers, which is the point -- otherwise the evidence disappears
+ * exactly when you reload to investigate. But nothing ever cleared it except
+ * the Dismiss button, so a single bad boot left "Previous virtual disk error"
+ * on the page for every future visit, describing something that no longer
+ * happens. A fault that did not recur on a boot that worked is not evidence,
+ * it is noise.
+ *
+ * Only carried-over faults are cleared. One recorded in this session stays put:
+ * it describes what is happening now, and the shell reaching ready does not
+ * make it untrue.
+ */
+function clearStaleRuntimeFault() {
+  if (!showingPreviousFault) return;
+  showingPreviousFault = false;
+  lastRuntimeFault = null;
+  runtimeWarning.hidden = true;
+  try { localStorage.removeItem(RUNTIME_FAULT_KEY); } catch {}
+}
 let compatibilityBoot = bootOptions.get("compat") === "1";
 
 async function rangePreflight() {
