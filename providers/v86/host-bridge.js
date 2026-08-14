@@ -157,6 +157,17 @@ export class V86HostBridge extends EventTarget {
       result = completion?.choices?.[0]?.message?.content ?? completion;
     } else if (operation === "completion") {
       result = await client.chat(JSON.parse(decodeText(body64)));
+    } else if (typeof client.chatStream === "function") {
+      // Stream the SSE out as tokens arrive.
+      //
+      // This used to await client.chat() and convert the finished completion,
+      // which meant the guest saw nothing until generation was entirely done.
+      // The guest asked to stream and the transport already supported it -- PART
+      // frames are sequenced and acknowledged one at a time -- so the buffering
+      // was purely this function's doing. On a local WebGPU model answering an
+      // agent prompt that is minutes of silence, indistinguishable from a hang.
+      await this.streamOpenAi(id, client, JSON.parse(decodeText(body64)));
+      return;
     } else {
       const completion = await client.chat(JSON.parse(decodeText(body64)));
       result = this.openAiSse(completion);
@@ -194,6 +205,54 @@ export class V86HostBridge extends EventTarget {
       if (received) return;
     }
     throw new Error(`guest did not acknowledge LLM response chunk ${sequence}`);
+  }
+
+  /**
+   * Run a chat completion and emit OpenAI SSE frames to the guest as they are
+   * produced.
+   *
+   * Frame order matters to clients: one role delta first, then content deltas,
+   * then a finish_reason frame, then [DONE]. Sending content before the role
+   * frame makes strict parsers discard the first token.
+   *
+   * Each delta is flushed immediately rather than batched. Batching would undo
+   * the point, and the reliableReply ack loop already bounds how fast frames can
+   * go out.
+   */
+  async streamOpenAi(id, client, body) {
+    const base = {
+      id: `vm-${Date.now()}`,
+      object: "chat.completion.chunk",
+      model: body?.model || "webgpu",
+      usage: null,
+    };
+    let sequence = 0;
+    const send = async text => {
+      const encoded = encodeText(text);
+      for (let offset = 0; offset < encoded.length; offset += 256) {
+        await this.reliableReply(id, sequence, "PART", encoded.slice(offset, offset + 256));
+        sequence += 1;
+      }
+    };
+    const frame = choice => `data: ${JSON.stringify({ ...base, choices: [choice] })}\n\n`;
+
+    await send(frame({ index: 0, delta: { role: "assistant" }, finish_reason: null }));
+    let finish = "stop";
+    try {
+      await client.chatStream(body, async delta => {
+        if (delta) await send(frame({ index: 0, delta: { content: delta }, finish_reason: null }));
+      });
+    } catch (error) {
+      // The stream is already open, so the guest cannot be given an HTTP error
+      // status now. Emit the message as content and close cleanly -- a truncated
+      // stream with no explanation is worse than a visible one.
+      await send(frame({ index: 0, delta: { content: `\n[vmbro: ${error?.message ?? error}]` }, finish_reason: null }));
+      finish = "error";
+    }
+    await send(frame({ index: 0, delta: {}, finish_reason: finish }));
+    await send("data: [DONE]\n\n");
+    await this.reliableReply(id, sequence, "DONE", "");
+    this.replyChannels.delete(id);
   }
 
   openAiSse(completion) {
