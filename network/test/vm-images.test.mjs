@@ -260,9 +260,42 @@ test('VMVM branding, themes, and refresh controls are present', () => {
   assert.match(html, /assets\/vmvm-logo\.png/);
   assert.match(html, /id="toggle-theme"/);
   assert.match(html, /localStorage\.setItem\("vm\.theme", next\)/);
+  // Both were removed deliberately in 2d0242c, so vmbro still having them is
+  // not a feature this tree is missing. Pinned so a future port cannot quietly
+  // reinstate them.
   assert.doesNotMatch(html, /id="refresh-app"/);
   assert.doesNotMatch(html, /id="share-ide"/);
   assert.match(html, /aria-label="Settings">\s*<svg/);
+});
+
+test('an unset theme follows the operating system rather than assuming dark', () => {
+  assert.match(html, /matchMedia\("\(prefers-color-scheme: light\)"\)\.matches \? "light" : "dark"/);
+  // The media query only helps if the light palette also switches the UA's own
+  // widgets; without this a light page keeps dark scrollbars and form controls.
+  assert.match(html, /:root\[data-theme="light"\] \{ color-scheme: light; \}/);
+});
+
+test('a carried-over runtime fault is cleared by a boot that works', () => {
+  // The fault is persisted so it survives the reload it provokes. Nothing but
+  // the Dismiss button ever cleared it, so one bad boot left the banner up for
+  // every later visit, describing something that had stopped happening.
+  assert.match(html, /function clearStaleRuntimeFault\(\)/);
+  assert.match(html, /if \(!showingPreviousFault\) return;/);
+  // Only carried-over faults clear. One recorded in this session describes what
+  // is happening now, and reaching a shell does not make it untrue.
+  assert.match(html, /showRuntimeFault\(lastRuntimeFault, true\); showingPreviousFault = true;/);
+  // Called on the success path, after the shell-ready dispatch rather than
+  // before it, because boot-source.test.mjs pins those two lines as adjacent.
+  // Bounded by position rather than by a character count, so editing a comment
+  // in between cannot fail this.
+  const dispatch = html.indexOf('window.dispatchEvent(new Event("vmvm-shell-ready"));');
+  const cleared = html.indexOf('clearStaleRuntimeFault();', dispatch);
+  const overlayDone = html.indexOf('bootOverlay.classList.add("done");', dispatch);
+  assert.ok(dispatch > 0, 'the shell-ready dispatch should exist');
+  assert.ok(
+    cleared > dispatch && cleared < overlayDone,
+    'clearStaleRuntimeFault should run inside finishBoot, after the shell-ready dispatch',
+  );
 });
 
 test('host terminal control commands are hidden from xterm', () => {
