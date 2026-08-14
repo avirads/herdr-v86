@@ -111,7 +111,18 @@ bootstrap_image() {
 }
 
 install_essentials() {
-  chroot "$MOUNT_DIR" /sbin/apk add --no-cache ca-certificates curl jq quickjs
+  # openssh-client-default, not dropbear: ssh, scp and ~/.ssh/config then behave
+  # the way anyone expects, for ~3.9 MB. It lives here rather than in a single
+  # tier so everything from essentials up inherits it -- it was in install_dev
+  # only because ai-tools had ~17 MB free at the time and could not take another
+  # package. The 64 MiB of headroom every tier now carries removed that
+  # constraint. Barebones stays without it deliberately: that tier has no curl,
+  # jq or git either, and a bare shell is the point of it.
+  chroot "$MOUNT_DIR" /sbin/apk add --no-cache ca-certificates curl jq quickjs openssh-client-default
+  # qjsc is QuickJS's ahead-of-time compiler. The guest only ever runs scripts
+  # through qjs, and nothing in this repository references qjsc, so it is 1.0 MB
+  # of image spent on a tool no code path can reach.
+  rm -f "$MOUNT_DIR/usr/bin/qjsc"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmagent-poll" "$MOUNT_DIR/usr/local/bin/vmagent-poll"
   install -D -m 0755 "$PROJECT_DIR/network/guest/vmagent-rpc" "$MOUNT_DIR/usr/local/bin/vmagent-rpc"
 }
@@ -121,6 +132,11 @@ install_ai_tools() {
   require_file "$HERDR_BINARY"
   require_file "$DOMAIN_SKILLS_PACKAGE"
   chroot "$MOUNT_DIR" /sbin/apk add --no-cache tmux libgcc git ripgrep shfmt ctags make patch
+  # optscript is not a stray dependency, which is what it looked like: the apk
+  # database says it belongs to ctags, which ships ctags, optscript and readtags.
+  # It is Universal Ctags' own scripting-language interpreter, used only for
+  # optlib scripting, so plain ctags does not need it -- 1.3 MB.
+  rm -f "$MOUNT_DIR/usr/bin/optscript"
   tar -xzf "$RIG_PACKAGE" -C "$MOUNT_DIR"
   tar -xzf "$ZEROSTACK_PACKAGE" -C "$MOUNT_DIR"
   chmod 0755 "$MOUNT_DIR/usr/local/libexec/rig-agent"
