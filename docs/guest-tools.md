@@ -8,7 +8,7 @@ automatically.
 The main page revalidates the selected tier's versioned VM image URL at boot.
 If the hosted image is not newer, the browser loads the existing local
 HTTP-cache entry. Image URLs, sizes, versions, and checksums live in
-`vm-images.json`; update the selected image's version and checksum whenever it
+`images/v86/vm-images.json`; update the selected image's version and checksum whenever it
 changes. After an image boots successfully, the page records that version
 locally under a tier-specific cache key.
 Every long-lived startup message then includes `[local cache]` for that same
@@ -290,13 +290,14 @@ origin via CORS. The command returns raw JSON. Credentials cross the trusted
 hosting page; use short-lived, narrow-scope keys. Never save a VM snapshot while
 a key remains in the environment or shell history.
 
-## Cloud LLMs: OpenAI, Claude, Gemini, and gateways
+## Cloud LLMs: OpenAI, Claude, Gemini, GitHub Copilot, and gateways
 
 Rig, Zerostack, vmlang, and vmmastra use the model loaded under
 **Settings → AI Model** by default. This Local WebGPU path remains direct and
-does not pass through the cloud router. Add OpenAI, Anthropic, Gemini, or an
-OpenAI-compatible endpoint under **Settings → Cloud AI providers**, then either
-choose a per-agent default there or override one invocation:
+does not pass through the cloud router. Add OpenAI, Anthropic, Gemini, GitHub
+Copilot, or an OpenAI-compatible endpoint under **Settings → Cloud AI
+providers**, then either choose a per-agent default there or override one
+invocation:
 
 ```sh
 rig --provider work-openai --model gpt-4.1-mini 'Review this project'
@@ -304,6 +305,12 @@ vmlang --provider claude --session review-a run 'Review this project'
 vmmastra --provider gemini --session build-a 'Implement and test the change'
 zerostack --provider local-gateway --model provider/model-id
 ```
+
+GitHub Copilot is configured like the others but takes a **GitHub OAuth token
+with Copilot enabled**, not a provider API key. The page exchanges it for a
+short-lived Copilot token per session and caches that until shortly before it
+expires, so the wrong kind of credential fails at the exchange rather than at
+save time.
 
 `--provider`, `--model`, and `--session` must precede the task or subcommand.
 A named session is pinned to its first provider/model selection, preventing a

@@ -10,7 +10,8 @@
 			const requestedTheme = new URLSearchParams(location.search).get('theme');
 			const initialTheme = ['light', 'dark'].includes(requestedTheme)
 				? requestedTheme
-				: localStorage.getItem('dev.theme') || 'dark';
+				: localStorage.getItem('dev.theme') ||
+					(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 			document.documentElement.dataset.theme = initialTheme;
 			localStorage.setItem('dev.theme', initialTheme);
 			addEventListener('message', (event) => {

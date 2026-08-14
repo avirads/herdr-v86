@@ -1,6 +1,26 @@
+/**
+ * How the guest environment is described to the model.
+ *
+ * This is the v86 guest verbatim and stays the default so that provider's
+ * behaviour is unchanged. It is injectable because it is not universally true:
+ * the CheerpX provider runs Debian with GNU coreutils and bash, where telling
+ * the model it is on "BusyBox sh" with Alpine tooling is actively misleading —
+ * it will reach for the wrong flags and read failures as missing files.
+ */
+export const V86_GUEST_PROFILE =
+  'You are a concise coding agent in /root/project on 32-bit Alpine Linux with BusyBox sh. ' +
+  'Read /usr/local/share/vm-agent-capabilities.md for the canonical installed-tool and workflow reference. ' +
+  'Installed commands include BusyBox utilities, jq, rg, git, curl, tar, gzip, qjs, vmjs, shfmt, ctags, make, patch, k6, and vmproject; ' +
+  'ShellCheck is not installed in this fixed-size i686 image. ' +
+  'Use Grafana k6 for JavaScript HTTP/API performance and load tests. ' +
+  'Format and verify shell scripts with shfmt and sh -n. ' +
+  'Remote curl, git, and k6 targets require a default route; without one use vmfetch or vmgithub archive when available. ' +
+  'Use vmproject import/export for project archives. AutoBro is not available in this Rig tool set. ' +
+  'Use tools only when needed, verify changes, then answer directly.';
+
 export class VmAgentController {
-  constructor({ createAgent, createMastraAgent = null, createCodeAgent = null, getLlmClient, getGuest, getBrowserClient = () => null, approveAction, onOutput = () => {}, onActivity = () => {}, onBusy = () => {} }) {
-    Object.assign(this, { createAgent, createMastraAgent, createCodeAgent, getLlmClient, getGuest, getBrowserClient, approveAction, onOutput, onActivity, onBusy });
+  constructor({ createAgent, createMastraAgent = null, createCodeAgent = null, getLlmClient, getGuest, getBrowserClient = () => null, approveAction, onOutput = () => {}, onActivity = () => {}, onBusy = () => {}, guestProfile = V86_GUEST_PROFILE }) {
+    Object.assign(this, { createAgent, createMastraAgent, createCodeAgent, getLlmClient, getGuest, getBrowserClient, approveAction, onOutput, onActivity, onBusy, guestProfile });
     this.harness = null;
     this.mastraHarness = null;
     this.codeHarness = null;
@@ -250,7 +270,7 @@ export class VmAgentController {
       { type: 'function', function: { name: 'shell', description: 'Run a shell command in the project', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } } },
     ];
     const messages = [
-      { role: 'system', content: 'You are a concise coding agent in /root/project on 32-bit Alpine Linux with BusyBox sh. Read /usr/local/share/vm-agent-capabilities.md for the canonical installed-tool and workflow reference. Installed commands include BusyBox utilities, jq, rg, git, curl, tar, gzip, qjs, vmjs, shfmt, ctags, make, patch, k6, and vmproject; ShellCheck is not installed in this fixed-size i686 image. Use Grafana k6 for JavaScript HTTP/API performance and load tests. Format and verify shell scripts with shfmt and sh -n. Remote curl, git, and k6 targets require a default route; without one use vmfetch or vmgithub archive when available. Use vmproject import/export for project archives. AutoBro is not available in this Rig tool set. Use tools only when needed, verify changes, then answer directly.' },
+      { role: 'system', content: this.guestProfile },
       { role: 'user', content: String(prompt) },
     ];
     for (let turn = 0; turn < 6; turn += 1) {

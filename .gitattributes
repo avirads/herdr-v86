@@ -13,6 +13,9 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
+# CheerpX ships wasm under a versioned path; text=auto must not touch it.
+vendor/cheerpx/**/*.wasm binary
+
 # Guest scripts run inside the Alpine VM via #!/bin/sh; a CRLF-converted
 # checkout turns the shebang into "#!/bin/sh\r", which the kernel resolves to a
 # nonexistent interpreter path and getty/exec fails silently ("can't execute").
