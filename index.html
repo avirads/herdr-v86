@@ -1304,6 +1304,13 @@ onBusy: async busy => {
 }).catch(error => status("agent bridge failed — " + error.message));
 
 const llmStatus = message => document.getElementById("llm-status").textContent = "Local AI model: " + message;
+function actionableModelError(error) {
+  const message = error?.message || String(error);
+  if (/no gpu adapter|webgpu is unavailable/i.test(message)) {
+    return "WebGPU adapter unavailable. In Chrome on Linux, enable graphics acceleration, confirm WebGPU in chrome://gpu, then restart Chrome; or configure a cloud model.";
+  }
+  return message;
+}
 const modelProgress = document.getElementById("model-progress");
 const modelProgressBar = document.getElementById("model-progress-bar");
 const modelProgressPercent = document.getElementById("model-progress-percent");
@@ -2126,9 +2133,10 @@ try {
         ? `Ready — ${client.modelName}`
         : `Ready — ${client.modelName} (using selected file; not cached)`);
     } catch (error) {
-      llmStatus("error — " + error.message);
+      const message = actionableModelError(error);
+      llmStatus("error — " + message);
       llmReady = false;
-      showModelProgress(modelProgressBar.value, "Model error: " + error.message, { error: true });
+      showModelProgress(modelProgressBar.value, "Model error: " + message, { error: true });
     } finally {
       modelLoadUiActive = false;
       setModelLoadControlsBusy(false);
@@ -2136,7 +2144,7 @@ try {
     }
   };
 } catch (error) {
-  llmStatus("unavailable — " + error.message);
+  llmStatus("unavailable — " + actionableModelError(error));
 }
 
 const fileInput = document.getElementById("file-input");

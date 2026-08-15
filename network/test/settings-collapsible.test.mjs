@@ -15,7 +15,7 @@ test("every titled Settings section is a native collapsible control", () => {
     "assets-transfer-settings-title",
     "remote-agent-settings-title",
     "diagnostics-settings-title",
-	"pwa-settings-title",
+    "pwa-settings-title",
   ];
   for (const title of titles) {
     assert.match(settings, new RegExp(`<details class="provider-section" aria-labelledby="${title}">\\s*<summary><h3 id="${title}">`));
@@ -24,7 +24,7 @@ test("every titled Settings section is a native collapsible control", () => {
 
 test("Settings sections are collapsed by default", () => {
   const sections = [...settings.matchAll(/<details class="provider-section"[^>]*>/g)].map(match => match[0]);
-  assert.equal(sections.length, 9);
+  assert.equal(sections.length, 10);
   assert.ok(sections.every(section => !/\sopen(?:\s|>|=)/.test(section)));
 });
 
