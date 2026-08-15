@@ -10,7 +10,7 @@ former single image.
 | Barebones | Alpine, BusyBox, serial shell, boot support, and `/root/project` |
 | Essentials | Barebones plus CA certificates, `curl`, `jq`, QuickJS, networking, and the UART browser transport |
 | AI Tools | Essentials plus `tmux`, Herdr, Git, ripgrep, shfmt, ctags, make, patch, Zerostack, Rig, the `vm*` browser commands, vmlang, and vmmastra |
-| Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, and the browsercode-style Dev IDE (Monaco editor, file tree, console, live preview) with 7 framework templates in `/opt/vmbro/templates` |
+| Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, `vmzot` (the zot coding agent on the page-local WebGPU model), and the browsercode-style Dev IDE (Monaco editor, file tree, console, live preview) with 7 framework templates in `/opt/vmbro/templates`, plus a pre-built starter project in `/root/project` |
 | Performance testing | AI Tools plus Grafana k6 and `k6obs`, which streams k6 results to OpenObserve during and after a run |
 | VAPT — native scanner | AI Tools plus Grafana k6, `k6obs`, and the self-contained Vaptr scanner |
 | Star | Every guest feature: AI Tools, Dev IDE and templates, Performance testing, and VAPT |

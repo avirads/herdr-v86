@@ -514,7 +514,8 @@ Shared facilities available to the agents include:
 
 - Project file inspection and editing rooted at the invocation directory.
 - BusyBox utilities plus `jq`, `rg`, `git`, `curl`, `tar`, `gzip`, `qjs`,
-  `vmjs`, `shfmt`, `ctags`, `make`, `patch`, Grafana `k6`, and `k6obs`.
+  `vmjs`, `shfmt`, `ctags`, `make`, `patch`, and — on the Performance, VAPT and
+  Star tiers only — Grafana `k6` and `k6obs`.
 - `vmproject import/export` and the matching Settings controls for moving a
   project into or out of the VM.
 - `vmfetch`, `vmgithub`, `vmclip`, and `vmexport` when ordinary guest networking

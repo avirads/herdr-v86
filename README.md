@@ -119,11 +119,16 @@ requests** (206). nginx, caddy, and other Range-capable static servers work;
 `python -m http.server` does not (returns 200/full-body, v86 aborts the
 read, and the guest kernel spirals into ATA timeouts before dropping to PIO).
 
-The demo checks Range delivery before starting. If the check fails, it downloads
-the complete 96 MiB disk before startup and adds `libata.force=pio4` to avoid
-virtual ATA DMA interrupt failures.
-Compatibility mode uses more browser memory and starts more slowly, but is the
-recommended fallback for machines showing `READ DMA`, `lost interrupt`, or
+The demo checks Range delivery before starting. If the check fails it boots in
+compatibility mode, which keeps the same range-backed disk and changes only the
+guest ATA path, by adding `libata.force=pio4` to avoid virtual ATA DMA interrupt
+failures.
+
+It deliberately does *not* preload the whole image first. That was the original
+design and was removed: browsers abort a request that large and leave startup
+waiting with no VM output, which is a worse failure than the one it was meant to
+work around. Compatibility mode is therefore no heavier on memory than a normal
+boot; PIO simply makes disk access slower. It is the recommended fallback for machines showing `READ DMA`, `lost interrupt`, or
 `I/O error, dev sda` during boot. If those errors are detected in normal mode,
 the page automatically restarts once in compatibility mode. Operators can
 still force this internal mode with `?compat=1` for diagnostics.

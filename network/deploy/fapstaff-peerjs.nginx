@@ -192,6 +192,27 @@ server {
         try_files $uri =404;
     }
 
+    # The manifest lives in that directory but is the opposite of immutable: it
+    # is the file that says which image version is current, so caching it for a
+    # year pins clients to whatever tier set was live when they first fetched
+    # it. index.html sends `cache: "no-cache"` on the request, which a compliant
+    # shared cache must honour, but that protects nothing against a proxy that
+    # drops client directives -- and nothing at all on the web-root path below,
+    # which no request of ours annotates. Exact matches beat prefix matches, so
+    # this wins over /images/v86/ regardless of order.
+    location = /images/v86/vm-images.json {
+        add_header Cache-Control "no-cache" always;
+        default_type application/json;
+        try_files $uri =404;
+    }
+
+    # The same file, served through the web-root hard link kept for older paths.
+    location = /vm-images.json {
+        add_header Cache-Control "no-cache" always;
+        default_type application/json;
+        try_files $uri =404;
+    }
+
     # CheerpX disk images. HttpBytesDevice streams them over HTTP Range and
     # refuses to initialise unless the response carries Last-Modified or ETag;
     # nginx emits both for static files, so this block only needs to not get in

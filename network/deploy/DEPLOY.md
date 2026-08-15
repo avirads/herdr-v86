@@ -52,7 +52,8 @@ used to sit flat at the web root. Every old flat path is preserved as a symlink
 (`vm-dev-i386-ext4.img -> images/v86/vm-dev-i386-ext4.img`) because the e2e pages
 under `network/test/` hardcode `../../vm-network-ext4.img` and would otherwise
 break. `vm-images.json` is one real file at `images/v86/vm-images.json` with a
-symlink at the web root, since `index.html` fetches `./vm-images.json` — one
+symlink at the web root, since older paths still resolve — `index.html` itself
+fetches `./images/v86/vm-images.json` — one
 manifest, two paths, no second copy to drift.
 
 The `url` fields are relative to the **page**, not the manifest, so they read
@@ -179,9 +180,13 @@ curl -s -o /dev/null -w '%{http_version}\n' --http2 https://fapstaff.com/cx/inde
   `std.in.readAsString()`, which returns at EOF, and `vmbro-httpd` does not close
   the handler's stdin.
 
-  **`vmbro-httpd` has no source in this repository** — `network/guest/bin/vmbro-httpd`
-  is a 7 MB stripped, statically linked i386 Go binary — so the deadlock cannot
-  be fixed where it lives.
+  **The `vmbro-httpd` binary is opaque, but its source is here** —
+  `network/guest/bin/vmbro-httpd` is a 7 MB stripped, statically linked i386 Go
+  binary, and `network/guest/vmbro-httpd/main.go` is what it is built from. This
+  paragraph used to claim the source did not exist, which was already untrue when
+  written: the source landed in 6d58508, before this measurement was taken. What
+  is unverified is whether the shipped binary was built from the current source,
+  so fixing the deadlock there means rebuilding rather than trusting the binary.
 
   The way round it does not need that source: invoke the shim directly from
   `CheerpXPreview.handle` instead of through `-handler`, with the envelope

@@ -99,7 +99,7 @@ $hashes | Set-Content -LiteralPath (Join-Path $stage "SHA256SUMS.txt") -Encoding
 # VM portable Windows x64
 
 Run ``run-vm.bat``. Remote full gateway is the default. Session tokens are
-prompted for each launch and are not saved. Modes 2 (local userspace) and 5
+prompted for each launch and are not saved. Modes 1 (local userspace) and 5
 (offline) need no installation or Administrator rights.
 
 Mode 3 uses the optional Wintun backend. Run the bundled setup script once from

@@ -102,3 +102,24 @@ test('the ethernet tunnel keeps the long timeout a persistent socket needs', () 
   assert.match(tunnel.slice(0, 500), /proxy_read_timeout 3600s;/);
   assert.match(tunnel.slice(0, 500), /proxy_send_timeout 3600s;/);
 });
+
+test('the tier manifest is not served as immutable', () => {
+  // It lives under /images/v86/, where everything else genuinely is immutable --
+  // the images are versioned by filename. The manifest is the opposite: it is
+  // the file that says which version is current, so a year-long cache pins a
+  // client to whatever tier set was live the first time it looked. index.html
+  // sends `cache: "no-cache"` on the request, but that protects nothing against
+  // a proxy that drops client directives, and nothing at all on the web-root
+  // path, which no request of ours annotates.
+  for (const path of ['/images/v86/vm-images.json', '/vm-images.json']) {
+    const block = config.slice(config.indexOf(`location = ${path} {`));
+    assert.ok(block.startsWith(`location = ${path} {`), `${path} needs an exact-match location`);
+    const body = block.slice(0, block.indexOf('\n    }'));
+    assert.match(body, /Cache-Control "no-cache"/);
+    assert.doesNotMatch(body, /immutable/);
+  }
+  // Exact matches beat prefix matches in nginx, so /images/v86/ may keep its
+  // immutable policy for the images themselves regardless of ordering.
+  const images = config.slice(config.indexOf('location /images/v86/ {'));
+  assert.match(images.slice(0, images.indexOf('\n    }')), /max-age=31536000, immutable/);
+});
