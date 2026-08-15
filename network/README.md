@@ -250,7 +250,7 @@ provides an optional WebRTC DataChannel data plane; see `docs/webrtc.md`.
 
 - `../../bzImage-network`: Linux 6.6 i386 kernel with v86-compatible no-APIC
   boot parameters and built-in VirtIO/NE2000 networking.
-- `../../vm-images.json`: the seven Alpine x86 images and their
+- `../../images/v86/vm-images.json`: the seven Alpine x86 images and their
   exact sizes, versions, and checksums. Essentials adds automatic DHCP, CA
   certificates, curl, jq, and QuickJS. AI Tools adds tmux 3.5a, Git, ripgrep,
   shfmt, ctags, make, patch, browser-backed tools, Rig, Zerostack, vmlang, and

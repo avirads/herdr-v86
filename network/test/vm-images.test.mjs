@@ -109,6 +109,15 @@ test('tier builder applies each preceding installer and validates boundaries', (
   assert.match(builder, /! command -v curl; ! command -v vmagent-rpc/);
   assert.match(builder, /! command -v herdr; ! command -v rig; ! command -v git/);
   assert.match(builder, /! command -v k6/);
+  // openssh-client-default is installed from essentials up, so the verifier has
+  // to prove it landed -- and that barebones, which is deliberately bare, did
+  // not get it. The install arrived without either check.
+  assert.match(builder, /command -v curl jq qjs vmagent-rpc ssh scp/);
+  assert.match(builder, /! command -v curl; ! command -v vmagent-rpc; ! command -v ssh/);
+  // e2fsck exits 1 when it repaired something; under set -e that aborts a batch
+  // build of an image that is now perfectly good.
+  assert.match(builder, /e2fsck -fy "\$image" \|\| \[\[ \$\? -le 2 \]\]/);
+
   assert.match(builder, /! command -v nuclei/);
   assert.match(builder, /command -v vaptr/);
   assert.match(builder, /command -v esbuild vmbro-httpd vmbro-dev/);
@@ -273,6 +282,25 @@ test('an unset theme follows the operating system rather than assuming dark', ()
   // The media query only helps if the light palette also switches the UA's own
   // widgets; without this a light page keeps dark scrollbars and form controls.
   assert.match(html, /:root\[data-theme="light"\] \{ color-scheme: light; \}/);
+});
+
+test('a fault recorded this session survives that session booting successfully', () => {
+  // The counterpart to the test below, and the half that was missing. #45 ported
+  // clearStaleRuntimeFault and its guard but not the line in recordRuntimeFault
+  // that resets the flag, so the tree shipped a doc comment promising "one
+  // recorded in this session stays put" alongside code that discarded it:
+  // load with a carried-over fault (flag true) -> fault again now -> the flag is
+  // never lowered -> finishBoot clears the banner and localStorage for a fault
+  // that had just happened.
+  const record = html.slice(html.indexOf('function recordRuntimeFault('));
+  const body = record.slice(0, record.indexOf('\n}'));
+  assert.match(body, /showingPreviousFault = false;/);
+  // Order matters: lower the flag before showing, so the banner and the flag
+  // never disagree about which session the fault belongs to.
+  assert.ok(
+    body.indexOf('showingPreviousFault = false;') < body.indexOf('showRuntimeFault(lastRuntimeFault);'),
+    'the flag must be cleared before the fault is shown',
+  );
 });
 
 test('a carried-over runtime fault is cleared by a boot that works', () => {

@@ -834,6 +834,11 @@ function recordRuntimeFault(kind, message) {
   try {
     localStorage.setItem(RUNTIME_FAULT_KEY, JSON.stringify(lastRuntimeFault));
   } catch {}
+  // This fault belongs to THIS session, so it is no longer the carried-over
+  // one clearStaleRuntimeFault may discard. Without this the flag stays true
+  // from page load and a later successful boot wipes a fault that had just
+  // happened -- the exact case the comment there promises to keep.
+  showingPreviousFault = false;
   showRuntimeFault(lastRuntimeFault);
   status("VM runtime fault captured — inspect Diagnostics or restart in compatibility mode");
 }
