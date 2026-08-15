@@ -36,6 +36,9 @@ build-dev.log
 #
 # A fresh clone therefore has vm-images.json but no images. Build or fetch them.
 images/v86/*.img
+# The previous build, kept beside the new one so a deploy can be rolled back
+# without re-fetching from the serving host.
+images/v86/*.img.old
 *.ext2
 
 # The rescued star image is committed compressed, because the raw 128 MiB file
