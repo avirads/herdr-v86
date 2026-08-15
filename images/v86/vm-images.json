@@ -44,7 +44,7 @@
     },
     "vapt": {
       "name": "VAPT — native scanner",
-      "description": "AI Tools plus Grafana k6 and Vaptr, the self-contained native scanner. k6obs and external tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.",
+      "description": "AI Tools plus Grafana k6, k6obs, and Vaptr, the self-contained native scanner. External tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.",
       "url": "images/v86/vm-vapt-i386-ext4.img",
       "size": 170917888,
       "version": "2026.08.11.6",

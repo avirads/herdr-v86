@@ -4,13 +4,20 @@ set -euo pipefail
 project_dir="${PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 tiers=(barebones essentials ai-tools dev performance vapt star)
 
+# Where the images live. They moved under images/v86/ when the manifest did, and
+# this script kept looking beside the repository root, so it failed on its first
+# tier with "missing image" and had not been runnable since. IMAGE_DIR overrides
+# it for a staging directory, which is how the images get inspected on a machine
+# that builds them elsewhere.
+image_dir="${IMAGE_DIR:-$project_dir/images/v86}"
+
 command -v debugfs >/dev/null || {
   echo "debugfs is required (install e2fsprogs)" >&2
   exit 2
 }
 
 for tier in "${tiers[@]}"; do
-  image="$project_dir/vm-$tier-i386-ext4.img"
+  image="$image_dir/vm-$tier-i386-ext4.img"
   [[ -f "$image" ]] || { echo "missing image: $image" >&2; exit 1; }
   echo "=== $tier ==="
   echo "APK world:"
@@ -23,7 +30,7 @@ for tier in "${tiers[@]}"; do
   echo
 done
 
-for image in "$project_dir"/vm-*-i386-ext4.img; do
+for image in "$image_dir"/vm-*-i386-ext4.img; do
   if debugfs -R "stat /usr/bin/zellij" "$image" 2>/dev/null | grep -q '^Inode:' ||
      debugfs -R "stat /usr/local/bin/zellij" "$image" 2>/dev/null | grep -q '^Inode:'; then
     echo "unexpected Zellij executable in $image" >&2

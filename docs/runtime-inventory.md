@@ -2,46 +2,56 @@
 
 This inventory is generated from the built ext4 images, not from build scripts,
 package wish lists, or older documentation. The authoritative inputs are
-`/etc/apk/world` and `/usr/local/bin` inside each image. It was last verified
-in full against the images prepared as Dev/Star `2026.08.03.9`.
+`/etc/apk/world` and `/usr/local/bin` inside each image, read with `debugfs`.
 
-The shipped tiers have moved on since — the manifest now pins `2026.08.11.6`
-and later — so this table is behind by however much changed in between, and a
-`verify-runtime-inventory.sh` run against the current images is owed. One row
-has been corrected ahead of that run: `openssh-client-default` reaches
-Essentials and every tier above it. That was found by scanning the shipped
-`.img` files for `OpenSSH` and `ssh_config` rather than by mounting them, which
-is weaker evidence than this document normally carries, but leaving a row that
-positively contradicts the image it describes is worse than recording how the
-correction was made.
+Verified on 2026-08-15 by running `network/guest/verify-runtime-inventory.sh`
+against images whose SHA-256 was checked against `images/v86/vm-images.json`
+first. Six of the seven matched the manifest exactly and are therefore the
+shipped artifacts. The exception is Star, noted below.
 
-| Tier | APK world beyond the Alpine base | VMVM-managed executables in `/usr/local/bin` |
-|---|---|---|
-| Barebones | — | — |
-| Essentials | `ca-certificates`, `curl`, `jq`, `openssh-client-default`, `quickjs` | `vmagent-poll`, `vmagent-rpc` |
-| AI Tools | Essentials plus `ctags`, `git`, `libgcc`, `make`, `patch`, `ripgrep`, `shfmt`, `tmux` | Essentials plus `herdr`, `rig`, `zerostack`, `vmbench`, `vmclip`, `vmexport`, `vmfetch`, `vmgithub`, `vmai`, `vmjs`, `vmlang`, `vmllm`, `vmmastra`, `vmproject` |
-| Dev | AI Tools | AI Tools plus `esbuild`, `vmbro-dev`, `vmbro-httpd` |
-| Performance testing | AI Tools | AI Tools plus `k6`, `k6obs` |
-| VAPT | AI Tools | AI Tools plus `k6`, `vaptr` |
-| Star | AI Tools | AI Tools plus `esbuild`, `k6`, `k6obs`, `vaptr`, `vmbro-dev`, `vmbro-httpd` |
+| Tier | Version verified | APK world beyond the Alpine base | VMVM-managed executables in `/usr/local/bin` |
+|---|---|---|---|
+| Barebones | `2026.08.11.4` | — | — |
+| Essentials | `2026.08.11.6` | `ca-certificates`, `curl`, `jq`, `openssh-client-default`, `quickjs` | `vmagent-poll`, `vmagent-rpc` |
+| AI Tools | `2026.08.13.3` | Essentials plus `ctags`, `git`, `libgcc`, `make`, `patch`, `ripgrep`, `shfmt`, `tmux` | Essentials plus `herdr`, `rig`, `zerostack`, `vmai`, `vmbench`, `vmclip`, `vmexport`, `vmfetch`, `vmgithub`, `vmjs`, `vmlang`, `vmllm`, `vmmastra`, `vmproject`, `vmshelley` |
+| Dev | `2026.08.11.6` | AI Tools | AI Tools plus `esbuild`, `vmbro-dev`, `vmbro-httpd`, `vmzot`, minus `vmshelley` |
+| Performance testing | `2026.08.11.6` | AI Tools | AI Tools plus `k6`, `k6obs`, minus `vmshelley` |
+| VAPT | `2026.08.11.6` | AI Tools | AI Tools plus `k6`, `k6obs`, `vaptr`, minus `vmshelley` |
+| Star | `2026.08.03.9` (**not** the manifest's `2026.08.10.9`) | AI Tools, minus `openssh-client-default` | AI Tools plus `esbuild`, `k6`, `k6obs`, `vaptr`, `vmbro-dev`, `vmbro-httpd`, minus `vmshelley` |
 
 All images also contain the Alpine base world packages: `alpine-baselayout`,
 `alpine-keys`, `alpine-release`, `apk-tools`, `busybox`, and `libc-utils`.
 
-Zellij and ShellCheck are not installed in any shipped image. The guest uses
-tmux for terminal multiplexing and `sh -n` plus shfmt for shell validation.
-AutoBro, voice recognition, WebGPU inference, AI model weights, and networking
-helpers are browser, host, or server facilities rather than guest packages.
+## The tiers are cumulative by construction, not in the artifacts
 
-## Release verification
+`build_tier` applies each preceding installer, so a tier built today contains
+everything the tiers below it contain. The shipped set does not satisfy that,
+because the tiers were built on different days and only some were rebuilt
+afterwards:
 
-Run the inventory checker against the built images before every push or
-release:
+- `vmshelley` is in AI Tools (`2026.08.13.3`) and in nothing above it. Dev,
+  Performance and VAPT are all `2026.08.11.6` and predate it. Shelley has since
+  been removed from the builder entirely, so the next rebuild drops it from AI
+  Tools too and the inconsistency resolves itself.
+- `vmzot` is in Dev and not in Star, because Star is the oldest image here.
+- `openssh-client-default` is in every tier from Essentials up except Star, for
+  the same reason.
 
-```sh
-bash network/guest/verify-runtime-inventory.sh
-```
+None of this is a defect in the build; it is what a manifest that pins seven
+independently-dated artifacts looks like. It does mean "AI Tools plus …" in
+`docs/vm-images.md` describes what a rebuild would produce rather than what is
+currently downloadable.
 
-If the checker reports a difference, update this document from the reported
-runtime contents in the same commit as the images. Documentation is never an
-acceptable substitute for inspecting the images.
+## Star is pinned to bytes nobody has
+
+`images/v86/vm-images.json` pins Star at `2026.08.10.9`, SHA-256
+`6f376bbf…`. The only copy of a Star image in this repository is
+`rescued-from-production/images/vm-star-i386-ext4.img.gz`, which decompresses
+to `d8a5f4f6…` — a different build, `2026.08.03.9`, matching
+`rescued-from-production/vm-images.json` instead.
+
+Both are 134217728 bytes, so a size check cannot tell them apart; only the
+digest can. The manifest's Star therefore exists only on the serving host, and
+the row above was verified against the rescued build. Anyone rebuilding or
+re-deploying Star should treat the manifest digest as the thing to satisfy, not
+the rescued image.
