@@ -30,3 +30,10 @@ test('cache progress is not duplicated in the main-page model status', () => {
   assert.match(html, /if \(!\(modelLoadUiActive && event\.detail\.message\.startsWith\("caching "\)\)\) \{[\s\S]*llmStatus\(event\.detail\.message\)/);
   assert.match(html, /modelLoadUiActive = true;[\s\S]*llmStatus\("loading model…"\);[\s\S]*showModelProgress\(1,/);
 });
+
+test('a missing WebGPU adapter gives Linux Chrome users actionable recovery', () => {
+  assert.match(html, /no gpu adapter\|webgpu is unavailable/i);
+  assert.match(html, /enable graphics acceleration/);
+  assert.match(html, /confirm WebGPU in chrome:\/\/gpu/);
+  assert.match(html, /configure a cloud model/);
+});
