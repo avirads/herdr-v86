@@ -13,11 +13,11 @@ shipped artifacts. The exception is Star, noted below.
 |---|---|---|---|
 | Barebones | `2026.08.11.4` | — | — |
 | Essentials | `2026.08.11.6` | `ca-certificates`, `curl`, `jq`, `openssh-client-default`, `quickjs` | `vmagent-poll`, `vmagent-rpc` |
-| AI Tools | `2026.08.13.3` | Essentials plus `ctags`, `git`, `libgcc`, `make`, `patch`, `ripgrep`, `shfmt`, `tmux` | Essentials plus `herdr`, `rig`, `zerostack`, `vmai`, `vmbench`, `vmclip`, `vmexport`, `vmfetch`, `vmgithub`, `vmjs`, `vmlang`, `vmllm`, `vmmastra`, `vmproject`, `vmshelley` |
-| Dev | `2026.08.11.6` | AI Tools | AI Tools plus `esbuild`, `vmbro-dev`, `vmbro-httpd`, `vmzot`, minus `vmshelley` |
-| Performance testing | `2026.08.11.6` | AI Tools | AI Tools plus `k6`, `k6obs`, minus `vmshelley` |
-| VAPT | `2026.08.11.6` | AI Tools | AI Tools plus `k6`, `k6obs`, `vaptr`, minus `vmshelley` |
-| Star | `2026.08.03.9` (**not** the manifest's `2026.08.10.9`) | AI Tools, minus `openssh-client-default` | AI Tools plus `esbuild`, `k6`, `k6obs`, `vaptr`, `vmbro-dev`, `vmbro-httpd`, minus `vmshelley` |
+| AI Tools | `2026.08.15.1` | Essentials plus `ctags`, `git`, `libgcc`, `make`, `patch`, `ripgrep`, `shfmt`, `tmux` | Essentials plus `herdr`, `rig`, `zerostack`, `vmai`, `vmbench`, `vmclip`, `vmexport`, `vmfetch`, `vmgithub`, `vmjs`, `vmlang`, `vmllm`, `vmmastra`, `vmproject` |
+| Dev | `2026.08.11.6` | AI Tools | AI Tools plus `esbuild`, `vmbro-dev`, `vmbro-httpd`, `vmzot` |
+| Performance testing | `2026.08.11.6` | AI Tools | AI Tools plus `k6`, `k6obs` |
+| VAPT | `2026.08.11.6` | AI Tools | AI Tools plus `k6`, `k6obs`, `vaptr` |
+| Star | `2026.08.03.9` (**not** the manifest's `2026.08.10.9`) | AI Tools, minus `openssh-client-default` | AI Tools plus `esbuild`, `k6`, `k6obs`, `vaptr`, `vmbro-dev`, `vmbro-httpd` |
 
 All images also contain the Alpine base world packages: `alpine-baselayout`,
 `alpine-keys`, `alpine-release`, `apk-tools`, `busybox`, and `libc-utils`.
@@ -29,10 +29,11 @@ everything the tiers below it contain. The shipped set does not satisfy that,
 because the tiers were built on different days and only some were rebuilt
 afterwards:
 
-- `vmshelley` is in AI Tools (`2026.08.13.3`) and in nothing above it. Dev,
-  Performance and VAPT are all `2026.08.11.6` and predate it. Shelley has since
-  been removed from the builder entirely, so the next rebuild drops it from AI
-  Tools too and the inconsistency resolves itself.
+- `vmshelley` was in AI Tools (`2026.08.13.3`) and in nothing above it, because
+  Dev, Performance and VAPT are all `2026.08.11.6` and predated it. AI Tools has
+  since been rebuilt as `2026.08.15.1` without it, so that particular
+  inconsistency is gone. The rebuild changed exactly one thing: `vmshelley` left
+  `/usr/local/bin` and the apk world is byte-identical.
 - `vmzot` is in Dev and not in Star, because Star is the oldest image here.
 - `openssh-client-default` is in every tier from Essentials up except Star, for
   the same reason.

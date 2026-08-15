@@ -23,8 +23,8 @@
       "description": "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.",
       "url": "images/v86/vm-ai-tools-i386-ext4.img",
       "size": 159383552,
-      "version": "2026.08.13.3",
-      "sha256": "5240bf05a6425445d1dd1bf6daba02c529a88e488b2c4211554e9149e12c3803"
+      "version": "2026.08.15.1",
+      "sha256": "8a908123437f5e189f7a14e31f79c97fc24db69e49128262277111b6b5e600f3"
     },
     "dev": {
       "name": "Dev",
