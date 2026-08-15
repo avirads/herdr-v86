@@ -67,7 +67,7 @@ cleanup() {
   mountpoint -q "$MOUNT_DIR/sys" && umount "$MOUNT_DIR/sys" || true
   mountpoint -q "$MOUNT_DIR/proc" && umount "$MOUNT_DIR/proc" || true
   if mountpoint -q "$MOUNT_DIR"; then
-    umount "$MOUNT_DIR" 2>/dev/null || { sync; umount -l "$MOUNT_DIR"; }
+    umount "$MOUNT_DIR" 2>/dev/null || { sync; umount -l "$MOUNT_DIR"; } || true
   fi
   sync
 }
@@ -238,9 +238,9 @@ verify_tier() {
     test -d /root/project
   '
   if (( number >= 2 )); then
-    chroot "$MOUNT_DIR" /bin/sh -ec 'command -v curl jq qjs vmagent-rpc'
+    chroot "$MOUNT_DIR" /bin/sh -ec 'command -v curl jq qjs vmagent-rpc ssh scp'
   else
-    chroot "$MOUNT_DIR" /bin/sh -ec '! command -v curl; ! command -v vmagent-rpc'
+    chroot "$MOUNT_DIR" /bin/sh -ec '! command -v curl; ! command -v vmagent-rpc; ! command -v ssh'
   fi
   if (( number >= 3 )); then
     chroot "$MOUNT_DIR" /bin/sh -ec '
@@ -325,7 +325,11 @@ build_tier() {
     echo "warning: $MOUNT_DIR still mounted before e2fsck" >&2
   fi
   sync
-  e2fsck -fy "$image"
+  # e2fsck exits 1 when it FIXED something, which under set -e aborts the whole
+  # run -- a batch build stopped after the fifth tier because free block counts
+  # needed correcting, even though the image was then perfectly good. Only 4 and
+  # above mean the filesystem is still broken.
+  e2fsck -fy "$image" || [[ $? -le 2 ]]
   echo "Built $image"
 }
 

@@ -17,7 +17,7 @@ Either action hides the shell and returns to the corresponding wizard step.
 After skipping, use **Settings → Configure providers** to configure the model or
 AutoBro independently without repeating the other provider's setup.
 
-- `bzImage-network` + the images in `vm-images.json` — VMVM tiers from
+- `bzImage-network` + the images in `images/v86/vm-images.json` — VMVM tiers from
   Barebones through Star, which combines every guest feature. Barebones is the
   default and contains the minimal Alpine/BusyBox environment, serial shell,
   boot support, and `/root/project`. The UART browser transport begins with

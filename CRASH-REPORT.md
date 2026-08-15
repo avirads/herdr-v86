@@ -8,7 +8,7 @@ a corrupted struct — surfacing as the `.?`-on-null panic on the pane/VT path.
 
 Fix: pass those structs by `*const` pointer (ABI-stable on 32- and 64-bit), with
 matching `&`-references at the Rust FFI callsites. Shipped in the ABI-fixed
-`herdr-i686` baked into `vm-network-ext4.img` (commit "Reinstate herdr as a
+`herdr-i686` baked into `images/v86/vm-network-ext4.img` (commit "Reinstate herdr as a
 command in the VM"); the fix is captured in `herdr-i686.patch`. Re-verified on
 the committed image with `network/test/herdr-pane-e2e.html`: the startup-
 workspace + pane repro below now survives (server alive, no panic).

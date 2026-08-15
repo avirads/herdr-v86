@@ -163,5 +163,5 @@ The script pins the early-boot units to `-std=gnu11` for gcc ≥ 14 (which
 otherwise fails on `bool`/`true`/`false` as reserved keywords).
 
 Guest init files (`rc.startup`, `inittab`) are baked into
-`vm-network-ext4.img` with `debugfs -w`. `index-baseline.html` (git-ignored) is
+`images/v86/vm-network-ext4.img` with `debugfs -w`. `index-baseline.html` (git-ignored) is
 the de-tuned page kept for A/B runs.

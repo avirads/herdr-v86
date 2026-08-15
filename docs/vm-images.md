@@ -24,7 +24,7 @@ sudo bash network/guest/build-tier-images.sh all
 ```
 
 The image URLs, exact byte sizes, versions, and SHA-256 checksums live in
-`vm-images.json`. Update the version and checksum whenever an image changes.
+`images/v86/vm-images.json`. Update the version and checksum whenever an image changes.
 The browser keeps a separate cache-version marker for each tier.
 The installed-package inventory is derived directly from the built filesystems
 and recorded in [runtime-inventory.md](runtime-inventory.md). Run
