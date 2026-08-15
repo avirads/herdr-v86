@@ -12,7 +12,7 @@ former single image.
 | AI Tools | Essentials plus `tmux`, Herdr, Git, ripgrep, shfmt, ctags, make, patch, Zerostack, Rig, the `vm*` browser commands, vmlang, and vmmastra |
 | Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, and the browsercode-style Dev IDE (Monaco editor, file tree, console, live preview) with 7 framework templates in `/opt/vmbro/templates` |
 | Performance testing | AI Tools plus Grafana k6 and `k6obs`, which streams k6 results to OpenObserve during and after a run |
-| VAPT — native scanner | AI Tools plus Grafana k6 and the self-contained Vaptr scanner; `k6obs` is not installed in this tier |
+| VAPT — native scanner | AI Tools plus Grafana k6, `k6obs`, and the self-contained Vaptr scanner |
 | Star | Every guest feature: AI Tools, Dev IDE and templates, Performance testing, and VAPT |
 
 Each image is built from the same clean rootfs. Specialized Dev, Performance,
