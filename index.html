@@ -2071,6 +2071,13 @@ try {
   });
   hostBridge?.setLlmClient(client);
   const portableMode = new URLSearchParams(location.search).get("portable") === "1";
+  let manualModelLoadRequested = false;
+  // Importing the JS runtime is lightweight and must not wait for VM boot. A
+  // selected multi-gigabyte model used to wait behind the entire automatic
+  // cached-model load, leaving the import card indefinitely at 1% with no
+  // bytes copied. Keep runtime readiness separate from model auto-loading so a
+  // manual import can proceed as soon as the provider itself is available.
+  const runtimeInitialization = client.initialize({ autoLoad: false });
   // Let v86 reach its shell before compiling/loading a cached WebGPU model.
   // Starting both heavyweight WASM runtimes together can starve compatibility
   // boot for minutes even though the guest is making progress.
@@ -2078,9 +2085,15 @@ try {
   const vmBootReady = shellReady
     ? Promise.resolve()
     : new Promise(resolve => window.addEventListener("vmvm-shell-ready", resolve, { once: true }));
-  const initialization = vmBootReady.then(() => {
+  const initialization = Promise.all([vmBootReady, runtimeInitialization]).then(async ([, runtimeStatus]) => {
     llmStatus("loading LiteRT-LM runtime");
-    return client.initialize({ bundledModelUrl: portableMode ? "./models/gemma-4-E2B-it-web.litertlm" : "" });
+    if (manualModelLoadRequested) return runtimeStatus;
+    const models = await client.cachedModelNames();
+    const remembered = localStorage.getItem("vm.litert.lastModel");
+    const name = models.includes(remembered) ? remembered : models[0];
+    if (name) await client.loadCachedModel(name);
+    else if (portableMode) await client.loadBundledModel("./models/gemma-4-E2B-it-web.litertlm");
+    return client.status();
   });
   globalThis.vmvmLocalModelReady = initialization;
   globalThis.dispatchEvent(new CustomEvent("vmvm-local-model-client", {
@@ -2097,18 +2110,21 @@ try {
   llmFileInput.onchange = async () => {
     const file = llmFileInput.files[0];
     if (!file) return;
+    manualModelLoadRequested = true;
     modelLoadUiActive = true;
     setModelLoadControlsBusy(true);
     llmStatus("loading model…");
     showModelProgress(1, `Preparing ${file.name}…`);
     try {
-      await initialization;
-      await client.importModel(file);
+      await runtimeInitialization;
+      const imported = await client.importModel(file);
       hostBridge?.setLlmClient(client);
       llmStatus(`ready — ${client.modelName}`);
       llmReady = true;
       await refreshCachedModelSelect();
-      finishModelProgress(`Ready — ${client.modelName}`);
+      finishModelProgress(imported.cached
+        ? `Ready — ${client.modelName}`
+        : `Ready — ${client.modelName} (using selected file; not cached)`);
     } catch (error) {
       llmStatus("error — " + error.message);
       llmReady = false;

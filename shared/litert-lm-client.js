@@ -223,6 +223,17 @@ export class LiteRtLmClient extends EventTarget {
 
   async importModel(file) {
     if (!/\.(litertlm|task)$/i.test(file.name)) throw new Error('select a .litertlm or .task model');
+    const estimate = navigator.storage.estimate
+      ? await navigator.storage.estimate().catch(() => null)
+      : null;
+    const available = estimate && Number.isFinite(estimate.quota) && Number.isFinite(estimate.usage)
+      ? Math.max(0, estimate.quota - estimate.usage)
+      : null;
+    if (available !== null && available < file.size) {
+      this.activity(`browser storage is short by ${((file.size - available) / 1e6).toFixed(0)} MB; loading ${file.name} without caching`);
+      await this.createEngine(file, file.name, { remember: false });
+      return { cached: false };
+    }
     const directory = await this.modelsDirectory(true);
     const handle = await directory.getFileHandle(file.name, { create: true });
     const writable = await handle.createWritable();
@@ -240,9 +251,15 @@ export class LiteRtLmClient extends EventTarget {
     } catch (error) {
       await writable.abort?.();
       await directory.removeEntry(file.name).catch(() => undefined);
+      if (error?.name === 'QuotaExceededError') {
+        this.activity(`browser storage quota reached; loading ${file.name} without caching`);
+        await this.createEngine(file, file.name, { remember: false });
+        return { cached: false };
+      }
       throw error;
     }
     await this.loadCachedModel(file.name);
+    return { cached: true };
   }
 
   async reset() {
@@ -271,7 +288,7 @@ export class LiteRtLmClient extends EventTarget {
     await this.createEngine(file, name);
   }
 
-  async createEngine(source, name) {
+  async createEngine(source, name, { remember = true } = {}) {
     await this.ensureWasm();
     if (this.engine) await this.engine.delete?.();
     this.engine = null;
@@ -285,8 +302,10 @@ export class LiteRtLmClient extends EventTarget {
         mainExecutorSettings: { maxNumTokens: MAX_CONTEXT_TOKENS },
       });
       this.modelName = name;
-      localStorage.setItem(LAST_MODEL_KEY, name);
-      await navigator.storage.persist?.();
+      if (remember) {
+        localStorage.setItem(LAST_MODEL_KEY, name);
+        await navigator.storage.persist?.();
+      }
       this.activity(`ready — ${name}`, 1);
     } finally {
       this.loading = null;

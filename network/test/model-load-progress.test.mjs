@@ -21,7 +21,7 @@ test('model activity updates byte and staged loading percentages', () => {
 
 test('file selection shows progress and loading controls recover after completion', () => {
   assert.match(html, /modelLoadUiActive = true;[\s\S]*setModelLoadControlsBusy\(true\);[\s\S]*showModelProgress\(1,/);
-  assert.match(html, /finishModelProgress\(`Ready — \$\{client\.modelName\}`\)/);
+  assert.match(html, /finishModelProgress\(imported\.cached[\s\S]*Ready — \$\{client\.modelName\}/);
   assert.match(html, /showModelProgress\(modelProgressBar\.value,[\s\S]*\{ error: true \}/);
   assert.match(html, /finally \{[\s\S]*modelLoadUiActive = false;[\s\S]*setModelLoadControlsBusy\(false\)/);
 });
