@@ -8,6 +8,7 @@ const settings = html.slice(html.indexOf('<dialog id="settings-dialog">'), html.
 test("every titled Settings section is a native collapsible control", () => {
   const titles = [
     "vm-image-settings-title",
+    "vm-network-settings-title",
     "ai-model-settings-title",
     "cloud-model-settings-title",
     "autobro-settings-title",
