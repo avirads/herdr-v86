@@ -25,8 +25,12 @@ AutoBro independently without repeating the other provider's setup.
   AI Tools. See
   [VMVM image tiers](docs/vm-images.md) and the
   [runtime-derived package inventory](docs/runtime-inventory.md).
-- `network/` — authenticated WebSocket-to-TAP gateway, v86 adapter, guest build
-  recipes, and automated DHCP/DNS/ping/HTTPS test.
+- `network/` — authenticated WebSocket-to-TAP gateway, v86 adapters, guest build
+  recipes, and automated DHCP/DNS/ping/HTTPS test. Also the gateway-free in-page
+  transport: an lwIP-in-WASM stack that puts the page itself on the guest LAN.
+  **Settings → Network** picks between `gateway` (default, unchanged), `hybrid`
+  (gateway plus the page on the LAN), and `local` (the page is the whole
+  network, no host process, no Internet).
 
 Boot args (disk image route): `root=/dev/sda rw console=ttyS0`
 Needs an i686 kernel with 8250 serial + ext4 (or 9p/virtio for the tarball route).
@@ -36,7 +40,9 @@ short-lived gateway session in its URL fragment. See [network/README.md](network
 
 The demo also includes a gateway-free browser bridge. Its `vmfetch`, `vmclip`,
 `vmexport`, `vmgithub`, `vmai`, and `vmllm` guest commands use browser APIs instead of a
-NIC. The toolbar provides file import. See
+NIC. The toolbar provides file import. In the `local` and `hybrid` network modes
+the same services are also published on the guest LAN over real sockets, without
+the serial bridge's 8/16 MiB caps, via the guest's `vmlan` command. See
 [the guest-tools command reference](docs/guest-tools.html). Coding agents should
 start with [AGENTS.md](AGENTS.md); web-based agents can discover the documentation
 index through [llms.txt](llms.txt).

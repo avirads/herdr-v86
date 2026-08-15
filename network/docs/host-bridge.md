@@ -4,6 +4,22 @@ The host bridge uses the v86 serial port to expose bounded browser services to
 the 32-bit guest. It does not create a NIC, guest IP address, DNS resolver, or
 general TCP/UDP connectivity.
 
+> **A socket-backed alternative now exists.** In the `local` and `hybrid`
+> network modes the page holds an address on the guest LAN and publishes the
+> same services over real sockets — see
+> [browser LAN services](../../providers/v86/lan-services.js) and the guest's
+> `vmlan` command. That path has no tty size cap (the serial bridge caps
+> vmfetch at 16 MiB and vmexport at 8 MiB) and moves megabytes per second rather
+> than ~11 KB/s: a 12 MiB export takes ~8.7 s over sockets. `eval "$(vmlan env)"`
+> also points `http_proxy` at the page, so unmodified curl/wget/apk work for
+> plain HTTP with no guest command at all.
+>
+> The serial bridge described below remains the fallback, and is the only option
+> in `gateway` mode, where the page is not on the guest LAN. Both paths are
+> equally bound by browser security policy: cross-origin targets must send
+> permissive CORS headers either way, and neither can tunnel TLS, so HTTPS is
+> fetched *by the browser* (`vmlan fetch`) rather than proxied.
+
 ## Guest commands
 
 ```sh

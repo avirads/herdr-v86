@@ -343,6 +343,17 @@
       </div>
       <small id="vm-image-description"></small>
     </details>
+    <details class="provider-section" aria-labelledby="vm-network-settings-title">
+      <summary><h3 id="vm-network-settings-title">Network</h3></summary>
+      <small>Choose how the guest reaches the network. Changing this reloads the page; the guest filesystem is unaffected.</small>
+      <div class="provider-actions">
+        <label>Mode
+          <select id="vm-network-mode" aria-label="Guest network mode"></select>
+        </label>
+        <button id="apply-network-mode" type="button">Apply &amp; reload</button>
+      </div>
+      <small id="vm-network-description"></small>
+    </details>
     <details class="provider-section" aria-labelledby="ai-model-settings-title">
       <summary><h3 id="ai-model-settings-title">AI Model</h3></summary>
       <small>Load a LiteRT-LM model into this browser or clear all cached models.</small>
@@ -634,6 +645,32 @@ const vmImageTier = vmImageManifest.tiers[requestedVmTier] ? requestedVmTier : v
 const hasDevEnvironment = vmImageTier === "dev" || vmImageTier === "star";
 const vmImage = vmImageManifest.tiers[vmImageTier];
 localStorage.setItem("vm.imageTier", vmImageTier);
+
+// Network mode, selected in Settings or with ?network=, and remembered like the
+// image tier. "gateway" is the long-standing behaviour and is the default.
+//   gateway  guest frames go to the v86net gateway; the page is not on the LAN
+//   hybrid   same gateway uplink, but the page also joins the guest LAN, so
+//            guest and page can open sockets to each other directly
+//   local    tcpip.js only: a page-local LAN with no gateway and no internet,
+//            the one mode that needs no host process at all
+const NETWORK_MODES = {
+  gateway: {
+    name: "Gateway only",
+    description: "Guest traffic goes to the v86net gateway for full internet access. The page is not on the guest LAN. Requires a running gateway.",
+  },
+  hybrid: {
+    name: "Gateway + page on the LAN",
+    description: "As Gateway, plus this browser tab joins the guest LAN at 10.77.0.2, so the guest and the page can open sockets to each other directly. Requires a running gateway.",
+  },
+  local: {
+    name: "Page-local (no gateway)",
+    description: "This tab is the whole network, at 10.77.0.1. The guest gets a LAN and real sockets to the page with no host process, but no internet access.",
+  },
+};
+const requestedNetworkMode = bootOptions.get("network") || localStorage.getItem("vm.networkMode") || "gateway";
+const networkMode = NETWORK_MODES[requestedNetworkMode] ? requestedNetworkMode : "gateway";
+if (bootOptions.get("network")) localStorage.setItem("vm.networkMode", networkMode);
+
 const DISK_SIZE = vmImage.size;
 const DISK_VERSION = `${vmImageTier}-${vmImage.version}`;
 const diskURL = `${vmImage.url}?v=${encodeURIComponent(vmImage.version)}`;
@@ -1555,6 +1592,33 @@ document.getElementById("apply-vm-image").onclick = () => {
   next.searchParams.set("tier", nextTier);
   location.assign(next.href);
 };
+const vmNetworkModeSelect = document.getElementById("vm-network-mode");
+const vmNetworkDescription = document.getElementById("vm-network-description");
+for (const [mode, meta] of Object.entries(NETWORK_MODES)) {
+  const option = document.createElement("option");
+  option.value = mode;
+  option.textContent = meta.name;
+  vmNetworkModeSelect.appendChild(option);
+}
+vmNetworkModeSelect.value = networkMode;
+function updateVmNetworkDescription() {
+  vmNetworkDescription.textContent = NETWORK_MODES[vmNetworkModeSelect.value].description;
+  document.getElementById("apply-network-mode").disabled = vmNetworkModeSelect.value === networkMode;
+}
+vmNetworkModeSelect.onchange = updateVmNetworkDescription;
+updateVmNetworkDescription();
+document.getElementById("apply-network-mode").onclick = () => {
+  const nextMode = vmNetworkModeSelect.value;
+  if (nextMode === networkMode) return;
+  localStorage.setItem("vm.networkMode", nextMode);
+  const next = new URL(location.href);
+  next.searchParams.set("network", nextMode);
+  // A gateway session in the fragment is single-use and already consumed by
+  // this page load, so carrying it across the reload would only fail.
+  next.hash = "";
+  location.assign(next.href);
+};
+
 const remoteDialog = document.getElementById("remote-dialog");
 const remoteStatus = document.getElementById("remote-status");
 const remoteKey = document.getElementById("remote-key");
@@ -2186,9 +2250,68 @@ async function connectWebSocketGateway(url, token) {
   }).start();
   await window.v86Network.waitUntilConnected();
 }
-if (gatewayURL && sessionToken) {
+
+// tcpip.js (lwIP in WASM) terminates the guest LAN inside this tab. With an
+// uplink the page, the guest, and the gateway share one virtual switch, so a
+// single guest NIC carries both page-local sockets and gateway NAT.
+async function connectTcpipNetwork({ url, token } = {}) {
+  const moduleUrl = `./providers/v86/tcpip-network.js?v=${encodeURIComponent(APP_VERSION)}`;
+  const { V86TcpipNetwork } = await import(moduleUrl);
+  let signalUplinkReady = () => {};
+  let uplinkReady = Promise.resolve();
+  if (url && token) {
+    uplinkReady = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("gateway uplink did not connect")), 30000);
+      signalUplinkReady = () => { clearTimeout(timer); resolve(); };
+    });
+  }
+  const network = new V86TcpipNetwork({
+    // The gateway owns 10.77.0.1 and serves DHCP, so the page takes .2 beside
+    // it. Without a gateway the page is the address the guest already routes to.
+    hostIp: url && token ? "10.77.0.2/24" : "10.77.0.1/24",
+    uplink: url && token ? { url, token } : null,
+    onStatus: (state, error) => {
+      networkStatus(error ? `${state} — ${error.message}` : state);
+      if (state === "uplink-connected") signalUplinkReady();
+    },
+  });
+  network.addGuest(emulator);
+  window.v86Network = await network.start();
+  await uplinkReady;
+  networkStatus(`connected — page is ${network.address} on the guest LAN`);
+
+  // Now that the page has an address the guest can route to, publish the browser
+  // services on it. These are the socket-backed equivalents of the serial
+  // bridge's vmfetch/vmexport/vmclip, without the tty size caps.
+  try {
+    const servicesUrl = `./providers/v86/lan-services.js?v=${encodeURIComponent(APP_VERSION)}`;
+    const { startLanServices } = await import(servicesUrl);
+    window.v86LanServices = await startLanServices(network.stack, {
+      onStatus: networkStatus,
+      onClipboardRead: () => navigator.clipboard.readText(),
+      onClipboardWrite: text => navigator.clipboard.writeText(text),
+    });
+    networkStatus(`browser services on http://${network.address}:${window.v86LanServices.port}`);
+  } catch (error) {
+    networkStatus("browser LAN services unavailable — " + error.message);
+  }
+}
+
+async function connectGateway(url, token) {
+  if (networkMode === "hybrid") return connectTcpipNetwork({ url, token });
+  return connectWebSocketGateway(url, token);
+}
+
+if (networkMode === "local") {
+  // No gateway session is minted at all: nothing outside this tab is involved.
+  devNetworkReady = connectTcpipNetwork()
+    .catch(error => {
+      networkStatus("error — page-local network unavailable: " + error.message);
+      throw error;
+    });
+} else if (gatewayURL && sessionToken) {
   history.replaceState(null, "", location.pathname + location.search);
-  devNetworkReady = connectWebSocketGateway(gatewayURL, sessionToken);
+  devNetworkReady = connectGateway(gatewayURL, sessionToken);
   devNetworkReady
     .catch(error => networkStatus("error — " + error.message));
 // No hostname check. This branch is the only thing that mints a gateway session
@@ -2208,7 +2331,7 @@ if (gatewayURL && sessionToken) {
       if (!response.ok) throw new Error(`session request failed (${response.status})`);
       const session = await response.json();
 	  if (session.active) throw new Error("public IDE is already in use by another VM tab");
-      await connectWebSocketGateway(`wss://${location.host}/v1/ethernet`, session.token);
+      await connectGateway(`wss://${location.host}/v1/ethernet`, session.token);
     })
     .catch(error => {
       networkStatus("error — public IDE network unavailable: " + error.message);

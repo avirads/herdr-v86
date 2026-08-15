@@ -36,9 +36,23 @@ they do not require a guest network interface or the external TAP gateway.
 ip route
 ```
 
-- A default route through `10.77.0.1` means the full gateway is connected. Use
-  ordinary programs such as `curl`, `ssh`, and package managers.
-- No default route means ordinary networking is unavailable. Use the `vm*`
+A default route is no longer sufficient on its own, because the browser tab can
+also be the thing on the other end of it. Check what actually answers:
+
+```sh
+ping -c1 -W2 1.1.1.1     # Internet reachable?
+vmlan status             # browser LAN services reachable?
+```
+
+- **Internet reachable** — the gateway is connected. Use ordinary programs such
+  as `curl`, `ssh`, and package managers.
+- **No Internet, but `vmlan status` succeeds** — the page is on the guest LAN
+  (`local` network mode). Sockets to the page work and are fast, but nothing
+  routes beyond it. Use `vmlan`, or `eval "$(vmlan env)"` to point `http_proxy`
+  at the page so unmodified tools work for plain HTTP.
+- **Both succeed** — `hybrid` mode: the gateway provides the Internet and the
+  page is also on the LAN, at `10.77.0.2`.
+- **Neither** — ordinary networking is unavailable. Use the serial `vm*`
   browser-backed commands in this document.
 
 ## `vmfetch` — browser-backed HTTP client
@@ -113,7 +127,43 @@ vmexport project.tar.gz
 The browser opens its normal download flow. File bytes travel through the
 dedicated binary VirtIO 9P channel rather than Base64 over the terminal.
 Maximum file size is 8 MiB. Export only regular files; directories should
-first be archived.
+first be archived. Where `vmlan status` succeeds, `vmlan export FILE` does the
+same thing over sockets with no size cap and much faster.
+
+## `vmlan` — browser services over the LAN
+
+```text
+vmlan status              is the browser reachable, and where
+vmlan env                 print http_proxy exports for this shell
+vmlan fetch URL [-o OUT]  fetch through the browser, HTTPS included
+vmlan export FILE         save a guest file as a browser download
+vmlan clip [read|write]   read the browser clipboard, or write stdin to it
+```
+
+Available in the `local` and `hybrid` network modes, where the browser tab holds
+an address on the guest LAN and publishes its services there. This is the same
+capability set as the serial `vm*` commands, carried over real sockets instead of
+Base64 over the tty: no 8/16 MiB ceiling, and megabytes per second rather than
+about 11 KB/s. A 12 MiB export takes roughly 8.7 s.
+
+For plain HTTP no command is needed at all:
+
+```sh
+eval "$(vmlan env)"
+curl -sS http://example.internal/file      # unmodified tools, through the page
+wget -qO- http://example.internal/file
+```
+
+Limits, all inherited from the browser rather than from this transport:
+
+- **CORS applies**, exactly as it does to `vmfetch`. A cross-origin target must
+  send permissive headers or the browser blocks the request; `vmlan` reports
+  that explicitly rather than failing opaquely.
+- **HTTPS is not proxied.** A browser cannot open a raw socket, so it cannot
+  tunnel TLS; `CONNECT` returns 501 and `https_proxy` is deliberately left
+  empty. Use `vmlan fetch <https url>`, where the browser performs the request
+  and the guest receives the decrypted body.
+- **Clipboard** still needs browser permission and often a user gesture.
 
 ## `vmproject` — import and export projects
 

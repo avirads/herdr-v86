@@ -66,11 +66,18 @@ Rules that follow from this layout:
 - Architecture: Linux i386/i586, not x86-64.
 - Shell: BusyBox `sh`.
 - Working directory for imported files: `/root`.
-- Full IPv4 networking requires either the AutoBro per-user userspace helper
-  or the external WebSocket gateway. TAP/Wintun is only an optional native
+- Internet access requires either the AutoBro per-user userspace helper or the
+  external WebSocket gateway. TAP/Wintun is only an optional native
   high-performance backend.
-- Without that gateway, use the browser-backed `vm*` commands documented below.
+- A LAN between the guest and the browser tab does **not** need a gateway: in
+  the `local` and `hybrid` network modes the page holds an address on the
+  guest's subnet (`10.77.0.1` and `10.77.0.2` respectively) and ordinary
+  sockets work to it. `local` mode has no internet regardless.
+- Without a gateway, use `vmlan` (sockets, no size cap) or the serial
+  browser-backed `vm*` commands documented below.
 - Browser-backed commands are host RPC operations, not normal Linux networking.
+  This is true of `vmlan` too: it moves over real sockets, but the browser still
+  performs each request, so CORS applies and TLS cannot be tunnelled.
 
 ## Canonical command documentation
 
@@ -86,13 +93,22 @@ Rules that follow from this layout:
 
 1. Use `vmfetch` instead of `curl` when the guest has no IP address or default
    route. Do not assume `vmfetch` bypasses CORS.
-2. Use `curl` only when `ip route` shows working gateway-backed networking.
-3. Use `vmexport FILE` to return a guest file to the browser download manager.
+2. Use `curl` only when `ip route` shows working gateway-backed networking, or
+   when the target is the browser's own LAN service (see rule 7).
+3. Use `vmexport FILE` to return a guest file to the browser download manager,
+   or `vmlan export FILE` when `vmlan status` succeeds — the latter has no
+   8 MiB cap and is far faster.
 4. Files selected with the browser's **Import file** control appear in `/root`.
 5. Use `vmclip read` or `vmclip write`; browser permission or a user gesture may
    still be required.
 6. Never claim that `vmfetch`, WebRTC, or browser APIs provide DHCP, DNS, ICMP,
-   SSH, arbitrary TCP/UDP, inbound ports, or a general-purpose NIC.
+   SSH, arbitrary TCP/UDP, inbound ports, or a general-purpose NIC to the
+   *Internet*. The in-page tcpip.js transport does provide DHCP, ICMP, and
+   arbitrary TCP/UDP **within** the guest-to-browser LAN; it provides no egress.
+7. Run `vmlan status` to detect the browser's LAN services. When present,
+   `eval "$(vmlan env)"` points `http_proxy` at the page, so unmodified `curl`,
+   `wget`, and `apk` work for plain HTTP. HTTPS is not proxied — a browser
+   cannot tunnel TLS — so use `vmlan fetch <https url>` instead.
 7. Never print, persist, or commit API tokens. Prefer narrow-scope, short-lived
    credentials and unset them after use.
 8. Treat browser errors mentioning CORS, mixed content, forbidden headers, or
@@ -142,3 +158,7 @@ vmfetch --help
 If `ip route` has no default route, `curl`, `git clone`, `ssh`, and other normal
 network clients cannot reach the Internet. Use the documented browser-backed
 commands or ask the user to deploy/configure the external gateway.
+
+A default route pointing at the browser tab rather than a gateway (`local`
+network mode) reaches the tab and nothing beyond it: `vmlan` and `http_proxy`
+work, `git clone` and `ssh` to the Internet do not.

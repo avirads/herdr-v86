@@ -1,0 +1,86 @@
+#!/bin/sh
+# Socket-backed browser services, over the tcpip.js LAN instead of the serial
+# bridge. The page publishes these on its own LAN address; see
+# providers/v86/lan-services.js.
+#
+# The serial equivalents (vmfetch, vmexport, vmclip) still work and remain the
+# fallback when no LAN is present. They base64 a payload over the tty, which
+# caps transfers at 8-16 MiB and runs near 11 KB/s; this path has no cap and
+# measures in the megabytes per second.
+set -eu
+
+: "${VMLAN_HOST:=}"
+PORT=8080
+
+# BusyBox has no urlencode. Percent-encoding every byte is valid and avoids
+# having to reason about which characters are safe in a query value.
+urlencode() {
+  printf %s "$1" | od -An -tx1 -v | tr -d '\n ' | sed 's/\(..\)/%\1/g'
+}
+
+discover() {
+  [ -n "$VMLAN_HOST" ] && { echo "$VMLAN_HOST"; return 0; }
+  # The page is either the guest's default gateway (page-local mode) or sits
+  # beside it (hybrid mode, where the gateway itself owns .1).
+  gateway=$(ip route | awk '/^default/ {print $3; exit}')
+  for candidate in $gateway 10.77.0.2 10.77.0.1; do
+    [ -n "$candidate" ] || continue
+    if curl -s -m 2 -o /dev/null "http://$candidate:$PORT/_vm/health"; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+usage() {
+  cat >&2 <<'EOF'
+usage: vmlan <command> [args]
+
+  status              show whether the browser services are reachable
+  env                 print the http_proxy exports for this shell
+  fetch URL [-o OUT]  fetch through the browser (HTTPS included)
+  export FILE         save a guest file as a browser download
+  clip [read|write]   read the browser clipboard, or write stdin to it
+
+Plain HTTP needs no command at all:  eval "$(vmlan env)"
+then curl/wget/apk use the browser as an ordinary proxy.
+EOF
+  exit "${1:-2}"
+}
+
+host=$(discover) || {
+  [ "${1:-}" = status ] && { echo "browser LAN services: unreachable"; exit 1; }
+  echo "vmlan: browser LAN services unreachable; is the page in a tcpip network mode?" >&2
+  exit 1
+}
+base="http://$host:$PORT"
+
+case "${1:-}" in
+  status) echo "browser LAN services: $base"; curl -sS "$base/_vm/health"; echo ;;
+  env)    echo "export http_proxy=$base https_proxy= no_proxy=$host" ;;
+  fetch)
+    shift
+    [ "$#" -ge 1 ] || usage 2
+    url=$1; shift
+    out=""
+    [ "${1:-}" = -o ] && { out=$2; shift 2; }
+    if [ -n "$out" ]; then
+      curl -sS -o "$out" "$base/_vm/fetch?url=$(urlencode "$url")"
+    else
+      curl -sS "$base/_vm/fetch?url=$(urlencode "$url")"
+    fi ;;
+  export)
+    shift
+    [ "$#" -eq 1 ] && [ -f "$1" ] || usage 2
+    name=$(basename "$1")
+    curl -sS -X PUT --data-binary @"$1" "$base/_vm/export?name=$(urlencode "$name")"; echo ;;
+  clip)
+    case "${2:-read}" in
+      read)  curl -sS "$base/_vm/clip" ;;
+      write) curl -sS -X PUT --data-binary @- "$base/_vm/clip" ;;
+      *)     usage 2 ;;
+    esac ;;
+  -h|--help|help) usage 0 ;;
+  *) usage 2 ;;
+esac

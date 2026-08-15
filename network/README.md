@@ -297,13 +297,52 @@ nslookup example.com
 curl -I https://example.com
 ```
 
+## In-page transport (no gateway process)
+
+`providers/v86/tcpip-network.js` terminates the guest LAN inside the page using
+tcpip.js (lwIP compiled to WASM, vendored by `scripts/vendor-tcpip.mjs`). The
+tab itself takes an address on the guest's subnet, so guest and page can open
+sockets to each other with no gateway process, no TAP/Wintun adapter, no
+administrator rights, and no session token. It attaches at the same `net0-send`
+/ `net0-receive` seam as the WebSocket adapter.
+
+Selected in **Settings → Network**, or with `?network=`:
+
+| mode | uplink | page on the LAN | internet |
+|---|---|---|---|
+| `gateway` (default) | WebSocket gateway | no | yes |
+| `hybrid` | WebSocket gateway | yes, at `10.77.0.2` | yes |
+| `local` | none | yes, at `10.77.0.1` | no |
+
+`hybrid` bridges the guest, the page, and the gateway onto one virtual switch,
+so a single guest NIC carries page-local sockets and gateway NAT at the same
+time. The guest image needs no change in any mode: its static `10.77.0.15/24`
+from `guest/rc.startup` keeps working, and `@tcpip/dhcp` serves leases when
+several guests would otherwise collide on that address.
+
+Measured with the Essentials image and a virtio NIC, 8 MiB each way: roughly
+16-18 Mbit/s guest-inbound and 22-25 Mbit/s guest-outbound, effectively
+identical across all three modes — the bridge hop and the WebSocket uplink cost
+nothing measurable, because v86's emulated NIC is the bottleneck rather than
+lwIP. Full method and figures in `../poc-tcpip/README.md`.
+
+A browser cannot open raw sockets, so this path provides **no internet egress**
+on its own; `local` mode is a LAN between the guest and the tab. Reaching the
+internet still requires the gateway, which is what `hybrid` keeps.
+
+`providers/v86/lan-services.js` publishes browser services on that LAN — an
+HTTP proxy plus `/_vm/fetch`, `/_vm/export`, and `/_vm/clip` — as the
+socket-backed replacement for the serial bridge's size-capped RPC. See
+`docs/host-bridge.md` and the guest's `vmlan` command.
+
 ## Current scope
 
 Implemented by the Linux and Windows host paths: DHCP, DNS, IPv4 TCP, UDP,
 ICMP, NAT, HTTPS, SSH, package managers, and outbound connections from
 unmodified guest applications.
 
-Not yet implemented: IPv6, multiple VMs per gateway process, WebRTC transport,
-bandwidth quotas, and userspace NAT for an unprivileged/cloud gateway. Linux
-has explicit inbound forwarding; Windows does not. Physical-LAN bridging is
-deliberately excluded.
+Not yet implemented: IPv6, WebRTC transport, bandwidth quotas, and userspace NAT
+for an unprivileged/cloud gateway. Linux has explicit inbound forwarding;
+Windows does not. Physical-LAN bridging is deliberately excluded. Multiple VMs
+per *gateway process* remain unimplemented, but several guests can share one
+in-page bridge in `local` mode without a gateway at all.

@@ -1,0 +1,60 @@
+{
+  "name": "tcpip",
+  "version": "0.4.0",
+  "description": "Virtual TCP/IP stack that can run anywhere",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chipmk/tcpip.js.git",
+    "directory": "packages/tcpip"
+  },
+  "type": "module",
+  "main": "dist/index.cjs",
+  "types": "dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist/**/*",
+    "tcpip.wasm"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.cjs"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js",
+      "default": "./dist/types.cjs"
+    }
+  },
+  "dependencies": {
+    "@bjorn3/browser_wasi_shim": "^0.3.0",
+    "@tcpip/dns": "0.3.0",
+    "@tcpip/transport": "0.1.0",
+    "@tcpip/wire": "0.1.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@total-typescript/tsconfig": "^1.0.4",
+    "@types/node": "^22.15.19",
+    "@vitest/browser": "^3.1.2",
+    "tsup": "^8.3.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  },
+  "scripts": {
+    "build": "pnpm run build:js && pnpm run build:wasm",
+    "build:js": "tsup --clean",
+    "build:wasm": "pnpm run make build",
+    "test": "vitest",
+    "test:node": "vitest --project node",
+    "test:browser": "vitest --project browser",
+    "test:types": "vitest --project types",
+    "clean": "rm -rf dist",
+    "make": "CC='docker compose run --rm wasi-sdk /opt/wasi-sdk/bin/clang' AR='docker compose run --rm wasi-sdk /opt/wasi-sdk/bin/ar' make",
+    "wasm-objdump": "docker compose run --rm wabt wasm-objdump",
+    "wasm-opt": "docker compose run --rm binaryen wasm-opt -Oz --enable-bulk-memory wasm/tcpip.wasm -o wasm/tcpip.min.wasm"
+  }
+}

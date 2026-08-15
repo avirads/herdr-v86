@@ -124,10 +124,21 @@ they do not require a guest network interface or the external TAP gateway.</p>
 <h2 id="determine-which-networking-mode-is-available">Determine which networking mode is available</h2>
 <pre><code class="language-sh">ip route
 </code></pre>
+<p>A default route is no longer sufficient on its own, because the browser tab can
+also be the thing on the other end of it. Check what actually answers:</p>
+<pre><code class="language-sh">ping -c1 -W2 1.1.1.1     # Internet reachable?
+vmlan status             # browser LAN services reachable?
+</code></pre>
 <ul>
-<li>A default route through <code>10.77.0.1</code> means the full gateway is connected. Use
-ordinary programs such as <code>curl</code>, <code>ssh</code>, and package managers.</li>
-<li>No default route means ordinary networking is unavailable. Use the <code>vm*</code>
+<li><strong>Internet reachable</strong> — the gateway is connected. Use ordinary programs such
+as <code>curl</code>, <code>ssh</code>, and package managers.</li>
+<li><strong>No Internet, but <code>vmlan status</code> succeeds</strong> — the page is on the guest LAN
+(<code>local</code> network mode). Sockets to the page work and are fast, but nothing
+routes beyond it. Use <code>vmlan</code>, or <code>eval &quot;$(vmlan env)&quot;</code> to point <code>http_proxy</code>
+at the page so unmodified tools work for plain HTTP.</li>
+<li><strong>Both succeed</strong> — <code>hybrid</code> mode: the gateway provides the Internet and the
+page is also on the LAN, at <code>10.77.0.2</code>.</li>
+<li><strong>Neither</strong> — ordinary networking is unavailable. Use the serial <code>vm*</code>
 browser-backed commands in this document.</li>
 </ul>
 <h2 id="vmfetch-browser-backed-http-client"><code>vmfetch</code> — browser-backed HTTP client</h2>
@@ -183,7 +194,36 @@ vmexport project.tar.gz
 <p>The browser opens its normal download flow. File bytes travel through the
 dedicated binary VirtIO 9P channel rather than Base64 over the terminal.
 Maximum file size is 8 MiB. Export only regular files; directories should
-first be archived.</p>
+first be archived. Where <code>vmlan status</code> succeeds, <code>vmlan export FILE</code> does the
+same thing over sockets with no size cap and much faster.</p>
+<h2 id="vmlan-browser-services-over-the-lan"><code>vmlan</code> — browser services over the LAN</h2>
+<pre><code class="language-text">vmlan status              is the browser reachable, and where
+vmlan env                 print http_proxy exports for this shell
+vmlan fetch URL [-o OUT]  fetch through the browser, HTTPS included
+vmlan export FILE         save a guest file as a browser download
+vmlan clip [read|write]   read the browser clipboard, or write stdin to it
+</code></pre>
+<p>Available in the <code>local</code> and <code>hybrid</code> network modes, where the browser tab holds
+an address on the guest LAN and publishes its services there. This is the same
+capability set as the serial <code>vm*</code> commands, carried over real sockets instead of
+Base64 over the tty: no 8/16 MiB ceiling, and megabytes per second rather than
+about 11 KB/s. A 12 MiB export takes roughly 8.7 s.</p>
+<p>For plain HTTP no command is needed at all:</p>
+<pre><code class="language-sh">eval &quot;$(vmlan env)&quot;
+curl -sS http://example.internal/file      # unmodified tools, through the page
+wget -qO- http://example.internal/file
+</code></pre>
+<p>Limits, all inherited from the browser rather than from this transport:</p>
+<ul>
+<li><strong>CORS applies</strong>, exactly as it does to <code>vmfetch</code>. A cross-origin target must
+send permissive headers or the browser blocks the request; <code>vmlan</code> reports
+that explicitly rather than failing opaquely.</li>
+<li><strong>HTTPS is not proxied.</strong> A browser cannot open a raw socket, so it cannot
+tunnel TLS; <code>CONNECT</code> returns 501 and <code>https_proxy</code> is deliberately left
+empty. Use <code>vmlan fetch &lt;https url&gt;</code>, where the browser performs the request
+and the guest receives the decrypted body.</li>
+<li><strong>Clipboard</strong> still needs browser permission and often a user gesture.</li>
+</ul>
 <h2 id="vmproject-import-and-export-projects"><code>vmproject</code> — import and export projects</h2>
 <pre><code class="language-text">vmproject import ARCHIVE.tar.gz [DESTINATION]
 vmproject pack [PROJECT_DIR] [OUTPUT.tar.gz]
@@ -580,7 +620,7 @@ or direct host integration is unavailable.</li>
 tools and the extension is connected.</li>
 <li>Approval controls for mutations and shell execution; YOLO mode bypasses those
 prompts for the current agent session.</li>
-<li>Persistent browser-side sessions for <code>vmlang</code>, <code>vmmastra</code>,
+<li>Persistent browser-side sessions for <code>vmlang</code>, <code>vmmastra</code>, and
 <code>vmmastra code</code>, with reset/stop commands for recovery.</li>
 </ul>
 <p>Agents must verify executable code before reporting success. JavaScript is
@@ -588,7 +628,6 @@ tested with both <code>qjs</code> and <code>vmjs</code>, including elapsed time.
 are formatted with <code>shfmt</code>, checked with <code>sh -n</code>, and executed with
 representative arguments. ShellCheck is not installed in the fixed-size i686
 image.</p>
-
 <h2 id="vmmastra-mastra-workspace-agent"><code>vmmastra</code> — Mastra workspace agent</h2>
 <p><code>vmmastra</code> runs a <a href="https://github.com/mastra-ai/mastra">Mastra</a>-based agent in
 the browser and maps its workspace filesystem and command tools to the current

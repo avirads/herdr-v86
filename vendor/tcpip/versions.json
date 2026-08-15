@@ -1,0 +1,8 @@
+{
+  "tcpip": "0.4.0",
+  "@bjorn3/browser_wasi_shim": "0.3.0",
+  "@tcpip/dns": "0.3.0",
+  "@tcpip/wire": "0.1.4",
+  "@tcpip/transport": "0.1.0",
+  "@tcpip/dhcp": "0.3.0"
+}
