@@ -36,14 +36,24 @@ Rules that follow from this layout:
 
 ## Deployment policy
 
-- Production deployment is `https://fapstaff.com/`.
-- GitHub Pages for this repository is intentionally disabled by owner request.
-- Do not enable, trigger, rebuild, or deploy GitHub Pages, including through
-  the Pages API or Actions, until the user explicitly says to resume GitHub
-  Pages deployment.
-- Pushing source changes to GitHub does not authorize a GitHub Pages
-  deployment. Deploy website changes only to fapstaff.com unless the user
-  explicitly changes this policy.
+- Production deployment is `https://fapstaff.com/`. It is unchanged by, and
+  independent of, the GitHub Pages mirror below.
+- The owner resumed GitHub Pages deployment for this repository. It publishes a
+  static mirror at `https://avirads.github.io/herdr-v86/` from
+  `.github/workflows/pages.yml` on every push to `main`, and on manual dispatch.
+- The mirror is not equivalent to production. Pages cannot set response headers,
+  so `/cx/` (CheerpX) will not start there: it needs COOP/COEP for
+  `SharedArrayBuffer`. The v86 provider is unaffected. The v86 `.img` files are
+  not in git, so the mirror serves `images/v86/vm-images.json` without the
+  images it names.
+- Pages serves under the `/herdr-v86/` project subpath. Keep root-absolute URLs
+  out of the sources; `.github/workflows/pages-assemble.sh` rewrites the few
+  that exist (`index.html`, `offline.html`, `app.webmanifest`) at deploy time so
+  the sources stay correct for fapstaff.com. A new root-absolute URL needs a
+  matching rewrite there.
+- Pushing source changes to GitHub now also updates the Pages mirror. Deploying
+  to fapstaff.com remains a separate manual step; see
+  `network/deploy/DEPLOY.md`.
 - Before every push or release, run
   `bash network/guest/verify-runtime-inventory.sh` against the built images and
   keep `docs/runtime-inventory.md` synchronized in the same commit. Treat the

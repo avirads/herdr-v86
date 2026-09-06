@@ -1,0 +1,53 @@
+name: Deploy to GitHub Pages
+
+# The owner enabled GitHub Pages for this repository; see the deployment policy
+# in AGENTS.md. fapstaff.com remains the production deployment and is unaffected
+# by this workflow.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a running deployment: a half-uploaded static tree would leave the
+# site serving a mix of two revisions.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        id: pages
+        # enablement: true creates the Pages site on the first run, so the
+        # repository does not have to be toggled by hand in Settings.
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Assemble the static tree
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: bash .github/workflows/pages-assemble.sh
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

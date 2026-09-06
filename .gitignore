@@ -54,3 +54,7 @@ images/cheerpx/*.ext2
 # constructs (the CheerpX guest has no network interface at all). Restore with
 # vendor/cheerpx/fetch.sh if Tailscale networking is ever wired up.
 vendor/cheerpx/*/tun/tailscale.wasm
+
+# GitHub Pages artifact staging directory, built by
+# .github/workflows/pages-assemble.sh and never committed.
+_site/

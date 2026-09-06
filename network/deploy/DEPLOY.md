@@ -10,9 +10,13 @@ Production serves from `/var/www/herdr-v86/current` behind
 covered by `network/test/fapstaff-nginx.test.mjs`, so changes to it are testable
 before they reach the server.
 
-**Policy, unchanged:** GitHub Pages stays disabled. Pushing source to GitHub does
-not authorise a Pages deployment, and nothing here should enable, trigger or
-rebuild one.
+**Policy, updated:** GitHub Pages is enabled again by owner request and publishes
+a static mirror at `https://avirads.github.io/herdr-v86/` from
+`.github/workflows/pages.yml`. That mirror is automatic and separate from this
+document: deploying to fapstaff.com is still the manual process below, and the
+mirror cannot replace it (Pages sets no response headers, so `/cx/` does not
+start there, and the `.img` files are not in git). See the deployment policy in
+`AGENTS.md`.
 
 ## 1. Publish the static tree
 
