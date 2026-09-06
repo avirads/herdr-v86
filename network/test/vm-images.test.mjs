@@ -15,9 +15,11 @@ const devSupervisor = await readFile(new URL('network/guest/vmbro-httpd/main.go'
 const startup = await readFile(new URL('network/guest/rc.startup', root), 'utf8');
 const builder = await readFile(new URL('network/guest/build-tier-images.sh', root), 'utf8');
 
-// Sizes carry 64 MiB of headroom above contents, so adding a tool no longer
-// forces a size bump and a full re-download. star is smaller than its
-// neighbours because it is the one tier still built from this repository.
+// Sizes carry 64 MiB of nominal headroom above contents, so adding a tool no
+// longer forces a size bump and a full re-download. star used to be the odd one
+// out at 128 MiB -- smaller than ai-tools despite being a superset of it, with
+// 4 MiB to spare -- until a build of all seven tiers failed there on "No space
+// left on device". It now matches dev at 208 MiB.
 const expected = [
   ['barebones', 134217728],
   ['essentials', 150994944],
@@ -25,7 +27,7 @@ const expected = [
   ['dev', 218103808],
   ['performance', 163577856],
   ['vapt', 170917888],
-  ['star', 134217728],
+  ['star', 218103808],
 ];
 
 test('VM image manifest defines seven ordered tiers with an all-features Star image', () => {
@@ -266,7 +268,7 @@ test('Dev tier allows the larger image enough time to produce VM output', () => 
 
 test('Star combines every specialized guest installer and behavior', () => {
   assert.match(builder, /star\) echo 6/);
-  assert.match(builder, /star\) echo 134217728/);
+  assert.match(builder, /star\) echo 218103808/);
   assert.match(builder, /if \[\[ "\$tier" == dev \|\| "\$tier" == star \]\]/);
   assert.match(builder, /if \[\[ "\$tier" == performance \|\| "\$tier" == vapt \|\| "\$tier" == star \]\]/);
   assert.match(builder, /if \[\[ "\$tier" == vapt \|\| "\$tier" == star \]\]/);

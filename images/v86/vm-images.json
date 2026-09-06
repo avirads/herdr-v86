@@ -44,7 +44,7 @@
       "sha256": "045797922ac8900aa846061999eaa5f2aaf130514e28ecd6dbf16788d8238673"
     },
     "vapt": {
-      "name": "VAPT — native scanner",
+      "name": "VAPT \u2014 native scanner",
       "description": "AI Tools plus Grafana k6, k6obs, and Vaptr, the self-contained native scanner. External tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.",
       "url": "images/v86/vm-vapt-i386-ext4.img",
       "size": 170917888,
@@ -55,7 +55,7 @@
       "name": "Star",
       "description": "All guest features in one image: AI Tools, Dev IDE and seven templates, Grafana k6 with k6obs, and the self-contained Vaptr scanner.",
       "url": "images/v86/vm-star-i386-ext4.img",
-      "size": 134217728,
+      "size": 218103808,
       "version": "2026.08.10.9",
       "sha256": "6f376bbf0aba6477011981343e102f4c3ef1a0de8ad30ed32f3631580d16a6d7"
     }

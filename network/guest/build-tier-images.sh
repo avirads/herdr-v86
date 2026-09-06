@@ -48,10 +48,29 @@ tier_number() {
 # seven tiers. star is unchanged because it was already correct: it is the one
 # tier built from here rather than from the other tree.
 #
-# vibium's 10.1 MiB landed in this headroom on 2026-09-06 rather than moving these
-# numbers, which is what the headroom is for: a size bump would change
+# vibium's 10.1 MiB landed in this headroom on 2026-09-06 rather than moving six of
+# these numbers, which is what the headroom is for: a size bump changes
 # vm-images.json, index.html's VM_IMAGE_FALLBACK and network/test/vm-images.test.mjs
-# together, and cost every user a full re-download of the tier.
+# together, and costs every user a full re-download of the tier.
+#
+# star was the exception, and it did not have the headroom the paragraph above
+# claims for it. Measured contents per tier, against the size each carried before
+# that day:
+#
+#   barebones 7 MiB   essentials 19 MiB   ai-tools 73 MiB   dev 107 MiB
+#   performance 84 MiB   vapt 90 MiB   star 124 MiB
+#
+# Six had 72-120 MiB spare. star had 4 MiB, because it was left at 128 MiB while it
+# grew into the tier that installs every other tier's contents -- it was smaller
+# than ai-tools, which it is a superset of. vibium was simply what finally pushed it
+# over: a CI build of all seven failed there on `install: error writing
+# /usr/local/libexec/zot: No space left on device`, after the other six passed.
+#
+# star is now 208 MiB, matching dev. Note that the 64 MiB above is nominal --
+# size minus contents -- and not what the guest sees. ext4 metadata and reserved
+# blocks take their cut first, so the space actually free at these sizes is
+# ai-tools 42 MiB, dev 56 MiB, vapt 34 MiB. 208 MiB puts star at 42 MiB, in the
+# same band as the rest; 192 MiB left it at 26 MiB, still the outlier.
 tier_bytes() {
   case "$1" in
     barebones) echo 134217728 ;;
@@ -60,7 +79,7 @@ tier_bytes() {
     dev) echo 218103808 ;;
     performance) echo 163577856 ;;
     vapt) echo 170917888 ;;
-    star) echo 134217728 ;;
+    star) echo 218103808 ;;
   esac
 }
 
