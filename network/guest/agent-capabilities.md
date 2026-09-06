@@ -35,6 +35,13 @@ startup and again before choosing tools for a task.
   the project through the browser.
 - AutoBro browser tools are exposed only when they appear in the active agent's
   tool list. Do not claim AutoBro access when those tools are absent.
+- `vibium` is installed but **cannot drive a browser here**. It automates Chrome,
+  and no 32-bit Linux Chrome exists. Never run `vibium install`: it does not fail
+  on i386, it downloads a 290 MB x86-64 Chrome the guest cannot execute and the
+  image has no room for. Only `vibium add-skill`, `version`, `paths` and
+  `completion` work. Its vibe-check skill is already on disk at
+  `/usr/local/share/vm-skills/vibe-check-SKILL.md`. For real browser work use the
+  AutoBro tools or the `vm*` bridge commands, which drive the parent browser.
 - Local WebGPU is the direct default LLM for `rig`, `zerostack`, `vmlang`,
   `vmmastra`; it does not pass through the cloud router. The browser's
   **Settings → Cloud AI providers** section can configure OpenAI, Anthropic,

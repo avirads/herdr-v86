@@ -1,0 +1,15 @@
+{
+  "project": "VibiumDev/vibium",
+  "module": "github.com/vibium/clicker",
+  "package": "./cmd/clicker",
+  "version": "v26.8.21",
+  "commit": "c9d29a9ef1fade1752e5d8d9d8a70057998ea764",
+  "target": "linux/386",
+  "go": "go1.24.7",
+  "compression": "none",
+  "size": 10555576,
+  "binarySha256": "3bda2f8f9b961cda2b89ab5f82695e361124fa36296815f2851757dc183eb0f1",
+  "provenance": "Cloned at the pinned tag by network/guest/build-vibium-x86.sh, not vendored: the module is 3 direct dependencies of ordinary Go and upstream is a live public repository, so this does not carry the risk that made vmvapt worth vendoring. Upstream publishes no 32-bit Linux release asset, so this binary exists only as a cross-build.",
+  "verification": "binarySha256 held across two builds on one host, but do not treat it as a cross-host check: Go stamps a build ID from the build action graph, so another machine produces different bytes from this same tag. Check size (10555576) and toolchain instead: 'go version -m network/guest/bin/vibium'.",
+  "guestLimitation": "vibium automates Chrome and there is no 32-bit Linux Chrome. 'vibium install' does not fail on i386; it fetches the linux64 Chrome for Testing build, a 290 MB x86-64 ELF the guest cannot exec. Only version, paths, completion, help and add-skill are usable in the guest."
+}

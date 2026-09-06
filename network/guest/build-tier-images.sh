@@ -11,6 +11,7 @@ HERDR_BINARY="${HERDR_BINARY:-$PROJECT_DIR/herdr-i686}"
 K6_BINARY="${K6_BINARY:-$PROJECT_DIR/network/guest/bin/k6}"
 VAPTR_BINARY="${VAPTR_BINARY:-$PROJECT_DIR/network/guest/bin/vaptr}"
 VAPTR_CONFIG="${VAPTR_CONFIG:-$PROJECT_DIR/network/guest/vaptr-native.json}"
+VIBIUM_BINARY="${VIBIUM_BINARY:-$PROJECT_DIR/network/guest/bin/vibium}"
 DOMAIN_SKILLS_PACKAGE="${DOMAIN_SKILLS_PACKAGE:-$PROJECT_DIR/skills/guidewire-policycenter-1.0.0.zip}"
 ZOT_BINARY="${ZOT_BINARY:-$PROJECT_DIR/network/guest/bin/zot}"
 ESBUILD_BINARY="${ESBUILD_BINARY:-$PROJECT_DIR/network/guest/bin/esbuild}"
@@ -46,6 +47,11 @@ tier_number() {
 # this repository yielded images that did not match production for six of the
 # seven tiers. star is unchanged because it was already correct: it is the one
 # tier built from here rather than from the other tree.
+#
+# vibium's 10.1 MiB landed in this headroom on 2026-09-06 rather than moving these
+# numbers, which is what the headroom is for: a size bump would change
+# vm-images.json, index.html's VM_IMAGE_FALLBACK and network/test/vm-images.test.mjs
+# together, and cost every user a full re-download of the tier.
 tier_bytes() {
   case "$1" in
     barebones) echo 134217728 ;;
@@ -131,6 +137,7 @@ install_ai_tools() {
   require_file "$ZEROSTACK_PACKAGE"
   require_file "$HERDR_BINARY"
   require_file "$DOMAIN_SKILLS_PACKAGE"
+  require_file "$VIBIUM_BINARY"
   chroot "$MOUNT_DIR" /sbin/apk add --no-cache tmux libgcc git ripgrep shfmt ctags make patch
   # optscript is not a stray dependency, which is what it looked like: the apk
   # database says it belongs to ctags, which ships ctags, optscript and readtags.
@@ -155,6 +162,22 @@ install_ai_tools() {
   install -D -m 0644 "$PROJECT_DIR/network/guest/agent-capabilities.md" "$MOUNT_DIR/usr/local/share/vm-agent-capabilities.md"
   install -D -m 0644 "$PROJECT_DIR/network/guest/agent-capabilities.md" "$MOUNT_DIR/root/.local/share/zerostack/AGENTS.md"
   install -D -m 0644 "$DOMAIN_SKILLS_PACKAGE" "$MOUNT_DIR/usr/local/share/vm-skills/guidewire-policycenter-1.0.0.zip"
+  # vibium: cross-built for i386 by network/guest/build-vibium-x86.sh, since
+  # upstream ships no 32-bit Linux asset. It cannot drive a browser here and is
+  # not meant to -- there is no 32-bit Linux Chrome, and `vibium install` quietly
+  # fetches a 290 MB x86-64 Chrome the guest cannot exec. What it provides
+  # in-guest is `add-skill`, which writes the embedded vibe-check SKILL.md, plus
+  # version/paths/completion. Guest browser automation still goes through
+  # AutoBro and the vm* bridge commands. See network/guest/vibium-source.json.
+  install -D -m 0755 "$VIBIUM_BINARY" "$MOUNT_DIR/usr/local/bin/vibium"
+  # Pre-extract the skill so an offline guest has it on disk without running
+  # add-skill, matching how the guidewire skill ships as a file rather than a
+  # command the agent has to know to invoke. Running the guest's own copy rather
+  # than the host's also proves the i386 binary executes inside the rootfs it is
+  # being installed into.
+  chroot "$MOUNT_DIR" /usr/local/bin/vibium add-skill --stdout \
+    > "$MOUNT_DIR/usr/local/share/vm-skills/vibe-check-SKILL.md"
+  chmod 0644 "$MOUNT_DIR/usr/local/share/vm-skills/vibe-check-SKILL.md"
 }
 
 install_performance() {
@@ -249,9 +272,12 @@ verify_tier() {
       command -v vmai vmllm vmlang vmmastra vmjs vmbench
       test -x /usr/local/libexec/rig-agent
       test -f /usr/local/share/vm-skills/guidewire-policycenter-1.0.0.zip
+      command -v vibium
+      vibium version
+      test -s /usr/local/share/vm-skills/vibe-check-SKILL.md
     '
   else
-    chroot "$MOUNT_DIR" /bin/sh -ec '! command -v herdr; ! command -v rig; ! command -v git'
+    chroot "$MOUNT_DIR" /bin/sh -ec '! command -v herdr; ! command -v rig; ! command -v git; ! command -v vibium'
   fi
   if [[ "$tier" == dev || "$tier" == star ]]; then
     chroot "$MOUNT_DIR" /bin/sh -ec '

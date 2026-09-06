@@ -9,7 +9,7 @@ former single image.
 |---|---|
 | Barebones | Alpine, BusyBox, serial shell, boot support, and `/root/project` |
 | Essentials | Barebones plus CA certificates, `curl`, `jq`, QuickJS, networking, and the UART browser transport |
-| AI Tools | Essentials plus `tmux`, Herdr, Git, ripgrep, shfmt, ctags, make, patch, Zerostack, Rig, the `vm*` browser commands, vmlang, and vmmastra |
+| AI Tools | Essentials plus `tmux`, Herdr, Git, ripgrep, shfmt, ctags, make, patch, Zerostack, Rig, the `vm*` browser commands, vmlang, vmmastra, and `vibium` (see [What `vibium` can and cannot do here](#what-vibium-can-and-cannot-do-here)) |
 | Dev | AI Tools plus native ia32 esbuild, the Chi-based `vmbro-httpd`, `vmbro-dev`, `vmzot` (the zot coding agent on the page-local WebGPU model), and the browsercode-style Dev IDE (Monaco editor, file tree, console, live preview) with 7 framework templates in `/opt/vmbro/templates`, plus a pre-built starter project in `/root/project` |
 | Performance testing | AI Tools plus Grafana k6 and `k6obs`, which streams k6 results to OpenObserve during and after a run |
 | VAPT — native scanner | AI Tools plus Grafana k6, `k6obs`, and the self-contained Vaptr scanner |
@@ -64,3 +64,29 @@ The Go version reported by `k6 version` identifies the compiler used to build
 the static k6 binary; the Go toolchain is not installed in the guest. ShellCheck
 also remains external because Alpine does not provide it for this fixed-size
 i386 image. Guest scripts can always be checked with `sh -n` and shfmt.
+
+## What `vibium` can and cannot do here
+
+[Vibium](https://github.com/VibiumDev/vibium) is browser automation for coding
+agents. AI Tools ships it as an i386 binary cross-built from the pinned tag in
+`network/guest/vibium-source.json`, because upstream publishes no 32-bit Linux
+release asset.
+
+**It cannot drive a browser in the guest, and it is not meant to.** Vibium
+automates Chrome, and there is no 32-bit Linux Chrome. The failure mode is worse
+than an error: `vibium install` succeeds on i386 and fetches the linux64 Chrome
+for Testing build — a 290 MB x86-64 ELF the guest cannot exec, against a tier
+with 64 MiB of headroom. Do not run it.
+
+What works in-guest, with no browser:
+
+| Command | Use |
+|---|---|
+| `vibium add-skill` | Write the embedded vibe-check skill (also pre-extracted to `/usr/local/share/vm-skills/vibe-check-SKILL.md`) |
+| `vibium version` | Report the pinned version |
+| `vibium paths` | Show the cache and browser paths it would use |
+| `vibium completion` | Generate a shell completion script |
+
+Guest browser automation continues to go through AutoBro and the `vm*` bridge
+commands, which drive the *parent* browser rather than a guest-local one. That
+path is unchanged and is the one to use.
