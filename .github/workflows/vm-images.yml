@@ -1,0 +1,116 @@
+name: Build and publish VM images
+
+# The seven tier .img files are build artifacts, not sources: each is 128-208 MB,
+# over GitHub's 100 MB per-file limit, and all seven together are ~1.05 GB, over
+# the 1 GB GitHub Pages site limit. They can go in neither the repository nor the
+# Pages artifact, which is why the mirror's VM stalls at the boot progress cap
+# with nothing to read from.
+#
+# Release assets have a 2 GB per-file limit and support Range requests, which is
+# what v86 needs to stream a disk. This builds the images and publishes them
+# there, then prints the manifest edit that points the site at them.
+#
+# Building needs root, loop devices and an i386 chroot. GitHub-hosted Ubuntu
+# runners provide all three, so network/guest/build-tier-images.sh runs unmodified.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create or update, e.g. vm-images-2026.09.06'
+        required: true
+        type: string
+      tiers:
+        description: 'Tier to build, or "all"'
+        required: false
+        default: all
+        type: string
+      prerelease:
+        description: 'Mark the release as a prerelease'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vm-images
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Report free disk space
+        # The images need ~1.1 GB plus the loop-mounted staging copy. A runner
+        # that is short on space fails deep inside mkfs with a confusing error,
+        # so surface the number before spending 45 minutes on the build.
+        run: df -h /
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y e2fsprogs
+
+      - name: Build the tier images
+        run: sudo bash network/guest/build-tier-images.sh "${{ inputs.tiers }}"
+
+      - name: Summarise what was built
+        id: built
+        run: |
+          set -euo pipefail
+          {
+            echo '| Tier | Bytes | SHA-256 |'
+            echo '|---|---:|---|'
+          } >> "$GITHUB_STEP_SUMMARY"
+          for image in images/v86/vm-*-i386-ext4.img; do
+            tier=$(basename "$image" | sed -E 's/^vm-(.*)-i386-ext4\.img$/\1/')
+            size=$(stat -c %s "$image")
+            sum=$(sha256sum "$image" | cut -d' ' -f1)
+            echo "| \`$tier\` | $size | \`$sum\` |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          ls -l images/v86/
+
+      - name: Publish the images as release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "VM images $TAG" \
+              --notes "Guest disk images built from \`${{ github.sha }}\` by .github/workflows/vm-images.yml. Consumed by images/v86/vm-images.json via its imageBaseUrl." \
+              ${{ inputs.prerelease && '--prerelease' || '' }}
+          fi
+          # --clobber so re-running the workflow against the same tag replaces
+          # assets instead of failing on the ones already there.
+          gh release upload "$TAG" images/v86/vm-*-i386-ext4.img --clobber
+
+      - name: Print the manifest edit that points the site at this release
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          base="${{ github.server_url }}/${{ github.repository }}/releases/download/$TAG/"
+          {
+            echo
+            echo '### Point the site at these images'
+            echo
+            echo 'The images are published but nothing uses them yet. Set this in'
+            echo '`images/v86/vm-images.json` **and** in `VM_IMAGE_FALLBACK` in `index.html`'
+            echo '(`vm-images.test.mjs` asserts the two agree), then let Pages redeploy:'
+            echo
+            echo '```json'
+            echo "\"imageBaseUrl\": \"$base\","
+            echo '```'
+            echo
+            echo 'Then update each tier'"'"'s `size` and `sha256` from the table above.'
+            echo 'Leave `imageBaseUrl` empty on any deployment that serves the images'
+            echo 'beside the page, which is what fapstaff.com does.'
+          } >> "$GITHUB_STEP_SUMMARY"

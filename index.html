@@ -624,6 +624,10 @@ const AUTOBRO_EXTENSION_ID = "aaigkodgcmkbipbacijelgebhchknkln";
 // asserts the two agree.
 const VM_IMAGE_FALLBACK = {
   defaultTier: "barebones",
+  // Must mirror the manifest's imageBaseUrl too: when the manifest fetch is what
+  // failed, a fallback still pointing beside the page would 404 every image on a
+  // deployment that hosts them elsewhere.
+  imageBaseUrl: "",
   tiers: {
     "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "images/v86/vm-barebones-i386-ext4.img", size: 134217728, version: "2026.08.11.4" },
     "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "images/v86/vm-essentials-i386-ext4.img", size: 150994944, version: "2026.08.11.6" },
@@ -673,7 +677,19 @@ if (bootOptions.get("network")) localStorage.setItem("vm.networkMode", networkMo
 
 const DISK_SIZE = vmImage.size;
 const DISK_VERSION = `${vmImageTier}-${vmImage.version}`;
-const diskURL = `${vmImage.url}?v=${encodeURIComponent(vmImage.version)}`;
+// Where the .img files actually live. Empty means "beside this page", which is
+// how fapstaff.com serves them and has always been the behaviour. A deployment
+// that cannot carry them points this at a release download URL instead: on the
+// GitHub Pages mirror all seven total more than the 1 GB site limit, and each
+// one exceeds the 100 MB file limit, so they cannot ship with the site.
+//
+// The cache-buster is appended only for same-origin images. Release assets are
+// immutable per tag -- the tag is the version -- and the download URL redirects
+// through a signed URL, so an extra query parameter buys nothing there.
+const imageBaseUrl = vmImageManifest.imageBaseUrl || "";
+const diskURL = imageBaseUrl
+  ? new URL(vmImage.url, imageBaseUrl).href
+  : `${vmImage.url}?v=${encodeURIComponent(vmImage.version)}`;
 const diskCacheKey = `vm.diskVersion.${vmImageTier}`;
 const vmImageSource = localStorage.getItem(diskCacheKey) === DISK_VERSION
   ? "local cache"

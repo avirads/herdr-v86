@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "defaultTier": "barebones",
+  "imageBaseUrl": "",
   "tiers": {
     "barebones": {
       "name": "Barebones",

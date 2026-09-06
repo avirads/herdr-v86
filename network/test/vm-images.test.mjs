@@ -53,6 +53,14 @@ test("index.html's fallback manifest mirrors the real one", () => {
   const block = html.slice(start, html.indexOf('\n};', start));
 
   assert.match(block, new RegExp(`defaultTier: ["']${manifest.defaultTier}["']`));
+
+  // imageBaseUrl drifting is the same silent failure as a stale size, one level
+  // worse: if the manifest fetch is what failed and the fallback still points
+  // beside the page, every image 404s on a deployment that hosts them elsewhere
+  // and the boot parks at the progress cap with nothing in the console.
+  const fallbackBase = block.match(/imageBaseUrl: "([^"]*)"/);
+  assert.ok(fallbackBase, 'fallback has no imageBaseUrl');
+  assert.equal(fallbackBase[1], manifest.imageBaseUrl ?? '', 'fallback imageBaseUrl');
   for (const [tier, entry] of Object.entries(manifest.tiers)) {
     const line = block.split('\n').find(l => l.includes(`"${tier}":`));
     assert.ok(line, `fallback has no entry for ${tier}`);
