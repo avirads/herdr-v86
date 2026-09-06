@@ -41,6 +41,8 @@ Rules that follow from this layout:
 - The owner resumed GitHub Pages deployment for this repository. It publishes a
   static mirror at `https://avirads.github.io/herdr-v86/` from
   `.github/workflows/pages.yml` on every push to `main`, and on manual dispatch.
+  Turning Pages on is a one-time manual step (Settings -> Pages -> Source:
+  GitHub Actions); `GITHUB_TOKEN` cannot create the site itself.
 - The mirror is not equivalent to production. Pages cannot set response headers,
   so `/cx/` (CheerpX) will not start there: it needs COOP/COEP for
   `SharedArrayBuffer`. The v86 provider is unaffected. The v86 `.img` files are

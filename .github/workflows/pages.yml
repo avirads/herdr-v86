@@ -32,8 +32,13 @@ jobs:
 
       - name: Configure Pages
         id: pages
-        # enablement: true creates the Pages site on the first run, so the
-        # repository does not have to be toggled by hand in Settings.
+        # enablement: true keeps the site's build type pinned to "GitHub
+        # Actions", but it cannot create the site from scratch: the create-site
+        # API needs repo-admin rights and GITHUB_TOKEN has none, so the first
+        # run on a repository where Pages has never been enabled fails with
+        # "Create Pages site failed: Resource not accessible by integration".
+        # Enabling Pages once under Settings -> Pages -> Source: GitHub Actions
+        # is a manual step; every run after that is automatic.
         uses: actions/configure-pages@v5
         with:
           enablement: true
