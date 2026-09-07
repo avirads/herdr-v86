@@ -33,6 +33,46 @@ tar -cf - \
 # same if the site is ever served from a branch instead.
 touch _site/.nojekyll
 
+# Bring in the disk images the VM boots from. They are build artifacts, not
+# sources -- too big for git, and all seven together exceed the 1 GB Pages site
+# limit -- so they are built by .github/workflows/vm-images.yml, published as
+# release assets, and pulled back in here.
+#
+# They are copied into the site rather than linked to because a v86 disk has to
+# be read cross-origin otherwise, and release assets cannot serve that: they send
+# no Access-Control-Allow-Origin, so the browser drops every range read and the
+# boot parks at 90%. Same-origin sidesteps CORS entirely. See the imageBaseUrl
+# comment in index.html.
+#
+# Only these two fit the budget: the rest of the site is ~377 MB, so barebones
+# (128 MiB, the default tier) and ai-tools (152 MiB) bring it to ~657 MB. Adding
+# dev or star would push past 1 GB. Other tiers 404 on the mirror by design.
+VM_IMAGE_RELEASE="${VM_IMAGE_RELEASE:-vm-images-2026.09.06}"
+VM_IMAGE_TIERS="${VM_IMAGE_TIERS:-barebones ai-tools}"
+VM_IMAGE_BASE="https://github.com/avirads/herdr-v86/releases/download/$VM_IMAGE_RELEASE"
+
+mkdir -p _site/images/v86
+for tier in $VM_IMAGE_TIERS; do
+  image="vm-${tier}-i386-ext4.img"
+  expected="$(python3 -c "
+import json,sys
+m = json.load(open('images/v86/vm-images.json'))
+print(m['tiers']['$tier']['size'])
+")"
+  echo "Fetching $image ($expected bytes) from $VM_IMAGE_RELEASE"
+  curl -fsSL --retry 3 --retry-delay 5 -o "_site/images/v86/$image" \
+    "$VM_IMAGE_BASE/$image"
+  actual="$(stat -c %s "_site/images/v86/$image")"
+  # index.html compares this against the Range preflight's content-range total
+  # and silently drops to PIO compatibility mode when they disagree, so a short
+  # or truncated download must fail the build rather than ship.
+  if [ "$actual" != "$expected" ]; then
+    echo "$image is $actual bytes, manifest says $expected" >&2
+    exit 1
+  fi
+done
+du -sh _site
+
 base_path="${BASE_PATH:-}"
 if [ -z "$base_path" ] || [ "$base_path" = "/" ]; then
   echo "Serving from the domain root; no path rewrite needed."

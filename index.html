@@ -629,13 +629,13 @@ const VM_IMAGE_FALLBACK = {
   // deployment that hosts them elsewhere.
   imageBaseUrl: "",
   tiers: {
-    "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "images/v86/vm-barebones-i386-ext4.img", size: 134217728, version: "2026.08.11.4" },
-    "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "images/v86/vm-essentials-i386-ext4.img", size: 150994944, version: "2026.08.11.6" },
-    "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "images/v86/vm-ai-tools-i386-ext4.img", size: 159383552, version: "2026.08.15.1" },
-    "dev": { name: "Dev", description: "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.", url: "images/v86/vm-dev-i386-ext4.img", size: 218103808, version: "2026.08.11.6" },
-    "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs OpenObserve streaming.", url: "images/v86/vm-performance-i386-ext4.img", size: 163577856, version: "2026.08.11.6" },
-    "vapt": { name: "VAPT — native scanner", description: "AI Tools plus Grafana k6, k6obs, and Vaptr, the self-contained native scanner. External tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.", url: "images/v86/vm-vapt-i386-ext4.img", size: 170917888, version: "2026.08.11.6" },
-    "star": { name: "Star", description: "All guest features in one image: AI Tools, Dev IDE and seven templates, Grafana k6 with k6obs, and the self-contained Vaptr scanner.", url: "images/v86/vm-star-i386-ext4.img", size: 218103808, version: "2026.08.10.9" },
+    "barebones": { name: "Barebones", description: "Minimal Alpine i386 and BusyBox shell.", url: "images/v86/vm-barebones-i386-ext4.img", size: 134217728, version: "2026.09.06.1" },
+    "essentials": { name: "Essentials", description: "Barebones plus networking, browser transport, curl, jq and QuickJS.", url: "images/v86/vm-essentials-i386-ext4.img", size: 150994944, version: "2026.09.06.1" },
+    "ai-tools": { name: "AI Tools", description: "Essentials plus terminal tools, coding agents, browser tools and AI frameworks.", url: "images/v86/vm-ai-tools-i386-ext4.img", size: 159383552, version: "2026.09.06.1" },
+    "dev": { name: "Dev", description: "AI Tools plus native esbuild, the browsercode-style Dev IDE (framework picker, Monaco editor, live preview) and the Chi-backed app supervisor with seven ready-to-run project templates.", url: "images/v86/vm-dev-i386-ext4.img", size: 218103808, version: "2026.09.06.1" },
+    "performance": { name: "Performance testing", description: "AI Tools plus Grafana k6 and k6obs OpenObserve streaming.", url: "images/v86/vm-performance-i386-ext4.img", size: 163577856, version: "2026.09.06.1" },
+    "vapt": { name: "VAPT — native scanner", description: "AI Tools plus Grafana k6, k6obs, and Vaptr, the self-contained native scanner. External tools (httpx/katana/nuclei/ffuf) are not bundled in this tier.", url: "images/v86/vm-vapt-i386-ext4.img", size: 170917888, version: "2026.09.06.1" },
+    "star": { name: "Star", description: "All guest features in one image: AI Tools, Dev IDE and seven templates, Grafana k6 with k6obs, and the self-contained Vaptr scanner.", url: "images/v86/vm-star-i386-ext4.img", size: 218103808, version: "2026.09.06.1" },
   },
 };
 let vmImageManifest = VM_IMAGE_FALLBACK;
@@ -678,14 +678,25 @@ if (bootOptions.get("network")) localStorage.setItem("vm.networkMode", networkMo
 const DISK_SIZE = vmImage.size;
 const DISK_VERSION = `${vmImageTier}-${vmImage.version}`;
 // Where the .img files actually live. Empty means "beside this page", which is
-// how fapstaff.com serves them and has always been the behaviour. A deployment
-// that cannot carry them points this at a release download URL instead: on the
-// GitHub Pages mirror all seven total more than the 1 GB site limit, and each
-// one exceeds the 100 MB file limit, so they cannot ship with the site.
+// how both fapstaff.com and the GitHub Pages mirror serve them, and has always
+// been the behaviour. It is a hook for a deployment that hosts images elsewhere.
 //
-// The cache-buster is appended only for same-origin images. Release assets are
-// immutable per tag -- the tag is the version -- and the download URL redirects
-// through a signed URL, so an extra query parameter buys nothing there.
+// Two things any cross-origin host must do, both learned the hard way, and both
+// of which GitHub release assets fail -- do not point this at a release:
+//
+//   1. Send Access-Control-Allow-Origin. release-assets.githubusercontent.com
+//      sends none at all, so the browser discards the response. (Release assets
+//      are still fine as a download source; just not as a v86 disk.)
+//   2. Allow the X-Accept-Encoding request header in Access-Control-Allow-Headers.
+//      v86's disk loader sets it, it is not CORS-safelisted, so every range read
+//      is preflighted and a host that does not name it fails the preflight.
+//
+// Either failure looks identical from the page: the disk XHR never completes,
+// the guest gets no sector, and the boot overlay parks at its 90% cap with
+// nothing in the console.
+//
+// The cache-buster is appended only for same-origin images, where the version is
+// the only thing distinguishing one build of a tier from the next.
 const imageBaseUrl = vmImageManifest.imageBaseUrl || "";
 const diskURL = imageBaseUrl
   ? new URL(vmImage.url, imageBaseUrl).href
